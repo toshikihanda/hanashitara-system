@@ -168,28 +168,107 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         });
     };
 
-    // 全体の総売上と未入金額の計算
-    const totalMonthSales = reports.reduce((sum, r) => sum + r.totalSales, 0);
-    const totalUnpaid = reports.reduce((sum, r) => !r.isPaid ? sum + r.totalSales : sum, 0);
+    // ---- フェーズ4: 集計ロジック ----
+    const currentYear = new Date().getFullYear();
+    const currentMonthStr = `${currentYear}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
+    // 1. 年間合計（当年）
+    const yearReports = reports.filter(r => new Date(r.date).getFullYear() === currentYear);
+    const totalYearSales = yearReports.reduce((sum, r) => sum + r.totalSales, 0);
+    const totalYearProfit = yearReports.reduce((sum, r) => sum + (r.totalSales - r.staffShare), 0);
+
+    // 2. 今月分合計
+    const monthReports = reports.filter(r => {
+        const d = new Date(r.date);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === currentMonthStr;
+    });
+    const totalMonthSales = monthReports.reduce((sum, r) => sum + r.totalSales, 0);
+    const totalMonthProfit = monthReports.reduce((sum, r) => sum + (r.totalSales - r.staffShare), 0);
+
+    // 3. 全ての未入金額
+    const totalUnpaid = reports.filter(r => !r.isPaid).reduce((sum, r) => sum + r.totalSales, 0);
+
+    // 4. スタッフ別集計（今月）
+    const staffStatsMap = new Map<string, { sales: number, share: number }>();
+    monthReports.forEach(r => {
+        const current = staffStatsMap.get(r.staff) || { sales: 0, share: 0 };
+        staffStatsMap.set(r.staff, {
+            sales: current.sales + r.totalSales,
+            share: current.share + r.staffShare
+        });
+    });
+    const staffStats = Array.from(staffStatsMap.entries())
+        .map(([name, stats]) => ({ name, ...stats }))
+        .sort((a, b) => b.sales - a.sales);
 
     return (
-        <div className="p-6 max-w-6xl mx-auto space-y-8">
-            <header className="flex justify-between items-end border-b pb-4">
+        <div className="p-6 max-w-6xl mx-auto space-y-8 pb-32">
+            <header className="flex flex-col md:flex-row justify-between items-start md:items-end border-b pb-4 gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">オーナー管理画面</h1>
-                    <p className="text-sm text-gray-500 mt-1">入金確認・売上管理ダッシュボード</p>
-                </div>
-                <div className="flex gap-4 text-sm">
-                    <div className="bg-white px-4 py-2 rounded-lg shadow-sm border">
-                        <span className="text-gray-500">今月の総売上: </span>
-                        <span className="font-bold text-gray-900">¥{totalMonthSales.toLocaleString()}</span>
-                    </div>
-                    <div className="bg-white px-4 py-2 rounded-lg shadow-sm border">
-                        <span className="text-gray-500">未入金総額: </span>
-                        <span className="font-bold text-red-600">¥{totalUnpaid.toLocaleString()}</span>
-                    </div>
+                    <h1 className="text-2xl font-bold text-gray-900">オーナーダッシュボード</h1>
+                    <p className="text-sm text-gray-500 mt-1">売上管理・入金確認</p>
                 </div>
             </header>
+
+            {/* 集計サマリー表示 (フェーズ4) */}
+            <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* 総合サマリー */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-4">
+                    <h2 className="font-bold text-gray-800 border-b border-gray-100 pb-2">サマリー ({currentMonthStr.replace('-', '年')}月)</h2>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <p className="text-xs text-gray-500 mb-1 font-medium">今月の総売上</p>
+                            <p className="text-xl font-bold text-gray-900">¥{totalMonthSales.toLocaleString()}</p>
+                        </div>
+                        <div>
+                            <p className="text-xs text-blue-600 mb-1 font-bold">✨ オーナー利益</p>
+                            <p className="text-xl font-bold text-blue-600">¥{totalMonthProfit.toLocaleString()}</p>
+                        </div>
+                        <div className="pt-2 border-t border-gray-100 col-span-2">
+                            <p className="text-xs text-gray-500 mb-1 font-medium">現在の未入金総額</p>
+                            <p className="text-lg font-bold text-red-500">¥{totalUnpaid.toLocaleString()}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 年間サマリー */}
+                <div className="bg-gradient-to-br from-gray-900 to-gray-800 p-6 rounded-2xl shadow-sm border border-gray-900 text-white flex flex-col gap-4 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10 text-6xl">📈</div>
+                    <h2 className="font-bold border-b border-gray-700 pb-2 text-gray-200">確定申告用 ({currentYear}年 累計)</h2>
+                    <div className="flex-1 flex flex-col justify-center gap-4 relative z-10">
+                        <div>
+                            <p className="text-xs text-gray-400 mb-1">年間 総売上</p>
+                            <p className="text-2xl font-bold">¥{totalYearSales.toLocaleString()}</p>
+                        </div>
+                        <div>
+                            <p className="text-xs text-gray-400 mb-1">年間 オーナー純利益</p>
+                            <p className="text-xl font-bold text-blue-300">¥{totalYearProfit.toLocaleString()}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* スタッフ別実績（今月） */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col h-full max-h-[250px] overflow-hidden">
+                    <h2 className="font-bold text-gray-800 border-b border-gray-100 pb-2 mb-3">スタッフ別実績 ({currentMonthStr.replace('-', '年')}月)</h2>
+                    <div className="overflow-y-auto pr-2 space-y-3">
+                        {staffStats.length === 0 ? (
+                            <p className="text-sm text-gray-400 text-center py-4">データがありません</p>
+                        ) : (
+                            <ul className="space-y-3">
+                                {staffStats.map(s => (
+                                    <li key={s.name} className="flex justify-between items-center text-sm border-b border-gray-50 pb-2 last:border-0">
+                                        <span className="font-semibold text-gray-700">{s.name}</span>
+                                        <div className="text-right">
+                                            <p className="text-gray-900 font-medium">売上: ¥{s.sales.toLocaleString()}</p>
+                                            <p className="text-[11px] text-gray-400 mt-0.5">報酬: ¥{s.share.toLocaleString()}</p>
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                </div>
+            </section>
 
             {/* 報告データ一覧・入金チェック */}
             <section className="bg-white rounded-xl shadow-sm border overflow-hidden">
