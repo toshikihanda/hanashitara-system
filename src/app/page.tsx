@@ -1,4 +1,5 @@
 import ReportForm from '@/components/ReportForm';
+import BlacklistChecker from '@/components/BlacklistChecker';
 import Link from 'next/link';
 
 export default function Home() {
@@ -21,8 +22,9 @@ export default function Home() {
           </div>
         </header>
 
-        {/* 業務報告フォームの読み込み */}
-        <main>
+        {/* 事前確認＆業務報告エリア */}
+        <main className="space-y-6">
+          <BlacklistChecker />
           <ReportForm />
         </main>
 
