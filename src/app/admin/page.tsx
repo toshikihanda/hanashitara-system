@@ -232,17 +232,17 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                 </div>
 
                 {/* 年間サマリー */}
-                <div className="bg-gradient-to-br from-gray-900 to-gray-800 p-6 rounded-2xl shadow-sm border border-gray-900 text-white flex flex-col gap-4 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-10 text-6xl">📈</div>
-                    <h2 className="font-bold border-b border-gray-700 pb-2 text-gray-200">確定申告用 ({currentYear}年 累計)</h2>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-4 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-5 text-6xl">📈</div>
+                    <h2 className="font-bold border-b border-gray-100 pb-2 text-gray-800">確定申告用 ({currentYear}年 累計)</h2>
                     <div className="flex-1 flex flex-col justify-center gap-4 relative z-10">
                         <div>
-                            <p className="text-xs text-gray-400 mb-1">年間 総売上</p>
-                            <p className="text-2xl font-bold">¥{totalYearSales.toLocaleString()}</p>
+                            <p className="text-xs text-gray-500 mb-1 font-medium">年間 総売上</p>
+                            <p className="text-2xl font-bold text-gray-900">¥{totalYearSales.toLocaleString()}</p>
                         </div>
                         <div>
-                            <p className="text-xs text-gray-400 mb-1">年間 オーナー純利益</p>
-                            <p className="text-xl font-bold text-blue-300">¥{totalYearProfit.toLocaleString()}</p>
+                            <p className="text-xs text-blue-600 mb-1 font-bold">年間 オーナー純利益</p>
+                            <p className="text-xl font-bold text-blue-600">¥{totalYearProfit.toLocaleString()}</p>
                         </div>
                     </div>
                 </div>
