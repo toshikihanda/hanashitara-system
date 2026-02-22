@@ -80,11 +80,27 @@ export default function AdminDashboard() {
     };
 
     const togglePaidStatus = async (id: string, currentPaid: boolean) => {
-        // 画面上の見た目を即座に切り替える（UX用）
-        setReports(reports.map(r => r.id === id ? { ...r, isPaid: !r.isPaid } : r));
+        const newPaidStatus = !currentPaid;
+        // 画面上の見た目を即座に切り替える
+        setReports(reports.map(r => r.id === id ? { ...r, isPaid: newPaidStatus } : r));
 
-        // 【TODO】次のフェーズで、ここへ「GASの特定の行のI列（入金済）を更新する」処理を入れる予定です。
-        // 今回は画面の一時切り替えのみ
+        try {
+            // GASへ通信してスプレッドシートを更新
+            await fetch(GAS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify({
+                    action: 'updatePaidStatus',
+                    id: id,
+                    isPaid: newPaidStatus
+                }),
+            });
+        } catch (error) {
+            console.error('更新エラー:', error);
+            alert('通信エラーが発生しました。元の状態に戻ります。');
+            // エラー時は画面を元に戻す
+            setReports(reports.map(r => r.id === id ? { ...r, isPaid: currentPaid } : r));
+        }
     };
 
     // 全体の総売上と未入金額の計算
