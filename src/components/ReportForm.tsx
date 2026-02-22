@@ -13,6 +13,8 @@ export default function ReportForm() {
     const [phoneNumber, setPhoneNumber] = useState('');
     const [customerName, setCustomerName] = useState('');
     const [services, setServices] = useState<ServiceDetail[]>([{ type: 'listen', minutes: 0 }]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
 
     // サービス追加用のハンドラ
     const handleAddService = () => {
@@ -60,10 +62,44 @@ export default function ReportForm() {
 
     const totals = calculateTotals();
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // TODO: ここでSupabase等へデータを送信する
-        alert('業務報告を送信しました！（テスト完了）\n売上: ' + totals.totalSales + '円');
+        if (isSubmitting) return;
+        setIsSubmitting(true);
+
+        try {
+            // 送信データの整形（GASへ送る形式）
+            const reportData = {
+                action: 'addReport',
+                date: new Date().toLocaleDateString('ja-JP'),
+                staff: 'テストスタッフ様', // TODO: ログイン機能ができたらユーザー名に差し替える
+                customerPhone: phoneNumber,
+                customerName: customerName || '名無し',
+                services: services.map(s => `${s.type === 'listen' ? '傾聴' : s.type === 'fortune' ? '占い' : '性的な相談'}(${s.minutes}分)`).join(', '),
+                totalSales: totals.totalSales,
+                staffShare: totals.staffShare
+            };
+
+            // スプレッドシート（GAS）へ通信
+            await fetch(GAS_URL, {
+                method: 'POST',
+                // GASでCORSエラーを起こさないよう、単純なtext/plain扱いでJSON文字列を送る手法を採用
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify(reportData),
+            });
+
+            alert(`業務報告を送信しました！\n明細がスプレッドシートに追記されます。\n売上: ${totals.totalSales}円`);
+
+            // 送信成功後、次の入力用にフォームをリセットする
+            setPhoneNumber('');
+            setCustomerName('');
+            setServices([{ type: 'listen', minutes: 0 }]);
+        } catch (error) {
+            console.error('送信エラー:', error);
+            alert('エラーが発生しました。ネットワーク環境を確認してください。');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -173,9 +209,13 @@ export default function ReportForm() {
                 {/* 送信ボタン */}
                 <button
                     type="submit"
-                    className="w-full bg-[#007AFF] hover:bg-[#007AFF]/90 text-white font-medium py-3 px-4 rounded-xl transition-all shadow-sm active:scale-[0.98]"
+                    disabled={isSubmitting || totals.totalSales === 0}
+                    className={`w-full font-medium py-3 px-4 rounded-xl transition-all shadow-sm active:scale-[0.98] text-white flex justify-center items-center gap-2 ${isSubmitting || totals.totalSales === 0
+                            ? 'bg-gray-400 cursor-not-allowed'
+                            : 'bg-[#007AFF] hover:bg-[#007AFF]/90'
+                        }`}
                 >
-                    この内容で報告を送信する
+                    {isSubmitting ? '送信中（少々お待ちください）...' : 'この内容で報告を送信する'}
                 </button>
             </form>
         </div>
