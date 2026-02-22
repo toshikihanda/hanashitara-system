@@ -21,6 +21,9 @@ export default function AdminDashboard() {
     const [isLoading, setIsLoading] = useState(true);
     const [errorText, setErrorText] = useState('');
 
+    // コピー完了アニメーション表示用
+    const [copiedId, setCopiedId] = useState<string | null>(null);
+
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
 
     // ②初回読み込み時に全データを取得する
@@ -103,6 +106,30 @@ export default function AdminDashboard() {
         }
     };
 
+    // 督促文をクリップボードにコピーする関数
+    const handleCopyRemind = (report: ReportData) => {
+        const text = `${report.customerName} 様
+        
+いつもハナシタラ.comをご利用いただき、誠にありがとうございます。
+${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきました下記サービスにつきまして、現在ご入金の確認がとれておりません。
+
+【ご利用内容】: ${report.services}
+【ご請求金額】: ¥${report.totalSales.toLocaleString()}-
+
+お手数をおかけいたしますが、指定の口座までご入金をお願い申し上げます。
+行き違いで既にお振込済みの場合は、何卒ご容赦くださいませ。
+
+引き続き、ハナシタラ.comをよろしくお願いいたします。`;
+
+        navigator.clipboard.writeText(text).then(() => {
+            setCopiedId(report.id);
+            setTimeout(() => setCopiedId(null), 2000); // 2秒後に「コピーしました」の表示を消す
+        }).catch(err => {
+            console.error('コピー失敗:', err);
+            alert('クリップボードへのコピーに失敗しました。');
+        });
+    };
+
     // 全体の総売上と未入金額の計算
     const totalMonthSales = reports.reduce((sum, r) => sum + r.totalSales, 0);
     const totalUnpaid = reports.reduce((sum, r) => !r.isPaid ? sum + r.totalSales : sum, 0);
@@ -179,15 +206,25 @@ export default function AdminDashboard() {
                                         <div className="flex flex-col items-center gap-2">
                                             <button
                                                 onClick={() => togglePaidStatus(report.id, report.isPaid)}
-                                                className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors border shadow-sm ${report.isPaid
+                                                className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors border shadow-sm w-full max-w-[100px] ${report.isPaid
                                                     ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
                                                     : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
                                                     }`}
                                             >
                                                 {report.isPaid ? '✓ 入金済' : '未入金'}
                                             </button>
-                                            {!report.isPaid && report.daysPending >= 3 && (
-                                                <span className="text-[10px] text-red-600 font-bold bg-red-100 px-2 py-0.5 rounded">3日経過!</span>
+                                            {!report.isPaid && (
+                                                <div className="flex flex-col items-center gap-1.5 w-full">
+                                                    {report.daysPending >= 3 && (
+                                                        <span className="text-[10px] text-red-600 font-bold bg-red-100 px-2 py-0.5 rounded w-full text-center">3日経過!</span>
+                                                    )}
+                                                    <button
+                                                        onClick={() => handleCopyRemind(report)}
+                                                        className={`text-[10px] w-full max-w-[100px] py-1 border rounded transition-colors flex justify-center items-center ${copiedId === report.id ? 'bg-green-50 text-green-600 border-green-200' : 'border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
+                                                    >
+                                                        {copiedId === report.id ? '✓ コピー完了' : '📝督促をコピー'}
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
                                     </td>
