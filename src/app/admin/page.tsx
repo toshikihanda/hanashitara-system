@@ -21,6 +21,11 @@ export default function AdminDashboard() {
     const [isLoading, setIsLoading] = useState(true);
     const [errorText, setErrorText] = useState('');
 
+    // タブ状態管理
+    const [activeTab, setActiveTab] = useState<'sales' | 'staff'>('sales');
+    // デモ用デポジット状態
+    const [mockDeposits, setMockDeposits] = useState<Record<string, number>>({});
+
     // コピー完了アニメーション表示用
     const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -206,166 +211,277 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
             <header className="flex flex-col md:flex-row justify-between items-start md:items-end border-b pb-4 gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">オーナーダッシュボード</h1>
-                    <p className="text-sm text-gray-500 mt-1">売上管理・入金確認</p>
+                    <p className="text-sm text-gray-500 mt-1">売上管理・スタッフ管理</p>
                 </div>
             </header>
 
-            {/* 集計サマリー表示 (フェーズ4) */}
-            <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* 総合サマリー */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-4">
-                    <h2 className="font-bold text-gray-800 border-b border-gray-100 pb-2">サマリー ({currentMonthStr.replace('-', '年')}月)</h2>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <p className="text-xs text-gray-500 mb-1 font-medium">今月の総売上</p>
-                            <p className="text-xl font-bold text-gray-900">¥{totalMonthSales.toLocaleString()}</p>
-                        </div>
-                        <div>
-                            <p className="text-xs text-blue-600 mb-1 font-bold">✨ オーナー利益</p>
-                            <p className="text-xl font-bold text-blue-600">¥{totalMonthProfit.toLocaleString()}</p>
-                        </div>
-                        <div className="pt-2 border-t border-gray-100 col-span-2">
-                            <p className="text-xs text-gray-500 mb-1 font-medium">現在の未入金総額</p>
-                            <p className="text-lg font-bold text-red-500">¥{totalUnpaid.toLocaleString()}</p>
-                        </div>
-                    </div>
-                </div>
+            {/* タブナビゲーション */}
+            <div className="flex gap-4 border-b border-gray-100">
+                <button
+                    onClick={() => setActiveTab('sales')}
+                    className={`pb-3 px-4 text-sm font-bold transition-colors border-b-2 ${activeTab === 'sales' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                        }`}
+                >
+                    📊 売上・入金管理
+                </button>
+                <button
+                    onClick={() => setActiveTab('staff')}
+                    className={`pb-3 px-4 text-sm font-bold transition-colors border-b-2 ${activeTab === 'staff' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                        }`}
+                >
+                    👥 スタッフ管理 (給与明細・デポジット)
+                </button>
+            </div>
 
-                {/* 年間サマリー */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-4 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-5 text-6xl">📈</div>
-                    <h2 className="font-bold border-b border-gray-100 pb-2 text-gray-800">確定申告用 ({currentYear}年 累計)</h2>
-                    <div className="flex-1 flex flex-col justify-center gap-4 relative z-10">
-                        <div>
-                            <p className="text-xs text-gray-500 mb-1 font-medium">年間 総売上</p>
-                            <p className="text-2xl font-bold text-gray-900">¥{totalYearSales.toLocaleString()}</p>
+            {activeTab === 'sales' && (
+                <>
+                    {/* 集計サマリー表示 (フェーズ4) */}
+                    <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* 総合サマリー */}
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-4">
+                            <h2 className="font-bold text-gray-800 border-b border-gray-100 pb-2">サマリー ({currentMonthStr.replace('-', '年')}月)</h2>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <p className="text-xs text-gray-500 mb-1 font-medium">今月の総売上</p>
+                                    <p className="text-xl font-bold text-gray-900">¥{totalMonthSales.toLocaleString()}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-blue-600 mb-1 font-bold">✨ オーナー利益</p>
+                                    <p className="text-xl font-bold text-blue-600">¥{totalMonthProfit.toLocaleString()}</p>
+                                </div>
+                                <div className="pt-2 border-t border-gray-100 col-span-2">
+                                    <p className="text-xs text-gray-500 mb-1 font-medium">現在の未入金総額</p>
+                                    <p className="text-lg font-bold text-red-500">¥{totalUnpaid.toLocaleString()}</p>
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-xs text-blue-600 mb-1 font-bold">年間 オーナー純利益</p>
-                            <p className="text-xl font-bold text-blue-600">¥{totalYearProfit.toLocaleString()}</p>
+
+                        {/* 年間サマリー */}
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-4 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-5 text-6xl">📈</div>
+                            <h2 className="font-bold border-b border-gray-100 pb-2 text-gray-800">確定申告用 ({currentYear}年 累計)</h2>
+                            <div className="flex-1 flex flex-col justify-center gap-4 relative z-10">
+                                <div>
+                                    <p className="text-xs text-gray-500 mb-1 font-medium">年間 総売上</p>
+                                    <p className="text-2xl font-bold text-gray-900">¥{totalYearSales.toLocaleString()}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-blue-600 mb-1 font-bold">年間 オーナー純利益</p>
+                                    <p className="text-xl font-bold text-blue-600">¥{totalYearProfit.toLocaleString()}</p>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
 
-                {/* スタッフ別実績（今月） */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col h-full max-h-[250px] overflow-hidden">
-                    <h2 className="font-bold text-gray-800 border-b border-gray-100 pb-2 mb-3">スタッフ別実績 ({currentMonthStr.replace('-', '年')}月)</h2>
-                    <div className="overflow-y-auto pr-2 space-y-3">
-                        {staffStats.length === 0 ? (
-                            <p className="text-sm text-gray-400 text-center py-4">データがありません</p>
-                        ) : (
-                            <ul className="space-y-3">
-                                {staffStats.map(s => (
-                                    <li key={s.name} className="flex justify-between items-center text-sm border-b border-gray-50 pb-2 last:border-0">
-                                        <span className="font-semibold text-gray-700">{s.name}</span>
-                                        <div className="text-right">
-                                            <p className="text-gray-900 font-medium">売上: ¥{s.sales.toLocaleString()}</p>
-                                            <p className="text-[11px] text-gray-400 mt-0.5">報酬: ¥{s.share.toLocaleString()}</p>
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </div>
-                </div>
-            </section>
-
-            {/* 報告データ一覧・入金チェック */}
-            <section className="bg-white rounded-xl shadow-sm border overflow-hidden">
-                <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50/50">
-                    <h2 className="font-semibold text-gray-800">最新の業務報告 / 入金確認</h2>
-                </div>
-                <div className="overflow-x-auto relative">
-
-                    {/* ローディング表示とエラー表示 */}
-                    {isLoading && (
-                        <div className="absolute inset-0 bg-white/70 flex justify-center items-center z-10 backdrop-blur-sm">
-                            <span className="text-gray-500 font-medium animate-pulse">データを取得中...</span>
+                        {/* スタッフ別実績（今月） */}
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col h-full max-h-[250px] overflow-hidden">
+                            <h2 className="font-bold text-gray-800 border-b border-gray-100 pb-2 mb-3">スタッフ別実績 ({currentMonthStr.replace('-', '年')}月)</h2>
+                            <div className="overflow-y-auto pr-2 space-y-3">
+                                {staffStats.length === 0 ? (
+                                    <p className="text-sm text-gray-400 text-center py-4">データがありません</p>
+                                ) : (
+                                    <ul className="space-y-3">
+                                        {staffStats.map(s => (
+                                            <li key={s.name} className="flex justify-between items-center text-sm border-b border-gray-50 pb-2 last:border-0">
+                                                <span className="font-semibold text-gray-700">{s.name}</span>
+                                                <div className="text-right">
+                                                    <p className="text-gray-900 font-medium">売上: ¥{s.sales.toLocaleString()}</p>
+                                                    <p className="text-[11px] text-gray-400 mt-0.5">報酬: ¥{s.share.toLocaleString()}</p>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
                         </div>
-                    )}
-                    {errorText && (
-                        <div className="p-4 bg-red-50 text-red-600 text-sm border-b font-medium">
-                            {errorText}
-                        </div>
-                    )}
+                    </section>
 
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-gray-50 text-gray-600 border-b">
-                            <tr>
-                                <th className="px-6 py-3 font-medium">日付</th>
-                                <th className="px-6 py-3 font-medium">スタッフ</th>
-                                <th className="px-6 py-3 font-medium">お客様名 (電話) / サービス</th>
-                                <th className="px-6 py-3 font-medium text-right">売上額</th>
-                                <th className="px-6 py-3 font-medium text-right">スタッフ報酬</th>
-                                <th className="px-6 py-3 font-medium text-center">入金状況</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {reports.length === 0 && !isLoading && !errorText && (
-                                <tr>
-                                    <td colSpan={6} className="px-6 py-8 text-center text-gray-400">
-                                        報告データがまだありません
-                                    </td>
-                                </tr>
+                    {/* 報告データ一覧・入金チェック */}
+                    <section className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                        <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50/50">
+                            <h2 className="font-semibold text-gray-800">最新の業務報告 / 入金確認</h2>
+                        </div>
+                        <div className="overflow-x-auto relative">
+
+                            {/* ローディング表示とエラー表示 */}
+                            {isLoading && (
+                                <div className="absolute inset-0 bg-white/70 flex justify-center items-center z-10 backdrop-blur-sm">
+                                    <span className="text-gray-500 font-medium animate-pulse">データを取得中...</span>
+                                </div>
                             )}
-                            {reports.map((report) => (
-                                <tr key={report.id} className={`hover:bg-gray-50/50 transition-colors ${!report.isPaid && report.daysPending >= 3 ? 'bg-red-50/30' : ''}`}>
-                                    <td className="px-6 py-4 text-gray-600 whitespace-nowrap">{new Date(report.date).toLocaleDateString('ja-JP')}</td>
-                                    <td className="px-6 py-4 font-medium text-gray-900">{report.staff}</td>
-                                    <td className="px-6 py-4 text-gray-600">
-                                        <div className="font-medium text-gray-800 flex items-center gap-2">
-                                            {report.customerName}
-                                            {blacklistedPhones.includes(report.customerPhone) && (
-                                                <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold border border-red-200">ブラックリスト受診拒否</span>
-                                            )}
-                                        </div>
-                                        <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-2">
-                                            {report.customerPhone}
-                                            {!blacklistedPhones.includes(report.customerPhone) && (
-                                                <button
-                                                    onClick={() => handleAddBlacklist(report.customerPhone, report.customerName)}
-                                                    className="text-[10px] text-gray-400 hover:text-red-500 underline transition-colors"
-                                                >
-                                                    ブラックリストに登録
-                                                </button>
-                                            )}
-                                        </div>
-                                        <div className="text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded inline-block mt-1">{report.services}</div>
-                                    </td>
-                                    <td className="px-6 py-4 text-right font-medium text-gray-900">¥{report.totalSales.toLocaleString()}</td>
-                                    <td className="px-6 py-4 text-right text-gray-600">¥{report.staffShare.toLocaleString()}</td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex flex-col items-center gap-2">
-                                            <button
-                                                onClick={() => togglePaidStatus(report.id, report.isPaid)}
-                                                className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors border shadow-sm w-full max-w-[100px] ${report.isPaid
-                                                    ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
-                                                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                                                    }`}
-                                            >
-                                                {report.isPaid ? '✓ 入金済' : '未入金'}
-                                            </button>
-                                            {!report.isPaid && (
-                                                <div className="flex flex-col items-center gap-1.5 w-full">
-                                                    {report.daysPending >= 3 && (
-                                                        <span className="text-[10px] text-red-600 font-bold bg-red-100 px-2 py-0.5 rounded w-full text-center">3日経過!</span>
+                            {errorText && (
+                                <div className="p-4 bg-red-50 text-red-600 text-sm border-b font-medium">
+                                    {errorText}
+                                </div>
+                            )}
+
+                            <table className="w-full text-sm text-left">
+                                <thead className="bg-gray-50 text-gray-600 border-b">
+                                    <tr>
+                                        <th className="px-6 py-3 font-medium">日付</th>
+                                        <th className="px-6 py-3 font-medium">スタッフ</th>
+                                        <th className="px-6 py-3 font-medium">お客様名 (電話) / サービス</th>
+                                        <th className="px-6 py-3 font-medium text-right">売上額</th>
+                                        <th className="px-6 py-3 font-medium text-right">スタッフ報酬</th>
+                                        <th className="px-6 py-3 font-medium text-center">入金状況</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {reports.length === 0 && !isLoading && !errorText && (
+                                        <tr>
+                                            <td colSpan={6} className="px-6 py-8 text-center text-gray-400">
+                                                報告データがまだありません
+                                            </td>
+                                        </tr>
+                                    )}
+                                    {reports.map((report) => (
+                                        <tr key={report.id} className={`hover:bg-gray-50/50 transition-colors ${!report.isPaid && report.daysPending >= 3 ? 'bg-red-50/30' : ''}`}>
+                                            <td className="px-6 py-4 text-gray-600 whitespace-nowrap">{new Date(report.date).toLocaleDateString('ja-JP')}</td>
+                                            <td className="px-6 py-4 font-medium text-gray-900">{report.staff}</td>
+                                            <td className="px-6 py-4 text-gray-600">
+                                                <div className="font-medium text-gray-800 flex items-center gap-2">
+                                                    {report.customerName}
+                                                    {blacklistedPhones.includes(report.customerPhone) && (
+                                                        <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold border border-red-200">ブラックリスト受診拒否</span>
                                                     )}
+                                                </div>
+                                                <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-2">
+                                                    {report.customerPhone}
+                                                    {!blacklistedPhones.includes(report.customerPhone) && (
+                                                        <button
+                                                            onClick={() => handleAddBlacklist(report.customerPhone, report.customerName)}
+                                                            className="text-[10px] text-gray-400 hover:text-red-500 underline transition-colors"
+                                                        >
+                                                            ブラックリストに登録
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded inline-block mt-1">{report.services}</div>
+                                            </td>
+                                            <td className="px-6 py-4 text-right font-medium text-gray-900">¥{report.totalSales.toLocaleString()}</td>
+                                            <td className="px-6 py-4 text-right text-gray-600">¥{report.staffShare.toLocaleString()}</td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-col items-center gap-2">
                                                     <button
-                                                        onClick={() => handleCopyRemind(report)}
-                                                        className={`text-[10px] w-full max-w-[100px] py-1 border rounded transition-colors flex justify-center items-center ${copiedId === report.id ? 'bg-green-50 text-green-600 border-green-200' : 'border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
+                                                        onClick={() => togglePaidStatus(report.id, report.isPaid)}
+                                                        className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors border shadow-sm w-full max-w-[100px] ${report.isPaid
+                                                            ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                                                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                                                            }`}
                                                     >
-                                                        {copiedId === report.id ? '✓ コピー完了' : '📝督促をコピー'}
+                                                        {report.isPaid ? '✓ 入金済' : '未入金'}
+                                                    </button>
+                                                    {!report.isPaid && (
+                                                        <div className="flex flex-col items-center gap-1.5 w-full">
+                                                            {report.daysPending >= 3 && (
+                                                                <span className="text-[10px] text-red-600 font-bold bg-red-100 px-2 py-0.5 rounded w-full text-center">3日経過!</span>
+                                                            )}
+                                                            <button
+                                                                onClick={() => handleCopyRemind(report)}
+                                                                className={`text-[10px] w-full max-w-[100px] py-1 border rounded transition-colors flex justify-center items-center ${copiedId === report.id ? 'bg-green-50 text-green-600 border-green-200' : 'border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
+                                                            >
+                                                                {copiedId === report.id ? '✓ コピー完了' : '📝督促をコピー'}
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                </>
+            )}
+
+            {/* スタッフ管理・給与・デポジットタブ (フェーズ5用デモ) */}
+            {activeTab === 'staff' && (
+                <section className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                    <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50/50">
+                        <h2 className="font-semibold text-gray-800">スタッフ一覧と報酬・デポジット管理 ({currentMonthStr.replace('-', '年')}月)</h2>
+                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold">デモモード (保存されません)</span>
+                    </div>
+                    <div className="overflow-x-auto relative p-6">
+                        <table className="w-full text-sm text-left border rounded-lg overflow-hidden">
+                            <thead className="bg-gray-50 text-gray-600 border-b">
+                                <tr>
+                                    <th className="px-6 py-3 font-medium">スタッフ名</th>
+                                    <th className="px-6 py-3 font-medium text-right">今月の報酬額</th>
+                                    <th className="px-6 py-3 font-medium text-right">前払い(デポジット)残高</th>
+                                    <th className="px-6 py-3 font-medium text-center">操作・アクション</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {staffStats.length === 0 && (
+                                    <tr>
+                                        <td colSpan={4} className="px-6 py-8 text-center text-gray-400">データがありません</td>
+                                    </tr>
+                                )}
+                                {staffStats.map((s) => {
+                                    const deposit = mockDeposits[s.name] || 0;
+                                    return (
+                                        <tr key={s.name} className="hover:bg-gray-50/50 transition-colors">
+                                            <td className="px-6 py-4 font-bold text-gray-900">{s.name}</td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="font-medium text-gray-900">¥{s.share.toLocaleString()}</div>
+                                                <div className="text-[10px] text-gray-400">売上: ¥{s.sales.toLocaleString()}</div>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="font-bold text-indigo-600">¥{deposit.toLocaleString()}</div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-wrap items-center justify-center gap-2">
+                                                    <button
+                                                        onClick={() => {
+                                                            const input = window.prompt(`${s.name}さんの追加前払い額（例: 5000）を入力してください。※デモ用なのでリロードで消えます`);
+                                                            if (input && !isNaN(Number(input))) {
+                                                                const val = Number(input);
+                                                                // 特典計算のデモ: 5000円なら700円おまけ
+                                                                const bonus = val >= 5000 ? Math.floor(val * 0.14) : 0;
+                                                                const confirmed = window.confirm(`追加額: ¥${val.toLocaleString()}\n特典(14%): ¥${bonus.toLocaleString()}\n\n合計 ¥${(val + bonus).toLocaleString()} をデポジットにチャージしますか？`);
+                                                                if (confirmed) {
+                                                                    setMockDeposits(prev => ({
+                                                                        ...prev,
+                                                                        [s.name]: (prev[s.name] || 0) + val + bonus
+                                                                    }));
+                                                                }
+                                                            }
+                                                        }}
+                                                        className="px-3 py-1.5 bg-indigo-50 text-indigo-600 border border-indigo-200 rounded text-xs font-bold hover:bg-indigo-100 transition-colors">
+                                                        💰 前払い(D)追加
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            alert(`【給与明細 (PDF作成デモ)】\n\n対象: ${s.name} 様\n対象月: ${currentMonthStr.replace('-', '年')}月分\n\n・今月報酬額: ¥${s.share.toLocaleString()}\n・デポジット引出残額: ¥${deposit.toLocaleString()}\n\n→ 実際はここでPDFプレビューが開き、ダウンロード可能になります。`);
+                                                        }}
+                                                        className="px-3 py-1.5 bg-white text-gray-700 border border-gray-300 rounded text-xs font-bold hover:bg-gray-50 transition-colors">
+                                                        📄 明細PDF作成
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            alert(`【自動メール送信デモ】\n\n宛先: ${s.name} 様\n件名: ${currentMonthStr.replace('-', '年')}月分 給与明細のお知らせ\n\n本文:\nいつもお世話になっておりますデモ定型文です。\n今月の明細を添付いたします...（送信完了！）`);
+                                                        }}
+                                                        className="px-3 py-1.5 bg-blue-50 text-blue-600 border border-blue-200 rounded text-xs font-bold hover:bg-blue-100 transition-colors">
+                                                        ✉️ メール送信
                                                     </button>
                                                 </div>
-                                            )}
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </section>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                        <div className="mt-4 p-4 bg-gray-50 border rounded-lg text-sm text-gray-600">
+                            <strong>💡 デモの仕様について（今後の開発イメージ）</strong>
+                            <ul className="list-disc pl-5 mt-2 space-y-1">
+                                <li><strong>デポジット管理:</strong> スプレッドシートの「スタッフマスタ」などに別シートを作り、そこで残高を管理する想定です。特典等のロジックも組み込めます。</li>
+                                <li><strong>給与明細PDF:</strong> オーナー側でこのように月次一覧からワンクリックでサクッとPDF化できると便利です。</li>
+                                <li><strong>自動メール:</strong> PDF生成と同時に「定型文付きでスタッフのメールアドレス（あるいはLINE等）」に送信するAPIを叩く仕組みを想定しています。</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+            )}
         </div>
     );
 }
