@@ -24,12 +24,28 @@ export default function AdminDashboard() {
     // コピー完了アニメーション表示用
     const [copiedId, setCopiedId] = useState<string | null>(null);
 
+    // ブラックリスト保持用
+    const [blacklistedPhones, setBlacklistedPhones] = useState<string[]>([]);
+
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
 
     // ②初回読み込み時に全データを取得する
     useEffect(() => {
         fetchReports();
+        fetchBlacklist();
     }, []);
+
+    const fetchBlacklist = async () => {
+        try {
+            const res = await fetch(`${GAS_URL}?action=getBlacklistPhones`);
+            const json = await res.json();
+            if (json.success) {
+                setBlacklistedPhones(json.phones || []);
+            }
+        } catch (err) {
+            console.error('ブラックリスト取得エラー:', err);
+        }
+    };
 
     const fetchReports = async () => {
         setIsLoading(true);
@@ -103,6 +119,28 @@ export default function AdminDashboard() {
             alert('通信エラーが発生しました。元の状態に戻ります。');
             // エラー時は画面を元に戻す
             setReports(reports.map(r => r.id === id ? { ...r, isPaid: currentPaid } : r));
+        }
+    };
+
+    const handleAddBlacklist = async (phone: string, name: string) => {
+        const reason = window.prompt(`${name}さん (${phone}) をブラックリストに登録する理由を入力してください（イタズラ、未払い等）`);
+        if (!reason) return; // キャンセル
+
+        // 即座にUIへ反映
+        setBlacklistedPhones(prev => [...prev, phone]);
+
+        try {
+            await fetch(GAS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify({ action: 'addBlacklist', phone, name, reason }),
+            });
+            alert('ブラックリストに登録しました。');
+        } catch (err) {
+            console.error('ブラックリスト登録エラー:', err);
+            alert('通信エラーが発生しました。時間を置いて再度お試しください。');
+            // エラー時は元に戻す
+            setBlacklistedPhones(prev => prev.filter(p => p !== phone));
         }
     };
 
@@ -196,8 +234,23 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     <td className="px-6 py-4 text-gray-600 whitespace-nowrap">{new Date(report.date).toLocaleDateString('ja-JP')}</td>
                                     <td className="px-6 py-4 font-medium text-gray-900">{report.staff}</td>
                                     <td className="px-6 py-4 text-gray-600">
-                                        <div className="font-medium text-gray-800">{report.customerName}</div>
-                                        <div className="text-xs text-gray-400 mt-0.5">{report.customerPhone}</div>
+                                        <div className="font-medium text-gray-800 flex items-center gap-2">
+                                            {report.customerName}
+                                            {blacklistedPhones.includes(report.customerPhone) && (
+                                                <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold border border-red-200">ブラックリスト受診拒否</span>
+                                            )}
+                                        </div>
+                                        <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-2">
+                                            {report.customerPhone}
+                                            {!blacklistedPhones.includes(report.customerPhone) && (
+                                                <button
+                                                    onClick={() => handleAddBlacklist(report.customerPhone, report.customerName)}
+                                                    className="text-[10px] text-gray-400 hover:text-red-500 underline transition-colors"
+                                                >
+                                                    ブラックリストに登録
+                                                </button>
+                                            )}
+                                        </div>
                                         <div className="text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded inline-block mt-1">{report.services}</div>
                                     </td>
                                     <td className="px-6 py-4 text-right font-medium text-gray-900">¥{report.totalSales.toLocaleString()}</td>

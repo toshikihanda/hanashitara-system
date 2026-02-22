@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 type ServiceType = 'listen' | 'fortune' | 'sexual';
 
@@ -14,7 +14,24 @@ export default function ReportForm() {
     const [customerName, setCustomerName] = useState('');
     const [services, setServices] = useState<ServiceDetail[]>([{ type: 'listen', minutes: 0 }]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // ブラックリスト電話番号の保持用
+    const [blacklistedPhones, setBlacklistedPhones] = useState<string[]>([]);
+
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
+
+    useEffect(() => {
+        // 初回のみブラックリストを取得
+        fetch(`${GAS_URL}?action=getBlacklistPhones`)
+            .then(res => res.json())
+            .then(json => {
+                if (json.success) {
+                    setBlacklistedPhones(json.phones || []);
+                }
+            }).catch(err => console.error('ブラックリスト取得エラー:', err));
+    }, []);
+
+    const isBlacklisted = phoneNumber && blacklistedPhones.includes(phoneNumber);
 
     // サービス追加用のハンドラ
     const handleAddService = () => {
@@ -119,11 +136,16 @@ export default function ReportForm() {
                         <input
                             type="tel"
                             required
-                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
+                            className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow ${isBlacklisted ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
                             placeholder="090-1234-5678"
                             value={phoneNumber}
                             onChange={(e) => setPhoneNumber(e.target.value)}
                         />
+                        {isBlacklisted && (
+                            <p className="mt-2 text-sm font-semibold text-red-600 bg-red-100/50 p-2 rounded border border-red-200">
+                                ⚠️ この電話番号のお客様はブラックリストに登録されています！<br />通話をお断りするなどの対応をご検討ください。
+                            </p>
+                        )}
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -211,8 +233,8 @@ export default function ReportForm() {
                     type="submit"
                     disabled={isSubmitting || totals.totalSales === 0}
                     className={`w-full font-medium py-3 px-4 rounded-xl transition-all shadow-sm active:scale-[0.98] text-white flex justify-center items-center gap-2 ${isSubmitting || totals.totalSales === 0
-                            ? 'bg-gray-400 cursor-not-allowed'
-                            : 'bg-[#007AFF] hover:bg-[#007AFF]/90'
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-[#007AFF] hover:bg-[#007AFF]/90'
                         }`}
                 >
                     {isSubmitting ? '送信中（少々お待ちください）...' : 'この内容で報告を送信する'}
