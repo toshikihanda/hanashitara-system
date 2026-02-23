@@ -26,6 +26,9 @@ export default function AdminDashboard() {
     // デモ用デポジット状態
     const [mockDeposits, setMockDeposits] = useState<Record<string, number>>({});
 
+    type CustomerSortOption = 'deposit' | 'paid_desc' | 'registered_asc' | 'registered_desc' | 'name_asc' | 'number_asc';
+    const [customerSortBy, setCustomerSortBy] = useState<CustomerSortOption>('deposit');
+
     // コピー完了アニメーション表示用
     const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -206,13 +209,19 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         .map(([name, stats]) => ({ name, ...stats }))
         .sort((a, b) => b.sales - a.sales);
 
-    // フェーズ5: お客様一覧の生成（デポジット利用者優先）
-    const customerMap = new Map<string, { totalPaid: number }>();
+    // フェーズ5: お客様一覧の生成（デポジット利用者優先＋その他のソート）
+    const customerMap = new Map<string, { totalPaid: number, registeredDate: string }>();
     reports.forEach(r => {
         if (r.customerName) {
-            const current = customerMap.get(r.customerName) || { totalPaid: 0 };
+            const current = customerMap.get(r.customerName) || {
+                totalPaid: 0,
+                registeredDate: r.date
+            };
             if (r.isPaid) {
                 current.totalPaid += r.totalSales;
+            }
+            if (new Date(r.date) < new Date(current.registeredDate)) {
+                current.registeredDate = r.date;
             }
             customerMap.set(r.customerName, current);
         }
@@ -220,24 +229,47 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
 
     Object.keys(mockDeposits).forEach(name => {
         if (!customerMap.has(name)) {
-            customerMap.set(name, { totalPaid: 0 });
+            customerMap.set(name, { totalPaid: 0, registeredDate: new Date().toISOString() });
         }
     });
 
-    const customerList = Array.from(customerMap.entries()).map(([name, data]) => {
-        const balance = mockDeposits[name] || 0;
-        return { name, balance, totalPaid: data.totalPaid };
-    }).sort((a, b) => {
-        // デポジットがある人(balance > 0)を上に、それ以外を下に排他
-        if (a.balance > 0 && b.balance === 0) return -1;
-        if (a.balance === 0 && b.balance > 0) return 1;
+    // 登録日ベースでお客様番号（連番）を割り当てるために一時ソート
+    const allCustomers = Array.from(customerMap.entries())
+        .map(([name, data]) => ({ name, ...data }))
+        .sort((a, b) => new Date(a.registeredDate).getTime() - new Date(b.registeredDate).getTime());
 
-        // 累計支払額が多い順にソート (デポジット有無の後)
-        if (a.totalPaid !== b.totalPaid) {
+    const customerList = allCustomers.map((customer, index) => {
+        const balance = mockDeposits[customer.name] || 0;
+        return {
+            name: customer.name,
+            balance,
+            totalPaid: customer.totalPaid,
+            registeredDate: customer.registeredDate,
+            customerNumber: index + 1
+        };
+    }).sort((a, b) => {
+        if (customerSortBy === 'deposit') {
+            if (a.balance > 0 && b.balance === 0) return -1;
+            if (a.balance === 0 && b.balance > 0) return 1;
+            if (a.totalPaid !== b.totalPaid) return b.totalPaid - a.totalPaid;
+            return a.name.localeCompare(b.name, 'ja');
+        }
+        if (customerSortBy === 'paid_desc') {
             return b.totalPaid - a.totalPaid;
         }
-
-        return a.name.localeCompare(b.name, 'ja');
+        if (customerSortBy === 'registered_asc') {
+            return new Date(a.registeredDate).getTime() - new Date(b.registeredDate).getTime();
+        }
+        if (customerSortBy === 'registered_desc') {
+            return new Date(b.registeredDate).getTime() - new Date(a.registeredDate).getTime();
+        }
+        if (customerSortBy === 'number_asc') {
+            return a.customerNumber - b.customerNumber;
+        }
+        if (customerSortBy === 'name_asc') {
+            return a.name.localeCompare(b.name, 'ja');
+        }
+        return 0;
     });
 
     return (
@@ -499,15 +531,34 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
             {/* お客様デポジット管理タブ (フェーズ5用デモ) */}
             {activeTab === 'deposit' && (
                 <section className="bg-white rounded-xl shadow-sm border overflow-hidden">
-                    <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50/50">
-                        <h2 className="font-semibold text-gray-800">お客様管理 (前払いデポジット含む)</h2>
-                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold">デモモード (保存されません)</span>
+                    <div className="px-6 py-4 border-b flex flex-wrap justify-between items-center gap-4 bg-gray-50/50">
+                        <div className="flex items-center gap-4">
+                            <h2 className="font-semibold text-gray-800">お客様管理 (前払いデポジット含む)</h2>
+                            <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold">デモモード (保存されません)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <label className="text-sm text-gray-600 font-medium">並べ替え:</label>
+                            <select
+                                value={customerSortBy}
+                                onChange={(e) => setCustomerSortBy(e.target.value as CustomerSortOption)}
+                                className="border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:border-indigo-500 font-medium"
+                            >
+                                <option value="deposit">前払い有り (お得意様順)</option>
+                                <option value="paid_desc">累計支払額が多い順</option>
+                                <option value="registered_asc">登録日が古い順</option>
+                                <option value="registered_desc">登録日が新しい順</option>
+                                <option value="number_asc">お客様番号順</option>
+                                <option value="name_asc">五十音順</option>
+                            </select>
+                        </div>
                     </div>
                     <div className="overflow-x-auto relative p-6">
                         <table className="w-full text-sm text-left border rounded-lg overflow-hidden">
                             <thead className="bg-gray-50 text-gray-600 border-b">
                                 <tr>
+                                    <th className="px-6 py-3 font-medium">No.</th>
                                     <th className="px-6 py-3 font-medium">お客様名</th>
+                                    <th className="px-6 py-3 font-medium">登録日</th>
                                     <th className="px-6 py-3 font-medium text-right">累計支払額</th>
                                     <th className="px-6 py-3 font-medium text-right">現在の前払い残高</th>
                                     <th className="px-6 py-3 font-medium text-center">操作・アクション</th>
@@ -516,17 +567,25 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                             <tbody className="divide-y divide-gray-100">
                                 {customerList.length === 0 ? (
                                     <tr>
-                                        <td colSpan={4} className="px-6 py-8 text-center text-gray-400">
+                                        <td colSpan={6} className="px-6 py-8 text-center text-gray-400">
                                             データがありません。右下の「新規のお客様を追加」からお試しください。
                                         </td>
                                     </tr>
                                 ) : (
-                                    customerList.map(({ name: customerName, balance, totalPaid }) => (
+                                    customerList.map(({ name: customerName, balance, totalPaid, registeredDate, customerNumber }) => (
                                         <tr key={customerName} className={`transition-colors ${balance > 0 ? 'bg-indigo-50/50' : 'hover:bg-gray-50/50'}`}>
+                                            <td className="px-6 py-4 text-center">
+                                                <span className="text-gray-400 font-medium">{customerNumber}</span>
+                                            </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-2">
                                                     <span className="font-bold text-gray-900">{customerName}</span>
                                                     {balance > 0 && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold shadow-sm">✨ お得意様</span>}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="text-gray-500 font-medium text-sm">
+                                                    {new Date(registeredDate).toLocaleDateString('ja-JP')}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 text-right">
