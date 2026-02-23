@@ -15,20 +15,22 @@ export default function ReportForm() {
     const [services, setServices] = useState<ServiceDetail[]>([{ type: 'listen', minutes: 0 }]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // ブラックリスト電話番号の保持用
+    // お客様データ保持用（名前自動補完）とブラックリスト
+    const [customersMap, setCustomersMap] = useState<Record<string, string>>({});
     const [blacklistedPhones, setBlacklistedPhones] = useState<string[]>([]);
 
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
 
     useEffect(() => {
-        // 初回のみブラックリストを取得
-        fetch(`${GAS_URL}?action=getBlacklistPhones`)
+        // 初回のみ顧客情報とブラックリストを取得
+        fetch(`${GAS_URL}?action=getCustomerInfo`)
             .then(res => res.json())
             .then(json => {
                 if (json.success) {
-                    setBlacklistedPhones(json.phones || []);
+                    setCustomersMap(json.customers || {});
+                    setBlacklistedPhones(json.blacklistedPhones || []);
                 }
-            }).catch(err => console.error('ブラックリスト取得エラー:', err));
+            }).catch(err => console.error('顧客情報取得エラー:', err));
     }, []);
 
     const isBlacklisted = phoneNumber && blacklistedPhones.includes(phoneNumber);
@@ -155,7 +157,14 @@ export default function ReportForm() {
                             className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow ${isBlacklisted ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
                             placeholder="090-1234-5678"
                             value={phoneNumber}
-                            onChange={(e) => setPhoneNumber(e.target.value)}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                setPhoneNumber(val);
+                                // 電話番号に変更があった時、過去の履歴からお客様名を自動補完する
+                                if (customersMap[val]) {
+                                    setCustomerName(customersMap[val]);
+                                }
+                            }}
                         />
                         {isBlacklisted && (
                             <p className="mt-2 text-sm font-semibold text-red-600 bg-red-100/50 p-2 rounded border border-red-200">

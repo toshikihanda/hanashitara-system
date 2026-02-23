@@ -168,16 +168,42 @@ function doGet(e) {
       return output.setContent(JSON.stringify({ success: true, data: data }));
     }
 
-    // ④ ブラックリスト一覧の取得（電話番号のみ）
-    if (action === 'getBlacklistPhones') {
-      const sheet = ss.getSheetByName('ブラックリスト');
-      const data = sheet.getDataRange().getValues();
-      if (data.length > 1) { 
-        data.shift(); 
-        const phones = data.map(row => String(row[0]).trim()); 
-        return output.setContent(JSON.stringify({ success: true, phones: phones }));
+    // ⑧ 顧客情報（電話番号→名前のマップ）とブラックリストの取得
+    if (action === 'getCustomerInfo') {
+      const result = { success: true, customers: {}, blacklistedPhones: [] };
+      
+      // まず業務報告から顧客マップを作成（新しいものが上書きされるように上から下へ）
+      const reportSheet = ss.getSheetByName('業務報告');
+      if (reportSheet) {
+        const reportData = reportSheet.getDataRange().getValues();
+        if (reportData.length > 1) {
+          for (let i = 1; i < reportData.length; i++) {
+            const phone = String(reportData[i][3]).trim();
+            const name = String(reportData[i][4]).trim();
+            if (phone && name && name !== '名無し') {
+              result.customers[phone] = name;
+            }
+          }
+        }
       }
-      return output.setContent(JSON.stringify({ success: true, phones: [] }));
+
+      // 既存の前払い管理の顧客も名前だけ拾っておく（電話番号がないので業務報告優先）
+      
+      // ブラックリスト取得
+      const blSheet = ss.getSheetByName('ブラックリスト');
+      if (blSheet) {
+        const blData = blSheet.getDataRange().getValues();
+        if (blData.length > 1) {
+          for (let i = 1; i < blData.length; i++) {
+            const phone = String(blData[i][0]).trim();
+            if (phone) {
+              result.blacklistedPhones.push(phone);
+            }
+          }
+        }
+      }
+
+      return output.setContent(JSON.stringify(result));
     }
 
     // ⑦ 残高データの取得
