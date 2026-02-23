@@ -23,8 +23,8 @@ export default function AdminDashboard() {
 
     // タブ状態管理
     const [activeTab, setActiveTab] = useState<'sales' | 'staff' | 'deposit'>('sales');
-    // デモ用デポジット状態
-    const [mockDeposits, setMockDeposits] = useState<Record<string, number>>({});
+    // 前払いデポジット状態
+    const [deposits, setDeposits] = useState<Record<string, number>>({});
 
     type CustomerSortOption = 'deposit' | 'paid_desc' | 'registered_asc' | 'registered_desc' | 'name_asc' | 'number_asc';
     const [customerSortBy, setCustomerSortBy] = useState<CustomerSortOption>('deposit');
@@ -41,7 +41,20 @@ export default function AdminDashboard() {
     useEffect(() => {
         fetchReports();
         fetchBlacklist();
+        fetchDeposits();
     }, []);
+
+    const fetchDeposits = async () => {
+        try {
+            const res = await fetch(`${GAS_URL}?action=getDeposits`);
+            const json = await res.json();
+            if (json.success) {
+                setDeposits(json.deposits || {});
+            }
+        } catch (err) {
+            console.error('デポジット取得エラー:', err);
+        }
+    };
 
     const fetchBlacklist = async () => {
         try {
@@ -227,7 +240,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         }
     });
 
-    Object.keys(mockDeposits).forEach(name => {
+    Object.keys(deposits).forEach(name => {
         if (!customerMap.has(name)) {
             customerMap.set(name, { totalPaid: 0, registeredDate: new Date().toISOString() });
         }
@@ -239,7 +252,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         .sort((a, b) => new Date(a.registeredDate).getTime() - new Date(b.registeredDate).getTime());
 
     const customerList = allCustomers.map((customer, index) => {
-        const balance = mockDeposits[customer.name] || 0;
+        const balance = deposits[customer.name] || 0;
         return {
             name: customer.name,
             balance,
@@ -534,22 +547,40 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                     <div className="px-6 py-4 border-b flex flex-wrap justify-between items-center gap-4 bg-gray-50/50">
                         <div className="flex items-center gap-4">
                             <h2 className="font-semibold text-gray-800">お客様管理 (前払いデポジット含む)</h2>
-                            <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold">デモモード (保存されません)</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <label className="text-sm text-gray-600 font-medium">並べ替え:</label>
-                            <select
-                                value={customerSortBy}
-                                onChange={(e) => setCustomerSortBy(e.target.value as CustomerSortOption)}
-                                className="border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:border-indigo-500 font-medium"
-                            >
-                                <option value="deposit">前払い有り (お得意様順)</option>
-                                <option value="paid_desc">累計支払額が多い順</option>
-                                <option value="registered_asc">登録日が古い順</option>
-                                <option value="registered_desc">登録日が新しい順</option>
-                                <option value="number_asc">お客様番号順</option>
-                                <option value="name_asc">五十音順</option>
-                            </select>
+                        <div className="flex flex-wrap items-center gap-4">
+                            <div className="flex items-center gap-2">
+                                <label className="text-sm text-gray-600 font-medium">並べ替え:</label>
+                                <select
+                                    value={customerSortBy}
+                                    onChange={(e) => setCustomerSortBy(e.target.value as CustomerSortOption)}
+                                    className="border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:border-indigo-500 font-medium"
+                                >
+                                    <option value="deposit">前払い有り (お得意様順)</option>
+                                    <option value="paid_desc">累計支払額が多い順</option>
+                                    <option value="registered_asc">登録日が古い順</option>
+                                    <option value="registered_desc">登録日が新しい順</option>
+                                    <option value="number_asc">お客様番号順</option>
+                                    <option value="name_asc">五十音順</option>
+                                </select>
+                            </div>
+                            <button
+                                onClick={async () => {
+                                    const name = window.prompt('新しいお客様名を入力してください');
+                                    if (name) {
+                                        setDeposits(prev => ({ ...prev, [name]: 0 }));
+                                        try {
+                                            await fetch(GAS_URL, {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'text/plain' },
+                                                body: JSON.stringify({ action: 'addCustomer', customerName: name })
+                                            });
+                                        } catch (e) { console.error(e); }
+                                    }
+                                }}
+                                className="px-3 py-1.5 bg-gray-900 text-white rounded text-sm font-bold hover:bg-gray-800 transition-colors shadow-sm">
+                                ＋ 新規のお客様を追加
+                            </button>
                         </div>
                     </div>
                     <div className="overflow-x-auto relative p-6">
@@ -597,17 +628,25 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-wrap items-center justify-center gap-2">
                                                     <button
-                                                        onClick={() => {
+                                                        onClick={async () => {
                                                             const input = window.prompt(`${customerName} 様の追加前払い額（例: 5000）を入力してください。`);
                                                             if (input && !isNaN(Number(input))) {
                                                                 const val = Number(input);
                                                                 const bonus = val >= 5000 ? Math.floor(val * 0.14) : 0;
-                                                                const confirmed = window.confirm(`追加額: ¥${val.toLocaleString()}\n特典(14%): ¥${bonus.toLocaleString()}\n\n合計 ¥${(val + bonus).toLocaleString()} をチャージしますか？`);
+                                                                const total = val + bonus;
+                                                                const confirmed = window.confirm(`追加額: ¥${val.toLocaleString()}\n特典(14%): ¥${bonus.toLocaleString()}\n\n合計 ¥${total.toLocaleString()} をチャージしますか？`);
                                                                 if (confirmed) {
-                                                                    setMockDeposits(prev => ({
+                                                                    setDeposits(prev => ({
                                                                         ...prev,
-                                                                        [customerName]: (prev[customerName] || 0) + val + bonus
+                                                                        [customerName]: (prev[customerName] || 0) + total
                                                                     }));
+                                                                    try {
+                                                                        await fetch(GAS_URL, {
+                                                                            method: 'POST',
+                                                                            headers: { 'Content-Type': 'text/plain' },
+                                                                            body: JSON.stringify({ action: 'updateDeposit', customerName, amount: total, type: 'charge' })
+                                                                        });
+                                                                    } catch (e) { console.error(e); }
                                                                 }
                                                             }
                                                         }}
@@ -615,7 +654,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         💰 チャージ追加
                                                     </button>
                                                     <button
-                                                        onClick={() => {
+                                                        onClick={async () => {
                                                             const input = window.prompt(`${customerName} 様のご利用金額を差し引きます。金額を入力してください。（現在の残高: ¥${balance.toLocaleString()}）`);
                                                             if (input && !isNaN(Number(input))) {
                                                                 const val = Number(input);
@@ -625,10 +664,17 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                 }
                                                                 const confirmed = window.confirm(`¥${val.toLocaleString()} を残高から差し引きますか？`);
                                                                 if (confirmed) {
-                                                                    setMockDeposits(prev => ({
+                                                                    setDeposits(prev => ({
                                                                         ...prev,
                                                                         [customerName]: prev[customerName] - val
                                                                     }));
+                                                                    try {
+                                                                        await fetch(GAS_URL, {
+                                                                            method: 'POST',
+                                                                            headers: { 'Content-Type': 'text/plain' },
+                                                                            body: JSON.stringify({ action: 'updateDeposit', customerName, amount: -val, type: 'use' })
+                                                                        });
+                                                                    } catch (e) { console.error(e); }
                                                                 }
                                                             }
                                                         }}
@@ -646,18 +692,6 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 )}
                             </tbody>
                         </table>
-                        <div className="mt-6 flex justify-end">
-                            <button
-                                onClick={() => {
-                                    const name = window.prompt('新しいお客様名を入力してください');
-                                    if (name) {
-                                        setMockDeposits(prev => ({ ...prev, [name]: 0 }));
-                                    }
-                                }}
-                                className="px-4 py-2 bg-gray-900 text-white rounded text-sm font-bold hover:bg-gray-800 transition-colors shadow-sm">
-                                ＋ 新規のお客様を追加
-                            </button>
-                        </div>
                     </div>
                 </section>
             )}
