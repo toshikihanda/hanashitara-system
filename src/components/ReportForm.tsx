@@ -98,14 +98,30 @@ export default function ReportForm() {
             };
 
             // スプレッドシート（GAS）へ通信
-            await fetch(GAS_URL, {
+            const res = await fetch(GAS_URL, {
                 method: 'POST',
                 // GASでCORSエラーを起こさないよう、単純なtext/plain扱いでJSON文字列を送る手法を採用
                 headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify(reportData),
             });
 
-            alert(`業務報告を送信しました！\n明細がスプレッドシートに追記されます。\n売上: ${totals.totalSales}円`);
+            // GASからのJSONレスポンスをパース
+            let data = null;
+            try {
+                data = await res.json();
+            } catch (e) {
+                console.error("JSON parse error:", e);
+                // JSONパースに失敗した場合でも、通信自体が成功していればレガシーな成功とみなす
+            }
+
+            // メッセージの組み立て
+            if (data && data.autoDeducted) {
+                alert(`業務報告を送信しました！\n売上: ${totals.totalSales}円\n\n✅ お客様の前払い残高から自動で引き落とされ、「入金済」として処理されました。`);
+            } else if (data && data.insufficientBalance) {
+                alert(`業務報告を送信しました！\n売上: ${totals.totalSales}円\n\n⚠️ お客様は前払い顧客ですが、残高（¥${data.currentDeposit}）が不足しているため自動引き落としできませんでした。「未入金」となっていますのでご請求をお願いします。`);
+            } else {
+                alert(`業務報告を送信しました！\n明細がスプレッドシートに追記されます。\n売上: ${totals.totalSales}円`);
+            }
 
             // 送信成功後、次の入力用にフォームをリセットする
             setPhoneNumber('');

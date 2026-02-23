@@ -10,20 +10,54 @@ function doPost(e) {
     
     // ① 業務報告の追加
     if (action === 'addReport') {
-      const sheet = ss.getSheetByName('業務報告');
+      const reportSheet = ss.getSheetByName('業務報告');
+      const depositSheet = ss.getSheetByName('前払い管理');
       const newId = Utilities.getUuid();
-      sheet.appendRow([
+      
+      let paidStatus = '未入金';
+      let autoDeducted = false;
+      let insufficientBalance = false;
+      let currentDeposit = 0;
+      const sales = Number(data.totalSales) || 0;
+      const customerName = data.customerName;
+      
+      // 前払い残高から自動引き落とし
+      if (depositSheet && customerName && sales > 0) {
+        const dValues = depositSheet.getDataRange().getValues();
+        for (let i = 1; i < dValues.length; i++) {
+          if (dValues[i][0] === customerName) {
+            currentDeposit = Number(dValues[i][1]) || 0;
+            if (currentDeposit >= sales) {
+              depositSheet.getRange(i + 1, 2).setValue(currentDeposit - sales);
+              paidStatus = '入金済'; 
+              autoDeducted = true;
+            } else if (currentDeposit > 0) {
+              insufficientBalance = true;
+            }
+            break;
+          }
+        }
+      }
+
+      reportSheet.appendRow([
         newId,
         data.date,
         data.staff,
         data.customerPhone,
         data.customerName,
         data.services,
-        data.totalSales,
+        sales,
         data.staffShare,
-        '未入金'
+        paidStatus
       ]);
-      return output.setContent(JSON.stringify({ success: true, id: newId }));
+      
+      return output.setContent(JSON.stringify({ 
+        success: true, 
+        id: newId, 
+        autoDeducted: autoDeducted, 
+        insufficientBalance: insufficientBalance,
+        currentDeposit: currentDeposit
+      }));
     }
     
     // ② 入金状況の更新
