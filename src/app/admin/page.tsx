@@ -22,7 +22,7 @@ export default function AdminDashboard() {
     const [errorText, setErrorText] = useState('');
 
     // タブ状態管理
-    const [activeTab, setActiveTab] = useState<'sales' | 'staff'>('sales');
+    const [activeTab, setActiveTab] = useState<'sales' | 'staff' | 'deposit'>('sales');
     // デモ用デポジット状態
     const [mockDeposits, setMockDeposits] = useState<Record<string, number>>({});
 
@@ -216,7 +216,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
             </header>
 
             {/* タブナビゲーション */}
-            <div className="flex gap-4 border-b border-gray-100">
+            <div className="flex gap-4 border-b border-gray-100 mb-6">
                 <button
                     onClick={() => setActiveTab('sales')}
                     className={`pb-3 px-4 text-sm font-bold transition-colors border-b-2 ${activeTab === 'sales' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-700 hover:border-gray-300'
@@ -229,7 +229,14 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                     className={`pb-3 px-4 text-sm font-bold transition-colors border-b-2 ${activeTab === 'staff' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-700 hover:border-gray-300'
                         }`}
                 >
-                    👥 スタッフ管理 (給与明細・デポジット)
+                    👥 スタッフ管理
+                </button>
+                <button
+                    onClick={() => setActiveTab('deposit')}
+                    className={`pb-3 px-4 text-sm font-bold transition-colors border-b-2 ${activeTab === 'deposit' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                        }`}
+                >
+                    💳 お客様デポジット管理
                 </button>
             </div>
 
@@ -394,12 +401,16 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                 </>
             )}
 
-            {/* スタッフ管理・給与・デポジットタブ (フェーズ5用デモ) */}
+            {/* スタッフ管理 (新規追加・給与明細等) */}
             {activeTab === 'staff' && (
                 <section className="bg-white rounded-xl shadow-sm border overflow-hidden">
                     <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50/50">
-                        <h2 className="font-semibold text-gray-800">スタッフ一覧と報酬・デポジット管理 ({currentMonthStr.replace('-', '年')}月)</h2>
-                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold">デモモード (保存されません)</span>
+                        <h2 className="font-semibold text-gray-800">スタッフ一覧と報酬管理 ({currentMonthStr.replace('-', '年')}月)</h2>
+                        <button
+                            onClick={() => alert('【デモ】新規スタッフ追加モーダルが表示され、スタッフ名やメールアドレス等を登録できるようになります。')}
+                            className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded font-bold hover:bg-gray-800 transition-colors shadow-sm">
+                            ➕ 新規スタッフ追加
+                        </button>
                     </div>
                     <div className="overflow-x-auto relative p-6">
                         <table className="w-full text-sm text-left border rounded-lg overflow-hidden">
@@ -407,18 +418,16 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 <tr>
                                     <th className="px-6 py-3 font-medium">スタッフ名</th>
                                     <th className="px-6 py-3 font-medium text-right">今月の報酬額</th>
-                                    <th className="px-6 py-3 font-medium text-right">前払い(デポジット)残高</th>
                                     <th className="px-6 py-3 font-medium text-center">操作・アクション</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {staffStats.length === 0 && (
                                     <tr>
-                                        <td colSpan={4} className="px-6 py-8 text-center text-gray-400">データがありません</td>
+                                        <td colSpan={3} className="px-6 py-8 text-center text-gray-400">データがありません</td>
                                     </tr>
                                 )}
                                 {staffStats.map((s) => {
-                                    const deposit = mockDeposits[s.name] || 0;
                                     return (
                                         <tr key={s.name} className="hover:bg-gray-50/50 transition-colors">
                                             <td className="px-6 py-4 font-bold text-gray-900">{s.name}</td>
@@ -426,33 +435,11 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 <div className="font-medium text-gray-900">¥{s.share.toLocaleString()}</div>
                                                 <div className="text-[10px] text-gray-400">売上: ¥{s.sales.toLocaleString()}</div>
                                             </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <div className="font-bold text-indigo-600">¥{deposit.toLocaleString()}</div>
-                                            </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-wrap items-center justify-center gap-2">
                                                     <button
                                                         onClick={() => {
-                                                            const input = window.prompt(`${s.name}さんの追加前払い額（例: 5000）を入力してください。※デモ用なのでリロードで消えます`);
-                                                            if (input && !isNaN(Number(input))) {
-                                                                const val = Number(input);
-                                                                // 特典計算のデモ: 5000円なら700円おまけ
-                                                                const bonus = val >= 5000 ? Math.floor(val * 0.14) : 0;
-                                                                const confirmed = window.confirm(`追加額: ¥${val.toLocaleString()}\n特典(14%): ¥${bonus.toLocaleString()}\n\n合計 ¥${(val + bonus).toLocaleString()} をデポジットにチャージしますか？`);
-                                                                if (confirmed) {
-                                                                    setMockDeposits(prev => ({
-                                                                        ...prev,
-                                                                        [s.name]: (prev[s.name] || 0) + val + bonus
-                                                                    }));
-                                                                }
-                                                            }
-                                                        }}
-                                                        className="px-3 py-1.5 bg-indigo-50 text-indigo-600 border border-indigo-200 rounded text-xs font-bold hover:bg-indigo-100 transition-colors">
-                                                        💰 前払い(D)追加
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            alert(`【給与明細 (PDF作成デモ)】\n\n対象: ${s.name} 様\n対象月: ${currentMonthStr.replace('-', '年')}月分\n\n・今月報酬額: ¥${s.share.toLocaleString()}\n・デポジット引出残額: ¥${deposit.toLocaleString()}\n\n→ 実際はここでPDFプレビューが開き、ダウンロード可能になります。`);
+                                                            alert(`【給与明細 (PDF作成デモ)】\n\n対象: ${s.name} 様\n対象月: ${currentMonthStr.replace('-', '年')}月分\n\n・今月報酬額: ¥${s.share.toLocaleString()}\n\n→ 実際はここでPDFプレビューが開き、ダウンロード可能になります。`);
                                                         }}
                                                         className="px-3 py-1.5 bg-white text-gray-700 border border-gray-300 rounded text-xs font-bold hover:bg-gray-50 transition-colors">
                                                         📄 明細PDF作成
@@ -471,13 +458,99 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 })}
                             </tbody>
                         </table>
-                        <div className="mt-4 p-4 bg-gray-50 border rounded-lg text-sm text-gray-600">
-                            <strong>💡 デモの仕様について（今後の開発イメージ）</strong>
-                            <ul className="list-disc pl-5 mt-2 space-y-1">
-                                <li><strong>デポジット管理:</strong> スプレッドシートの「スタッフマスタ」などに別シートを作り、そこで残高を管理する想定です。特典等のロジックも組み込めます。</li>
-                                <li><strong>給与明細PDF:</strong> オーナー側でこのように月次一覧からワンクリックでサクッとPDF化できると便利です。</li>
-                                <li><strong>自動メール:</strong> PDF生成と同時に「定型文付きでスタッフのメールアドレス（あるいはLINE等）」に送信するAPIを叩く仕組みを想定しています。</li>
-                            </ul>
+                    </div>
+                </section>
+            )}
+
+            {/* お客様デポジット管理タブ (フェーズ5用デモ) */}
+            {activeTab === 'deposit' && (
+                <section className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                    <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50/50">
+                        <h2 className="font-semibold text-gray-800">お客様 前払い(デポジット)管理</h2>
+                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold">デモモード (保存されません)</span>
+                    </div>
+                    <div className="overflow-x-auto relative p-6">
+                        <table className="w-full text-sm text-left border rounded-lg overflow-hidden">
+                            <thead className="bg-gray-50 text-gray-600 border-b">
+                                <tr>
+                                    <th className="px-6 py-3 font-medium">お客様名</th>
+                                    <th className="px-6 py-3 font-medium text-right">現在の前払い残高</th>
+                                    <th className="px-6 py-3 font-medium text-center">操作・アクション</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {Object.keys(mockDeposits).length === 0 ? (
+                                    <tr>
+                                        <td colSpan={3} className="px-6 py-8 text-center text-gray-400">
+                                            データがありません。右下の「新規のお客様を追加」からお試しください。
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    Object.entries(mockDeposits).map(([customerName, balance]) => (
+                                        <tr key={customerName} className="hover:bg-gray-50/50 transition-colors">
+                                            <td className="px-6 py-4 font-bold text-gray-900">{customerName}</td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="font-bold text-indigo-600">¥{balance.toLocaleString()}</div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-wrap items-center justify-center gap-2">
+                                                    <button
+                                                        onClick={() => {
+                                                            const input = window.prompt(`${customerName} 様の追加前払い額（例: 5000）を入力してください。`);
+                                                            if (input && !isNaN(Number(input))) {
+                                                                const val = Number(input);
+                                                                const bonus = val >= 5000 ? Math.floor(val * 0.14) : 0;
+                                                                const confirmed = window.confirm(`追加額: ¥${val.toLocaleString()}\n特典(14%): ¥${bonus.toLocaleString()}\n\n合計 ¥${(val + bonus).toLocaleString()} をチャージしますか？`);
+                                                                if (confirmed) {
+                                                                    setMockDeposits(prev => ({
+                                                                        ...prev,
+                                                                        [customerName]: (prev[customerName] || 0) + val + bonus
+                                                                    }));
+                                                                }
+                                                            }
+                                                        }}
+                                                        className="px-3 py-1.5 bg-indigo-50 text-indigo-600 border border-indigo-200 rounded text-xs font-bold hover:bg-indigo-100 transition-colors">
+                                                        💰 チャージ追加
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            const input = window.prompt(`${customerName} 様のご利用金額を差し引きます。金額を入力してください。（現在の残高: ¥${balance.toLocaleString()}）`);
+                                                            if (input && !isNaN(Number(input))) {
+                                                                const val = Number(input);
+                                                                if (val > balance) {
+                                                                    alert('残高不足です。');
+                                                                    return;
+                                                                }
+                                                                const confirmed = window.confirm(`¥${val.toLocaleString()} を残高から差し引きますか？`);
+                                                                if (confirmed) {
+                                                                    setMockDeposits(prev => ({
+                                                                        ...prev,
+                                                                        [customerName]: prev[customerName] - val
+                                                                    }));
+                                                                }
+                                                            }
+                                                        }}
+                                                        className="px-3 py-1.5 bg-white text-gray-700 border border-gray-300 rounded text-xs font-bold hover:bg-gray-50 transition-colors">
+                                                        ➖ 利用分を引く
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                        <div className="mt-6 flex justify-end">
+                            <button
+                                onClick={() => {
+                                    const name = window.prompt('新しいお客様名を入力してください');
+                                    if (name) {
+                                        setMockDeposits(prev => ({ ...prev, [name]: 0 }));
+                                    }
+                                }}
+                                className="px-4 py-2 bg-gray-900 text-white rounded text-sm font-bold hover:bg-gray-800 transition-colors shadow-sm">
+                                ＋ 新規のお客様を追加
+                            </button>
                         </div>
                     </div>
                 </section>
