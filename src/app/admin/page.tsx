@@ -207,19 +207,36 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         .sort((a, b) => b.sales - a.sales);
 
     // フェーズ5: お客様一覧の生成（デポジット利用者優先）
-    const customerSet = new Set<string>();
+    const customerMap = new Map<string, { totalPaid: number }>();
     reports.forEach(r => {
-        if (r.customerName) customerSet.add(r.customerName);
+        if (r.customerName) {
+            const current = customerMap.get(r.customerName) || { totalPaid: 0 };
+            if (r.isPaid) {
+                current.totalPaid += r.totalSales;
+            }
+            customerMap.set(r.customerName, current);
+        }
     });
-    Object.keys(mockDeposits).forEach(name => customerSet.add(name));
 
-    const customerList = Array.from(customerSet).map(name => {
+    Object.keys(mockDeposits).forEach(name => {
+        if (!customerMap.has(name)) {
+            customerMap.set(name, { totalPaid: 0 });
+        }
+    });
+
+    const customerList = Array.from(customerMap.entries()).map(([name, data]) => {
         const balance = mockDeposits[name] || 0;
-        return { name, balance };
+        return { name, balance, totalPaid: data.totalPaid };
     }).sort((a, b) => {
         // デポジットがある人(balance > 0)を上に、それ以外を下に排他
         if (a.balance > 0 && b.balance === 0) return -1;
         if (a.balance === 0 && b.balance > 0) return 1;
+
+        // 累計支払額が多い順にソート (デポジット有無の後)
+        if (a.totalPaid !== b.totalPaid) {
+            return b.totalPaid - a.totalPaid;
+        }
+
         return a.name.localeCompare(b.name, 'ja');
     });
 
@@ -491,6 +508,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                             <thead className="bg-gray-50 text-gray-600 border-b">
                                 <tr>
                                     <th className="px-6 py-3 font-medium">お客様名</th>
+                                    <th className="px-6 py-3 font-medium text-right">累計支払額</th>
                                     <th className="px-6 py-3 font-medium text-right">現在の前払い残高</th>
                                     <th className="px-6 py-3 font-medium text-center">操作・アクション</th>
                                 </tr>
@@ -498,18 +516,21 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                             <tbody className="divide-y divide-gray-100">
                                 {customerList.length === 0 ? (
                                     <tr>
-                                        <td colSpan={3} className="px-6 py-8 text-center text-gray-400">
+                                        <td colSpan={4} className="px-6 py-8 text-center text-gray-400">
                                             データがありません。右下の「新規のお客様を追加」からお試しください。
                                         </td>
                                     </tr>
                                 ) : (
-                                    customerList.map(({ name: customerName, balance }) => (
+                                    customerList.map(({ name: customerName, balance, totalPaid }) => (
                                         <tr key={customerName} className={`transition-colors ${balance > 0 ? 'bg-indigo-50/50' : 'hover:bg-gray-50/50'}`}>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-2">
                                                     <span className="font-bold text-gray-900">{customerName}</span>
                                                     {balance > 0 && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold shadow-sm">✨ お得意様</span>}
                                                 </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="text-gray-600 font-medium">¥{totalPaid.toLocaleString()}</div>
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 <div className={`font-bold ${balance > 0 ? 'text-indigo-600' : 'text-gray-400'}`}>¥{balance.toLocaleString()}</div>
@@ -554,8 +575,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         }}
                                                         disabled={balance === 0}
                                                         className={`px-3 py-1.5 rounded text-xs font-bold transition-colors border ${balance === 0
-                                                                ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                                                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                                            ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                                                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                                                             }`}>
                                                         ➖ 利用分を引く
                                                     </button>
