@@ -206,6 +206,23 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         .map(([name, stats]) => ({ name, ...stats }))
         .sort((a, b) => b.sales - a.sales);
 
+    // フェーズ5: お客様一覧の生成（デポジット利用者優先）
+    const customerSet = new Set<string>();
+    reports.forEach(r => {
+        if (r.customerName) customerSet.add(r.customerName);
+    });
+    Object.keys(mockDeposits).forEach(name => customerSet.add(name));
+
+    const customerList = Array.from(customerSet).map(name => {
+        const balance = mockDeposits[name] || 0;
+        return { name, balance };
+    }).sort((a, b) => {
+        // デポジットがある人(balance > 0)を上に、それ以外を下に排他
+        if (a.balance > 0 && b.balance === 0) return -1;
+        if (a.balance === 0 && b.balance > 0) return 1;
+        return a.name.localeCompare(b.name, 'ja');
+    });
+
     return (
         <div className="p-6 max-w-6xl mx-auto space-y-8 pb-32">
             <header className="flex flex-col md:flex-row justify-between items-start md:items-end border-b pb-4 gap-4">
@@ -236,7 +253,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                     className={`pb-3 px-4 text-sm font-bold transition-colors border-b-2 ${activeTab === 'deposit' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-700 hover:border-gray-300'
                         }`}
                 >
-                    💳 お客様デポジット管理
+                    💳 お客様管理
                 </button>
             </div>
 
@@ -466,7 +483,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
             {activeTab === 'deposit' && (
                 <section className="bg-white rounded-xl shadow-sm border overflow-hidden">
                     <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50/50">
-                        <h2 className="font-semibold text-gray-800">お客様 前払い(デポジット)管理</h2>
+                        <h2 className="font-semibold text-gray-800">お客様管理 (前払いデポジット含む)</h2>
                         <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold">デモモード (保存されません)</span>
                     </div>
                     <div className="overflow-x-auto relative p-6">
@@ -479,18 +496,23 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {Object.keys(mockDeposits).length === 0 ? (
+                                {customerList.length === 0 ? (
                                     <tr>
                                         <td colSpan={3} className="px-6 py-8 text-center text-gray-400">
                                             データがありません。右下の「新規のお客様を追加」からお試しください。
                                         </td>
                                     </tr>
                                 ) : (
-                                    Object.entries(mockDeposits).map(([customerName, balance]) => (
-                                        <tr key={customerName} className="hover:bg-gray-50/50 transition-colors">
-                                            <td className="px-6 py-4 font-bold text-gray-900">{customerName}</td>
+                                    customerList.map(({ name: customerName, balance }) => (
+                                        <tr key={customerName} className={`transition-colors ${balance > 0 ? 'bg-indigo-50/50' : 'hover:bg-gray-50/50'}`}>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-gray-900">{customerName}</span>
+                                                    {balance > 0 && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold shadow-sm">✨ お得意様</span>}
+                                                </div>
+                                            </td>
                                             <td className="px-6 py-4 text-right">
-                                                <div className="font-bold text-indigo-600">¥{balance.toLocaleString()}</div>
+                                                <div className={`font-bold ${balance > 0 ? 'text-indigo-600' : 'text-gray-400'}`}>¥{balance.toLocaleString()}</div>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-wrap items-center justify-center gap-2">
@@ -530,7 +552,11 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                 }
                                                             }
                                                         }}
-                                                        className="px-3 py-1.5 bg-white text-gray-700 border border-gray-300 rounded text-xs font-bold hover:bg-gray-50 transition-colors">
+                                                        disabled={balance === 0}
+                                                        className={`px-3 py-1.5 rounded text-xs font-bold transition-colors border ${balance === 0
+                                                                ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                                                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                                            }`}>
                                                         ➖ 利用分を引く
                                                     </button>
                                                 </div>
