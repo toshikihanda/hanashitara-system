@@ -23,11 +23,6 @@ export default function AdminDashboard() {
 
     // タブ状態管理
     const [activeTab, setActiveTab] = useState<'sales' | 'staff' | 'deposit'>('sales');
-    // ボーナス設定状態
-    const [bonusThreshold, setBonusThreshold] = useState(5000);
-    const [bonusRate, setBonusRate] = useState(14);
-    // PDFプレビュー用状態
-    const [selectedPdfStaff, setSelectedPdfStaff] = useState<string | null>(null);
     // 前払いデポジット状態
     const [deposits, setDeposits] = useState<Record<string, number>>({});
 
@@ -47,12 +42,6 @@ export default function AdminDashboard() {
         fetchReports();
         fetchBlacklist();
         fetchDeposits();
-
-        // ボーナス設定の読み込み
-        const savedThreshold = localStorage.getItem('depositBonusThreshold');
-        const savedRate = localStorage.getItem('depositBonusRate');
-        if (savedThreshold) setBonusThreshold(Number(savedThreshold));
-        if (savedRate) setBonusRate(Number(savedRate));
     }, []);
 
     const fetchDeposits = async () => {
@@ -209,11 +198,6 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
     const totalYearSales = yearReports.reduce((sum, r) => sum + r.totalSales, 0);
     const totalYearProfit = yearReports.reduce((sum, r) => sum + (r.totalSales - r.staffShare), 0);
 
-    // 1.5. 本日の売上（当日）
-    const todayStr = new Date().toLocaleDateString('ja-JP');
-    const todayReports = reports.filter(r => new Date(r.date).toLocaleDateString('ja-JP') === todayStr);
-    const totalTodaySales = todayReports.reduce((sum, r) => sum + r.totalSales, 0);
-
     // 2. 今月分合計
     const monthReports = reports.filter(r => {
         const d = new Date(r.date);
@@ -222,10 +206,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
     const totalMonthSales = monthReports.reduce((sum, r) => sum + r.totalSales, 0);
     const totalMonthProfit = monthReports.reduce((sum, r) => sum + (r.totalSales - r.staffShare), 0);
 
-    // 3. 全ての未入金額・件数
-    const unpaidReports = reports.filter(r => !r.isPaid);
-    const totalUnpaid = unpaidReports.reduce((sum, r) => sum + r.totalSales, 0);
-    const unpaidCount = unpaidReports.length;
+    // 3. 全ての未入金額
+    const totalUnpaid = reports.filter(r => !r.isPaid).reduce((sum, r) => sum + r.totalSales, 0);
 
     // 4. スタッフ別集計（今月）
     const staffStatsMap = new Map<string, { sales: number, share: number }>();
@@ -346,24 +328,16 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                             <h2 className="font-bold text-gray-800 border-b border-gray-100 pb-2">サマリー ({currentMonthStr.replace('-', '年')}月)</h2>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <p className="text-xs text-gray-500 mb-1 font-medium">本日の売上</p>
-                                    <p className="text-xl font-bold text-gray-900">¥{totalTodaySales.toLocaleString()}</p>
-                                </div>
-                                <div>
                                     <p className="text-xs text-gray-500 mb-1 font-medium">今月の総売上</p>
                                     <p className="text-xl font-bold text-gray-900">¥{totalMonthSales.toLocaleString()}</p>
                                 </div>
                                 <div>
-                                    <p className="text-xs text-blue-600 mb-1 font-bold">✨ 今月の運営利益</p>
+                                    <p className="text-xs text-blue-600 mb-1 font-bold">✨ オーナー利益</p>
                                     <p className="text-xl font-bold text-blue-600">¥{totalMonthProfit.toLocaleString()}</p>
                                 </div>
-                                <div>
-                                    <p className="text-xs text-gray-500 mb-1 font-medium">今月の報酬合計</p>
-                                    <p className="text-xl font-bold text-gray-700">¥{(totalMonthSales - totalMonthProfit).toLocaleString()}</p>
-                                </div>
                                 <div className="pt-2 border-t border-gray-100 col-span-2">
-                                    <p className="text-xs text-gray-500 mb-1 font-medium">現在の未入金</p>
-                                    <p className="text-lg font-bold text-red-500">{unpaidCount}件 / ¥{totalUnpaid.toLocaleString()}</p>
+                                    <p className="text-xs text-gray-500 mb-1 font-medium">現在の未入金総額</p>
+                                    <p className="text-lg font-bold text-red-500">¥{totalUnpaid.toLocaleString()}</p>
                                 </div>
                             </div>
                         </div>
@@ -543,7 +517,9 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-wrap items-center justify-center gap-2">
                                                     <button
-                                                        onClick={() => setSelectedPdfStaff(s.name)}
+                                                        onClick={() => {
+                                                            alert(`【給与明細 (PDF作成デモ)】\n\n対象: ${s.name} 様\n対象月: ${currentMonthStr.replace('-', '年')}月分\n\n・今月報酬額: ¥${s.share.toLocaleString()}\n\n→ 実際はここでPDFプレビューが開き、ダウンロード可能になります。`);
+                                                        }}
                                                         className="px-3 py-1.5 bg-white text-gray-700 border border-gray-300 rounded text-xs font-bold hover:bg-gray-50 transition-colors">
                                                         📄 明細PDF作成
                                                     </button>
@@ -573,19 +549,6 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                             <h2 className="font-semibold text-gray-800">お客様管理 (前払いデポジット含む)</h2>
                         </div>
                         <div className="flex flex-wrap items-center gap-4">
-                            {/* ボーナス設定 UI */}
-                            <div className="flex flex-col bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-100">
-                                <span className="text-[10px] text-indigo-800 font-bold mb-1 flex items-center gap-1">🎁 前払いボーナス設定</span>
-                                <div className="flex items-center gap-2">
-                                    <input type="number" value={bonusThreshold} onChange={e => setBonusThreshold(Number(e.target.value))} className="w-20 px-1.5 py-1 text-sm rounded border" /> <span className="text-xs text-gray-600 font-bold">円以上で</span>
-                                    <input type="number" value={bonusRate} onChange={e => setBonusRate(Number(e.target.value))} className="w-16 px-1.5 py-1 text-sm rounded border" /> <span className="text-xs text-gray-600 font-bold">％付与</span>
-                                    <button onClick={() => {
-                                        localStorage.setItem('depositBonusThreshold', String(bonusThreshold));
-                                        localStorage.setItem('depositBonusRate', String(bonusRate));
-                                        alert('次回のチャージから設定されたボーナス条件が適用されます。');
-                                    }} className="ml-2 bg-indigo-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-indigo-700 transition shadow-sm">保存</button>
-                                </div>
-                            </div>
                             <div className="flex items-center gap-2">
                                 <label className="text-sm text-gray-600 font-medium">並べ替え:</label>
                                 <select
@@ -669,9 +632,9 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                             const input = window.prompt(`${customerName} 様の追加前払い額（例: 5000）を入力してください。`);
                                                             if (input && !isNaN(Number(input))) {
                                                                 const val = Number(input);
-                                                                const bonus = val >= bonusThreshold ? Math.floor(val * (bonusRate / 100)) : 0;
+                                                                const bonus = val >= 5000 ? Math.floor(val * 0.14) : 0;
                                                                 const total = val + bonus;
-                                                                const confirmed = window.confirm(`追加額: ¥${val.toLocaleString()}\n特典(${bonusRate}%): ¥${bonus.toLocaleString()}\n\n合計 ¥${total.toLocaleString()} をチャージしますか？`);
+                                                                const confirmed = window.confirm(`追加額: ¥${val.toLocaleString()}\n特典(14%): ¥${bonus.toLocaleString()}\n\n合計 ¥${total.toLocaleString()} をチャージしますか？`);
                                                                 if (confirmed) {
                                                                     setDeposits(prev => ({
                                                                         ...prev,
@@ -732,89 +695,434 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                     </div>
                 </section>
             )}
-
-            {/* 給与明細PDFプレビューモーダル */}
-            {selectedPdfStaff && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex justify-center py-10 overflow-auto">
-                    <div className="bg-white max-w-3xl w-full p-8 rounded-lg shadow-xl m-auto relative">
-                        <button onClick={() => setSelectedPdfStaff(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-900 text-xl font-bold PrintHidden">✕</button>
-                        <div id="pdf-content" className="space-y-6 text-black bg-white">
-                            <h2 className="text-2xl font-bold text-center border-b border-gray-800 pb-4">給与明細書</h2>
-
-                            <div className="flex justify-between items-end">
-                                <div>
-                                    <p className="text-xl font-bold border-b border-black pb-1 mb-2 inline-block min-w-[200px]">{selectedPdfStaff} 様</p>
-                                    <p className="text-sm font-medium">対象期間: {currentMonthStr.replace('-', '年')}月1日〜末日</p>
-                                </div>
-                                <div className="text-right text-sm">
-                                    <p className="font-medium">発行日: {new Date().toLocaleDateString('ja-JP')}</p>
-                                    <p className="font-bold text-gray-800 mt-1 text-base">ハナシタラ.com</p>
-                                </div>
-                            </div>
-
-                            <table className="w-full text-sm border-collapse border border-gray-400">
-                                <thead>
-                                    <tr className="bg-gray-100 text-center text-gray-800">
-                                        <th className="border border-gray-400 py-2 px-2">日付</th>
-                                        <th className="border border-gray-400 py-2 px-2">お客様名</th>
-                                        <th className="border border-gray-400 py-2 px-2">サービス内訳</th>
-                                        <th className="border border-gray-400 py-2 px-2">ご請求額 (売上)</th>
-                                        <th className="border border-gray-400 py-2 px-2">スタッフ報酬</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {monthReports.filter(r => r.staff === selectedPdfStaff).map(r => (
-                                        <tr key={r.id} className="text-center hover:bg-gray-50/50">
-                                            <td className="border border-gray-400 py-2 px-2 text-gray-700">{new Date(r.date).toLocaleDateString('ja-JP').slice(5)}</td>
-                                            <td className="border border-gray-400 py-2 px-2 text-gray-800 font-medium">{r.customerName}</td>
-                                            <td className="border border-gray-400 py-2 px-2 text-xs text-gray-600 font-medium whitespace-pre-wrap text-left break-all max-w-[250px]">{r.services.split(', ').join('\n')}</td>
-                                            <td className="border border-gray-400 py-2 px-2 text-gray-700">¥{r.totalSales.toLocaleString()}</td>
-                                            <td className="border border-gray-400 py-2 px-2 font-bold text-gray-900">¥{r.staffShare.toLocaleString()}</td>
-                                        </tr>
-                                    ))}
-                                    {monthReports.filter(r => r.staff === selectedPdfStaff).length === 0 && (
-                                        <tr>
-                                            <td colSpan={5} className="border border-gray-400 py-8 text-center text-gray-500">
-                                                今月の実績はありません
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-
-                            <div className="flex justify-end pt-4">
-                                <div className="w-full max-w-[300px]">
-                                    <div className="flex justify-between font-bold text-xl border-b-[3px] border-black pb-1 mb-2">
-                                        <span>合計振込額</span>
-                                        <span>¥{(staffStats.find(s => s.name === selectedPdfStaff)?.share || 0).toLocaleString()}</span>
-                                    </div>
-                                    <p className="text-xs text-gray-600 font-medium text-right">※上記金額をご指定の口座へお振り込みいたします。</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="mt-8 flex justify-center gap-4 PrintHidden pt-4 border-t">
-                            <button onClick={() => window.print()} className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg font-bold shadow hover:bg-indigo-700 transition flex items-center gap-2">
-                                🖨️ 印刷 / PDFで保存
-                            </button>
-                            <button onClick={() => setSelectedPdfStaff(null)} className="px-6 py-2.5 bg-gray-200 text-gray-800 rounded-lg font-bold shadow hover:bg-gray-300 transition">
-                                閉じる
-                            </button>
-                        </div>
-                    </div>
-                    {/* 印刷用CSS */}
-                    <style dangerouslySetInnerHTML={{
-                        __html: `
-                        @media print {
-                            @page { size: auto; margin: 15mm; }
-                            body * { visibility: hidden !important; }
-                            #pdf-content, #pdf-content * { visibility: visible !important; }
-                            #pdf-content { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
-                            .PrintHidden { display: none !important; }
-                        }
-                    `}} />
-                </div>
-            )}
         </div>
     );
 }
+
+==================
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
+
+interface ReportData {
+    id: string;
+    date: string;
+    staff: string;
+    customerName: string;
+    totalSales: number;
+    staffShare: number;
+    isPaid: boolean;
+}
+
+export default function StaffMyPage() {
+    const [staffName, setStaffName] = useState('');
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+    const [reports, setReports] = useState<ReportData[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [errorText, setErrorText] = useState('');
+
+    const printRef = useRef<HTMLDivElement>(null);
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
+
+    // ログイン処理（名前を入力してデータを取得）
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!staffName) return;
+
+        setIsLoading(true);
+        setErrorText('');
+
+        try {
+            const res = await fetch(`${GAS_URL}?action=getReports`);
+            const json = await res.json();
+
+            if (json.success) {
+                // 自分のデータだけを抽出
+                const myData = json.data
+                    .filter((row: any[]) => row[2] === staffName)
+                    .map((row: any[]) => ({
+                        id: row[0],
+                        date: row[1],
+                        staff: row[2],
+                        customerName: row[4],
+                        totalSales: Number(row[6]) || 0,
+                        staffShare: Number(row[7]) || 0,
+                        isPaid: row[8] === '入金済' || row[8] === true || row[8] === 'TRUE',
+                    }))
+                    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                setReports(myData);
+                setIsLoggedIn(true);
+            } else {
+                setErrorText('データの取得に失敗しました。');
+            }
+        } catch (err) {
+            console.error(err);
+            setErrorText('通信エラーが発生しました。ネットワークをご確認ください。');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // 印刷（PDF生成）処理
+    const handlePrint = () => {
+        window.print();
+    };
+
+    // 今月の計算（※本来は月で絞り込みますが、今回は全件の合計として表示）
+    const totalMyShare = reports.reduce((sum, r) => sum + r.staffShare, 0);
+
+    // --- ログイン前画面 ---
+    if (!isLoggedIn) {
+        return (
+            <div className="min-h-screen bg-gray-50/50 flex flex-col items-center pt-20 px-4">
+                <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+                    <h1 className="text-2xl font-bold text-gray-900 text-center mb-6">給与・明細の確認</h1>
+                    <form onSubmit={handleLogin} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">スタッフ名を入力してください</label>
+                            <input
+                                type="text"
+                                required
+                                value={staffName}
+                                onChange={(e) => setStaffName(e.target.value)}
+                                placeholder="例: テストスタッフ様"
+                                className="w-full bg-gray-50 border border-gray-200 text-gray-900 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#007AFF] focus:border-transparent outline-none transition-all"
+                            />
+                        </div>
+                        {errorText && <p className="text-red-500 text-sm">{errorText}</p>}
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="w-full bg-[#007AFF] hover:bg-[#007AFF]/90 text-white font-medium py-3 rounded-xl transition-all shadow-sm flex justify-center items-center"
+                        >
+                            {isLoading ? 'データを確認中...' : 'マイページを表示する'}
+                        </button>
+                    </form>
+                    <div className="mt-6 text-center">
+                        <Link href="/" className="text-sm text-gray-500 hover:text-gray-800 underline">
+                            業務報告フォームへ戻る
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // --- ログイン後（マイページ＆明細書） ---
+    return (
+        <div className="min-h-screen bg-gray-50/50 pt-10 pb-20 px-4 print:bg-white print:pt-0 print:pb-0">
+            <div className="max-w-3xl mx-auto space-y-6">
+
+                {/* ヘッダーボタンエリア（印刷時は完全に隠す） */}
+                <div className="flex justify-between items-center print:hidden">
+                    <Link href="/" className="text-sm text-[#007AFF] font-medium hover:underline">
+                        ← 報告フォームに戻る
+                    </Link>
+                    <button
+                        onClick={handlePrint}
+                        className="bg-gray-900 text-white px-5 py-2 rounded-full text-sm font-medium shadow-sm hover:bg-gray-800 transition-colors"
+                    >
+                        🖨️ 明細をPDFで保存・印刷
+                    </button>
+                </div>
+
+                {/* --- ここから下が「明細書」として印刷（PDF化）されるエリア --- */}
+                <div ref={printRef} className="bg-white p-8 sm:p-12 rounded-2xl shadow-sm border border-gray-100 print:shadow-none print:border-none print:p-0">
+
+                    <div className="flex justify-between items-start border-b pb-6 mb-8">
+                        <div>
+                            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">給与支払明細書</h1>
+                            <p className="text-gray-500 mt-2">ハナシタラ.com</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-sm text-gray-500">発行日: {new Date().toLocaleDateString('ja-JP')}</p>
+                            <p className="text-xl font-bold text-gray-900 mt-1">{staffName} <span className="text-sm font-normal text-gray-600">様</span></p>
+                        </div>
+                    </div>
+
+                    <div className="bg-gray-50 rounded-xl p-6 mb-8 flex justify-between items-center print:border print:border-gray-200 print:bg-transparent">
+                        <span className="text-lg font-medium text-gray-700">合計支給額（スタッフ報酬）</span>
+                        <span className="text-3xl font-bold text-gray-900">¥{totalMyShare.toLocaleString()}</span>
+                    </div>
+
+                    <h2 className="text-sm font-bold text-gray-500 mb-4 px-1">今月の業務履歴・明細</h2>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left border-collapse">
+                            <thead>
+                                <tr className="border-b-2 border-gray-800 text-gray-900">
+                                    <th className="py-3 px-2 font-semibold">日付</th>
+                                    <th className="py-3 px-2 font-semibold">お客様名</th>
+                                    <th className="py-3 px-2 font-semibold text-right">総売上</th>
+                                    <th className="py-3 px-2 font-semibold text-right text-[#007AFF]">あなたの報酬額</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {reports.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={4} className="py-8 text-center text-gray-400">履歴がありません</td>
+                                    </tr>
+                                ) : (
+                                    reports.map((r, i) => (
+                                        <tr key={i} className="text-gray-700 print:text-black">
+                                            <td className="py-4 px-2">{new Date(r.date).toLocaleDateString('ja-JP')}</td>
+                                            <td className="py-4 px-2">{r.customerName}</td>
+                                            <td className="py-4 px-2 text-right">¥{r.totalSales.toLocaleString()}</td>
+                                            <td className="py-4 px-2 text-right font-bold text-gray-900">¥{r.staffShare.toLocaleString()}</td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div className="mt-16 pt-8 border-t border-gray-100 text-center text-xs text-gray-400">
+                        <p>※本明細書はシステムによって自動生成されています。</p>
+                        <p className="mt-1">ハナシタラ.com サポートセンター</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+==================
+const SHEET_ID = '1Uzvrp-GVYFlJZht9uOawiHJS3vV3Ub6MGmsVfS0P-so';
+
+function doPost(e) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const action = data.action;
+    const output = ContentService.createTextOutput().setMimeType(ContentService.MimeType.JSON);
+    
+    // ① 業務報告の追加
+    if (action === 'addReport') {
+      const reportSheet = ss.getSheetByName('業務報告');
+      const depositSheet = ss.getSheetByName('前払い管理');
+      const newId = Utilities.getUuid();
+      
+      let paidStatus = '未入金';
+      let autoDeducted = false;
+      let insufficientBalance = false;
+      let currentDeposit = 0;
+      const sales = Number(data.totalSales) || 0;
+      const customerName = data.customerName;
+      
+      // 前払い残高から自動引き落とし
+      if (depositSheet && customerName && sales > 0) {
+        const dValues = depositSheet.getDataRange().getValues();
+        for (let i = 1; i < dValues.length; i++) {
+          if (dValues[i][0] === customerName) {
+            currentDeposit = Number(dValues[i][1]) || 0;
+            if (currentDeposit >= sales) {
+              depositSheet.getRange(i + 1, 2).setValue(currentDeposit - sales);
+              paidStatus = '入金済'; 
+              autoDeducted = true;
+            } else if (currentDeposit > 0) {
+              insufficientBalance = true;
+            }
+            break;
+          }
+        }
+      }
+
+      reportSheet.appendRow([
+        newId,
+        data.date,
+        data.staff,
+        data.customerPhone,
+        data.customerName,
+        data.services,
+        sales,
+        data.staffShare,
+        paidStatus
+      ]);
+      
+      return output.setContent(JSON.stringify({ 
+        success: true, 
+        id: newId, 
+        autoDeducted: autoDeducted, 
+        insufficientBalance: insufficientBalance,
+        currentDeposit: currentDeposit
+      }));
+    }
+    
+    // ② 入金状況の更新
+    if (action === 'updatePaidStatus') {
+      const sheet = ss.getSheetByName('業務報告');
+      const targetId = data.id;
+      const newStatus = data.isPaid ? '入金済' : '未入金';
+      
+      const values = sheet.getDataRange().getValues();
+      for (let i = 1; i < values.length; i++) {
+        if (values[i][0] === targetId) {
+          sheet.getRange(i + 1, 9).setValue(newStatus);
+          return output.setContent(JSON.stringify({ success: true }));
+        }
+      }
+      return output.setContent(JSON.stringify({ success: false, message: 'IDが見つかりません' }));
+    }
+
+    // ③ ブラックリストの追加
+    if (action === 'addBlacklist') {
+      const sheet = ss.getSheetByName('ブラックリスト');
+      // [電話番号, お客様名, 登録理由, 登録日時]
+      sheet.appendRow([
+        data.phone,
+        data.name,
+        data.reason,
+        new Date().toLocaleString('ja-JP')
+      ]);
+      return output.setContent(JSON.stringify({ success: true }));
+    }
+
+    // ⑤ お客様の新規追加（前払い用）
+    if (action === 'addCustomer') {
+      let sheet = ss.getSheetByName("前払い管理");
+      if (!sheet) {
+        sheet = ss.insertSheet("前払い管理");
+        sheet.appendRow(["お客様名", "現在の残高"]); 
+      }
+      
+      const customerName = data.customerName;
+      const values = sheet.getDataRange().getValues();
+      let exists = false;
+      for (let i = 1; i < values.length; i++) {
+        if (values[i][0] === customerName) {
+          exists = true;
+          break;
+        }
+      }
+      
+      if (!exists) {
+        sheet.appendRow([customerName, 0]);
+      }
+      
+      return output.setContent(JSON.stringify({ success: true }));
+    }
+
+    // ⑥ チャージ・利用（残高更新）
+    if (action === 'updateDeposit') {
+      const sheet = ss.getSheetByName("前払い管理");
+      if (!sheet) {
+        return output.setContent(JSON.stringify({ success: false, message: '前払い管理シートがありません' }));
+      }
+      
+      const customerName = data.customerName;
+      const amount = Number(data.amount) || 0;
+      
+      const values = sheet.getDataRange().getValues();
+      let customerRowIndex = -1;
+      let currentBalance = 0;
+      
+      for (let i = 1; i < values.length; i++) {
+        if (values[i][0] === customerName) {
+          customerRowIndex = i + 1; // 1ベース
+          currentBalance = Number(values[i][1]) || 0;
+          break;
+        }
+      }
+      
+      if (customerRowIndex !== -1) {
+        // 既存顧客の残高を更新
+        const newBalance = currentBalance + amount;
+        sheet.getRange(customerRowIndex, 2).setValue(newBalance);
+      } else {
+        // 顧客が存在しない場合は新規追加
+        sheet.appendRow([customerName, amount]);
+      }
+      
+      return output.setContent(JSON.stringify({ success: true }));
+    }
+    
+    return output.setContent(JSON.stringify({ success: false, message: 'Invalid action' }));
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: error.toString() })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const action = e.parameter.action;
+  const output = ContentService.createTextOutput().setMimeType(ContentService.MimeType.JSON);
+
+  try {
+    // 業務報告一覧の取得
+    if (action === 'getReports') {
+      const sheet = ss.getSheetByName('業務報告');
+      const data = sheet.getDataRange().getValues();
+      if (data.length > 0) data.shift(); // ヘッダーを1行目として削除
+      return output.setContent(JSON.stringify({ success: true, data: data }));
+    }
+
+    // ⑧ 顧客情報（電話番号→名前のマップ）とブラックリストの取得
+    if (action === 'getCustomerInfo') {
+      const result = { success: true, customers: {}, blacklistedPhones: [] };
+      
+      // まず業務報告から顧客マップを作成（新しいものが上書きされるように上から下へ）
+      const reportSheet = ss.getSheetByName('業務報告');
+      if (reportSheet) {
+        const reportData = reportSheet.getDataRange().getValues();
+        if (reportData.length > 1) {
+          for (let i = 1; i < reportData.length; i++) {
+            const phone = String(reportData[i][3]).trim();
+            const name = String(reportData[i][4]).trim();
+            if (phone && name && name !== '名無し') {
+              result.customers[phone] = name;
+            }
+          }
+        }
+      }
+
+      // 既存の前払い管理の顧客も名前だけ拾っておく（電話番号がないので業務報告優先）
+      
+      // ブラックリスト取得
+      const blSheet = ss.getSheetByName('ブラックリスト');
+      if (blSheet) {
+        const blData = blSheet.getDataRange().getValues();
+        if (blData.length > 1) {
+          for (let i = 1; i < blData.length; i++) {
+            const phone = String(blData[i][0]).trim();
+            if (phone) {
+              result.blacklistedPhones.push(phone);
+            }
+          }
+        }
+      }
+
+      return output.setContent(JSON.stringify(result));
+    }
+
+    // ⑦ 残高データの取得
+    if (action === 'getDeposits') {
+      const sheet = ss.getSheetByName("前払い管理");
+      if (!sheet) {
+        return output.setContent(JSON.stringify({ success: false, message: '前払い管理シートがありません' }));
+      }
+      
+      const data = sheet.getDataRange().getValues();
+      const deposits = {};
+      if (data.length > 1) { 
+        for (let i = 1; i < data.length; i++) {
+          const name = data[i][0];
+          const balance = data[i][1];
+          if (name) {
+            deposits[name] = Number(balance) || 0;
+          }
+        }
+      }
+      
+      return output.setContent(JSON.stringify({ success: true, deposits: deposits }));
+    }
+    
+    return output.setContent(JSON.stringify({ success: false, message: 'Invalid action' }));
+  } catch (error) {
+    return output.setContent(JSON.stringify({ success: false, error: error.toString() }));
+  }
+}
+
+==================

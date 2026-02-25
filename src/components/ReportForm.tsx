@@ -10,10 +10,15 @@ interface ServiceDetail {
 }
 
 export default function ReportForm() {
+    const [staffName, setStaffName] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
     const [customerName, setCustomerName] = useState('');
     const [services, setServices] = useState<ServiceDetail[]>([{ type: 'listen', minutes: 0 }]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // デモ用スタッフリスト（将来的にはGASやDBから取得）
+    const STAFF_LIST = ['吉川', 'スタッフA', 'スタッフB', 'スタッフC'];
+
 
     // お客様データ保持用（名前自動補完）とブラックリスト
     const [customersMap, setCustomersMap] = useState<Record<string, string>>({});
@@ -60,7 +65,9 @@ export default function ReportForm() {
         let staffShare = 0;
 
         services.forEach(service => {
-            const units = service.minutes / 10;
+            // 5分単位で四捨五入する
+            const roundedMinutes = Math.round(service.minutes / 5) * 5;
+            const units = roundedMinutes / 10;
             if (service.type === 'listen') { // 傾聴: 10分300円、スタッフ6割
                 const price = units * 300;
                 totalSales += price;
@@ -91,10 +98,15 @@ export default function ReportForm() {
             const reportData = {
                 action: 'addReport',
                 date: new Date().toLocaleDateString('ja-JP'),
-                staff: 'テストスタッフ様', // TODO: ログイン機能ができたらユーザー名に差し替える
+                staff: staffName,
                 customerPhone: phoneNumber,
                 customerName: customerName || '名無し',
-                services: services.map(s => `${s.type === 'listen' ? '傾聴' : s.type === 'fortune' ? '占い' : '性的な相談'}(${s.minutes}分)`).join(', '),
+                // 生の分数と、端数処理後の分数を両方記録しておく（報告フォームは生、給与明細は端数処理後）
+                services: services.map(s => {
+                    const typeName = s.type === 'listen' ? '傾聴' : s.type === 'fortune' ? '占い' : '性的な相談';
+                    const rounded = Math.round(s.minutes / 5) * 5;
+                    return `${typeName}(${s.minutes}分 -> 計算${rounded}分)`;
+                }).join(', '),
                 totalSales: totals.totalSales,
                 staffShare: totals.staffShare
             };
@@ -145,6 +157,26 @@ export default function ReportForm() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
+                {/* スタッフ情報 */}
+                <div className="space-y-4 border-b border-gray-100 pb-6">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            スタッフ名 <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                            required
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                            value={staffName}
+                            onChange={(e) => setStaffName(e.target.value)}
+                        >
+                            <option value="">（お名前を選択してください）</option>
+                            {STAFF_LIST.map(name => (
+                                <option key={name} value={name}>{name}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+
                 {/* お客様情報 */}
                 <div className="space-y-4">
                     <div>
@@ -188,7 +220,8 @@ export default function ReportForm() {
 
                 {/* サービス内容（複数混在対応） */}
                 <div className="bg-gray-50 -mx-4 sm:-mx-6 px-4 sm:px-6 py-5 rounded-lg border border-gray-100">
-                    <label className="block text-sm font-medium text-gray-700 mb-3">提供サービスと通話時間（10分単位で合算されます）</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">提供サービスと通話時間（実際の通話分数を入力）</label>
+                    <p className="text-xs text-gray-500 mb-3">※システム側で自動的に5分単位の四捨五入が行われます。</p>
 
                     <div className="space-y-3">
                         {services.map((service, index) => (
@@ -207,7 +240,7 @@ export default function ReportForm() {
                                     <input
                                         type="number"
                                         min="0"
-                                        step="10"
+                                        step="1"
                                         className="w-20 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-right"
                                         placeholder="0"
                                         value={service.minutes || ''}
@@ -256,8 +289,8 @@ export default function ReportForm() {
                 {/* 送信ボタン */}
                 <button
                     type="submit"
-                    disabled={isSubmitting || totals.totalSales === 0}
-                    className={`w-full font-medium py-3 px-4 rounded-xl transition-all shadow-sm active:scale-[0.98] text-white flex justify-center items-center gap-2 ${isSubmitting || totals.totalSales === 0
+                    disabled={isSubmitting || totals.totalSales === 0 || !staffName}
+                    className={`w-full font-medium py-3 px-4 rounded-xl transition-all shadow-sm active:scale-[0.98] text-white flex justify-center items-center gap-2 ${isSubmitting || totals.totalSales === 0 || !staffName
                         ? 'bg-gray-400 cursor-not-allowed'
                         : 'bg-[#007AFF] hover:bg-[#007AFF]/90'
                         }`}
