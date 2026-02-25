@@ -11,14 +11,17 @@ interface ServiceDetail {
 
 export default function ReportForm() {
     const [staffName, setStaffName] = useState('');
+    const [reportDate, setReportDate] = useState(() => {
+        const today = new Date();
+        return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    });
     const [phoneNumber, setPhoneNumber] = useState('');
     const [customerName, setCustomerName] = useState('');
     const [services, setServices] = useState<ServiceDetail[]>([{ type: 'listen', minutes: 0 }]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // デモ用スタッフリスト（将来的にはGASやDBから取得）
-    const STAFF_LIST = ['吉川', 'スタッフA', 'スタッフB', 'スタッフC'];
-
+    // スタッフリストをGASから取得する
+    const [staffList, setStaffList] = useState<string[]>(['吉川', 'スタッフA', 'スタッフB', 'スタッフC']);
 
     // お客様データ保持用（名前自動補完）とブラックリスト
     const [customersMap, setCustomersMap] = useState<Record<string, string>>({});
@@ -27,7 +30,7 @@ export default function ReportForm() {
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
 
     useEffect(() => {
-        // 初回のみ顧客情報とブラックリストを取得
+        // 初回のみ顧客情報とブラックリスト、スタッフリストを取得
         fetch(`${GAS_URL}?action=getCustomerInfo`)
             .then(res => res.json())
             .then(json => {
@@ -36,6 +39,14 @@ export default function ReportForm() {
                     setBlacklistedPhones(json.blacklistedPhones || []);
                 }
             }).catch(err => console.error('顧客情報取得エラー:', err));
+
+        fetch(`${GAS_URL}?action=getStaffList`)
+            .then(res => res.json())
+            .then(json => {
+                if (json.success && json.staff && json.staff.length > 0) {
+                    setStaffList(json.staff.map((s: any) => s.name));
+                }
+            }).catch(err => console.error('スタッフ取得エラー:', err));
     }, []);
 
     const isBlacklisted = phoneNumber && blacklistedPhones.includes(phoneNumber);
@@ -88,20 +99,21 @@ export default function ReportForm() {
 
     const totals = calculateTotals();
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent, forceSubmit = false) => {
         e.preventDefault();
         if (isSubmitting) return;
         setIsSubmitting(true);
 
         try {
-            // 送信データの整形（GASへ送る形式）
+            // 送信データの整形（GASへ送る形式） - 日付は選択された値を使用
+            const formattedDate = new Date(reportDate).toLocaleDateString('ja-JP');
             const reportData = {
                 action: 'addReport',
-                date: new Date().toLocaleDateString('ja-JP'),
+                checkDuplicate: !forceSubmit, // 初回送信時は重複チェックをお願いする
+                date: formattedDate,
                 staff: staffName,
                 customerPhone: phoneNumber,
                 customerName: customerName || '名無し',
-                // 生の分数と、端数処理後の分数を両方記録しておく（報告フォームは生、給与明細は端数処理後）
                 services: services.map(s => {
                     const typeName = s.type === 'listen' ? '傾聴' : s.type === 'fortune' ? '占い' : '性的な相談';
                     const rounded = Math.round(s.minutes / 5) * 5;
@@ -114,7 +126,6 @@ export default function ReportForm() {
             // スプレッドシート（GAS）へ通信
             const res = await fetch(GAS_URL, {
                 method: 'POST',
-                // GASでCORSエラーを起こさないよう、単純なtext/plain扱いでJSON文字列を送る手法を採用
                 headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify(reportData),
             });
@@ -125,7 +136,18 @@ export default function ReportForm() {
                 data = await res.json();
             } catch (e) {
                 console.error("JSON parse error:", e);
-                // JSONパースに失敗した場合でも、通信自体が成功していればレガシーな成功とみなす
+            }
+
+            // 重複チェックによる警告ダイアログ
+            if (data && data.duplicate && !forceSubmit) {
+                setIsSubmitting(false); // 一旦ローディング解除
+                const confirmMsg = `⚠️【重複警告】\n「${formattedDate}」の「${customerName || phoneNumber}」様に対する「${staffName}」さんの報告は既に存在します。\n\n追加で登録してもよろしいですか？`;
+                if (window.confirm(confirmMsg)) {
+                    // OKなら強制送信フラグを立てて再実行
+                    return handleSubmit(e, true);
+                } else {
+                    return; // キャンセルした場合はここで処理終了
+                }
             }
 
             // メッセージの組み立て
@@ -157,9 +179,9 @@ export default function ReportForm() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-                {/* スタッフ情報 */}
-                <div className="space-y-4 border-b border-gray-100 pb-6">
-                    <div>
+                {/* スタッフ情報と日付 */}
+                <div className="space-y-4 border-b border-gray-100 pb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-4 mt-0">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                             スタッフ名 <span className="text-red-500">*</span>
                         </label>
@@ -170,10 +192,22 @@ export default function ReportForm() {
                             onChange={(e) => setStaffName(e.target.value)}
                         >
                             <option value="">（お名前を選択してください）</option>
-                            {STAFF_LIST.map(name => (
+                            {staffList.map(name => (
                                 <option key={name} value={name}>{name}</option>
                             ))}
                         </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            対応日 (報告を忘れた場合は過去を選択)
+                        </label>
+                        <input
+                            type="date"
+                            required
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                            value={reportDate}
+                            onChange={(e) => setReportDate(e.target.value)}
+                        />
                     </div>
                 </div>
 

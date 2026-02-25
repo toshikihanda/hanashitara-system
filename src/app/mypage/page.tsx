@@ -15,6 +15,7 @@ interface ReportData {
 
 export default function StaffMyPage() {
     const [staffName, setStaffName] = useState('');
+    const [password, setPassword] = useState('');
     const [isLoggedIn, setIsLoggedIn] = useState(false);
 
     const [reports, setReports] = useState<ReportData[]>([]);
@@ -24,15 +25,30 @@ export default function StaffMyPage() {
     const printRef = useRef<HTMLDivElement>(null);
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
 
-    // ログイン処理（名前を入力してデータを取得）
+    // ログイン処理（パスワード認証後、データを取得）
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!staffName) return;
+        if (!staffName || !password) return;
 
         setIsLoading(true);
         setErrorText('');
 
         try {
+            // ① パスワード認証をチェック
+            const authRes = await fetch(GAS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify({ action: 'login', staffId: staffName, password: password })
+            });
+            const authJson = await authRes.json();
+
+            if (!authJson.success) {
+                setErrorText(authJson.message || 'ログインに失敗しました。');
+                setIsLoading(false);
+                return;
+            }
+
+            // ② 認証成功したらデータを取得
             const res = await fetch(`${GAS_URL}?action=getReports`);
             const json = await res.json();
 
@@ -80,13 +96,23 @@ export default function StaffMyPage() {
                     <h1 className="text-2xl font-bold text-gray-900 text-center mb-6">給与・明細の確認</h1>
                     <form onSubmit={handleLogin} className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">スタッフ名を入力してください</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">スタッフ名 (ID)</label>
                             <input
                                 type="text"
                                 required
                                 value={staffName}
                                 onChange={(e) => setStaffName(e.target.value)}
                                 placeholder="例: テストスタッフ様"
+                                className="w-full bg-gray-50 border border-gray-200 text-gray-900 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#007AFF] focus:border-transparent outline-none transition-all mb-4"
+                            />
+
+                            <label className="block text-sm font-medium text-gray-700 mb-1">パスワード</label>
+                            <input
+                                type="password"
+                                required
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="パスワードを入力"
                                 className="w-full bg-gray-50 border border-gray-200 text-gray-900 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#007AFF] focus:border-transparent outline-none transition-all"
                             />
                         </div>

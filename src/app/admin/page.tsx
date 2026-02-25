@@ -28,8 +28,11 @@ export default function AdminDashboard() {
     const [bonusRate, setBonusRate] = useState(14);
     // PDFプレビュー用状態
     const [selectedPdfStaff, setSelectedPdfStaff] = useState<string | null>(null);
-    // 前払いデポジット状態
+    // 前払いデポジット状態と顧客電話番号
     const [deposits, setDeposits] = useState<Record<string, number>>({});
+    const [customerPhones, setCustomerPhones] = useState<Record<string, string>>({});
+    // スタッフのメアド保持用
+    const [staffEmails, setStaffEmails] = useState<Record<string, string>>({});
 
     type CustomerSortOption = 'deposit' | 'paid_desc' | 'registered_asc' | 'registered_desc' | 'name_asc' | 'number_asc';
     const [customerSortBy, setCustomerSortBy] = useState<CustomerSortOption>('deposit');
@@ -47,6 +50,7 @@ export default function AdminDashboard() {
         fetchReports();
         fetchBlacklist();
         fetchDeposits();
+        fetchStaffList();
 
         // ボーナス設定の読み込み
         const savedThreshold = localStorage.getItem('depositBonusThreshold');
@@ -55,12 +59,27 @@ export default function AdminDashboard() {
         if (savedRate) setBonusRate(Number(savedRate));
     }, []);
 
+    const fetchStaffList = async () => {
+        try {
+            const res = await fetch(`${GAS_URL}?action=getStaffList`);
+            const json = await res.json();
+            if (json.success && json.staff) {
+                const emails: Record<string, string> = {};
+                json.staff.forEach((s: any) => { emails[s.name] = s.email; });
+                setStaffEmails(emails);
+            }
+        } catch (err) {
+            console.error('スタッフ取得エラー:', err);
+        }
+    };
+
     const fetchDeposits = async () => {
         try {
             const res = await fetch(`${GAS_URL}?action=getDeposits`);
             const json = await res.json();
             if (json.success) {
                 setDeposits(json.deposits || {});
+                setCustomerPhones(json.phones || {});
             }
         } catch (err) {
             console.error('デポジット取得エラー:', err);
@@ -271,8 +290,10 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
 
     const customerList = allCustomers.map((customer, index) => {
         const balance = deposits[customer.name] || 0;
+        const phone = customerPhones[customer.name] || '登録なし';
         return {
             name: customer.name,
+            phone,
             balance,
             totalPaid: customer.totalPaid,
             registeredDate: customer.registeredDate,
@@ -495,6 +516,35 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                             </button>
                                                         </div>
                                                     )}
+
+                                                    {/* 管理者用：修正ボタン */}
+                                                    <button
+                                                        onClick={async () => {
+                                                            const cName = window.prompt('修正後の お客様名 を入力してください', report.customerName);
+                                                            if (cName === null) return;
+                                                            const cPhone = window.prompt(`修正後の 電話番号 を入力してください`, report.customerPhone);
+                                                            if (cPhone === null) return;
+                                                            const tSalesStr = window.prompt(`修正後の 売上額(半角数字) を入力してください`, String(report.totalSales));
+                                                            if (tSalesStr === null) return;
+                                                            const tSales = Number(tSalesStr);
+
+                                                            setReports(reports.map(r => r.id === report.id ? { ...r, customerName: cName, customerPhone: cPhone, totalSales: tSales } : r));
+
+                                                            try {
+                                                                await fetch(GAS_URL, {
+                                                                    method: 'POST',
+                                                                    headers: { 'Content-Type': 'text/plain' },
+                                                                    body: JSON.stringify({ action: 'editReport', id: report.id, customerName: cName, customerPhone: cPhone, totalSales: tSales })
+                                                                });
+                                                            } catch (err) {
+                                                                console.error(err);
+                                                                alert('エラーが発生しました。');
+                                                            }
+                                                        }}
+                                                        className="text-[10px] w-full max-w-[100px] py-1 border rounded transition-colors flex justify-center items-center border-gray-300 text-gray-600 bg-white hover:bg-gray-50 mt-1"
+                                                    >
+                                                        ✏️ 修正する
+                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -512,7 +562,25 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                     <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50/50">
                         <h2 className="font-semibold text-gray-800">スタッフ一覧と報酬管理 ({currentMonthStr.replace('-', '年')}月)</h2>
                         <button
-                            onClick={() => alert('【デモ】新規スタッフ追加モーダルが表示され、スタッフ名やメールアドレス等を登録できるようになります。')}
+                            onClick={async () => {
+                                const name = window.prompt('追加するスタッフ名(※マイページのIDになります)を入力してください');
+                                if (!name) return;
+                                const password = window.prompt(`${name}さんの ログインパスワード を設定してください`);
+                                if (!password) return;
+                                const email = window.prompt(`${name}さんの 給与明細送信先メールアドレス を入力してください（任意）`) || '';
+
+                                try {
+                                    await fetch(GAS_URL, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'text/plain' },
+                                        body: JSON.stringify({ action: 'addStaff', name, password, email })
+                                    });
+                                    alert(`${name}さんを登録しました。マイページからIDとパスワードを利用してログイン可能です。`);
+                                    fetchStaffList(); // リスト更新
+                                } catch (e) {
+                                    alert('エラーが発生しました。');
+                                }
+                            }}
                             className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded font-bold hover:bg-gray-800 transition-colors shadow-sm">
                             ➕ 新規スタッフ追加
                         </button>
@@ -548,8 +616,29 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         📄 明細PDF作成
                                                     </button>
                                                     <button
-                                                        onClick={() => {
-                                                            alert(`【自動メール送信デモ】\n\n宛先: ${s.name} 様\n件名: ${currentMonthStr.replace('-', '年')}月分 給与明細のお知らせ\n\n本文:\nいつもお世話になっておりますデモ定型文です。\n今月の明細を添付いたします...（送信完了！）`);
+                                                        onClick={async () => {
+                                                            const toEmail = staffEmails[s.name];
+                                                            if (!toEmail) {
+                                                                alert(`${s.name}さんのメールアドレスが登録されていません。「スタッフ一覧」を確認してください。`);
+                                                                return;
+                                                            }
+                                                            if (!window.confirm(`${s.name}さん (${toEmail}) へ給与明細メールを送信しますか？`)) return;
+
+                                                            try {
+                                                                await fetch(GAS_URL, {
+                                                                    method: 'POST',
+                                                                    headers: { 'Content-Type': 'text/plain' },
+                                                                    body: JSON.stringify({
+                                                                        action: 'sendEmail',
+                                                                        to: toEmail,
+                                                                        subject: `【ハナシタラ.com】${currentMonthStr.replace('-', '年')}月分 給与明細のお知らせ`,
+                                                                        body: `${s.name} 様\n\nお疲れ様です。ハナシタラ.comです。\n${currentMonthStr.replace('-', '年')}月分の給与計算が完了いたしました。\n\n【合計振込額】: ¥${s.share.toLocaleString()}\n\n詳細はスタッフマイページにログインの上、PDFにてご確認ください。\n引き続きよろしくお願いいたします。`
+                                                                    })
+                                                                });
+                                                                alert('メールを送信しました！');
+                                                            } catch (e) {
+                                                                alert('送信に失敗しました。');
+                                                            }
                                                         }}
                                                         className="px-3 py-1.5 bg-blue-50 text-blue-600 border border-blue-200 rounded text-xs font-bold hover:bg-blue-100 transition-colors">
                                                         ✉️ メール送信
@@ -605,12 +694,15 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 onClick={async () => {
                                     const name = window.prompt('新しいお客様名を入力してください');
                                     if (name) {
+                                        const phone = window.prompt(`${name} 様の電話番号を入力してください（任意）`) || '';
                                         setDeposits(prev => ({ ...prev, [name]: 0 }));
+                                        if (phone) setCustomerPhones(prev => ({ ...prev, [name]: phone }));
+
                                         try {
                                             await fetch(GAS_URL, {
                                                 method: 'POST',
                                                 headers: { 'Content-Type': 'text/plain' },
-                                                body: JSON.stringify({ action: 'addCustomer', customerName: name })
+                                                body: JSON.stringify({ action: 'addCustomer', customerName: name, customerPhone: phone })
                                             });
                                         } catch (e) { console.error(e); }
                                     }
@@ -640,15 +732,18 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         </td>
                                     </tr>
                                 ) : (
-                                    customerList.map(({ name: customerName, balance, totalPaid, registeredDate, customerNumber }) => (
+                                    customerList.map(({ name: customerName, phone, balance, totalPaid, registeredDate, customerNumber }) => (
                                         <tr key={customerName} className={`transition-colors ${balance > 0 ? 'bg-indigo-50/50' : 'hover:bg-gray-50/50'}`}>
                                             <td className="px-6 py-4 text-center">
                                                 <span className="text-gray-400 font-medium">{customerNumber}</span>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-bold text-gray-900">{customerName}</span>
-                                                    {balance > 0 && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold shadow-sm">✨ お得意様</span>}
+                                                <div className="flex flex-col gap-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-gray-900">{customerName}</span>
+                                                        {balance > 0 && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold shadow-sm">✨ お得意様</span>}
+                                                    </div>
+                                                    <span className="text-[11px] text-gray-400">{phone}</span>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
