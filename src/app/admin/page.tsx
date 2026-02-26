@@ -312,9 +312,18 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         });
     });
 
-    const staffStats = Array.from(staffStatsMap.entries())
-        .map(([name, stats]) => ({ name, ...stats }))
-        .sort((a, b) => b.sales - a.sales);
+    let staffStats = Array.from(staffStatsMap.entries())
+        .map(([name, stats]) => ({ name, ...stats }));
+
+    if (staffSearchQuery.trim()) {
+        staffStats = staffStats.filter(s => s.name.toLowerCase().includes(staffSearchQuery.toLowerCase()));
+    }
+    
+    staffStats.sort((a, b) => {
+        if (staffSortOption === 'sales_desc') return b.sales - a.sales;
+        if (staffSortOption === 'totalSales_desc') return b.totalSales - a.totalSales;
+        return a.name.localeCompare(b.name, 'ja');
+    });
 
     // フェーズ5: お客様一覧の生成（デポジット利用者優先＋その他のソート）
     const customerMap = new Map<string, { totalPaid: number, registeredDate: string }>();
@@ -379,6 +388,13 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
             return a.name.localeCompare(b.name, 'ja');
         }
         return 0;
+    }).filter(customer => {
+        if (showBlacklistOnly && (!customer.phone || !blacklistedPhones.includes(customer.phone))) return false;
+        if (customerSearchQuery.trim()) {
+            const query = customerSearchQuery.trim().toLowerCase();
+            return customer.name.toLowerCase().includes(query) || (customer.phone && customer.phone.includes(query));
+        }
+        return true;
     });
 
     return (
@@ -675,7 +691,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
             {activeTab === 'staff' && (
                 <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border overflow-hidden">
                     <div className="px-6 py-4 border-b dark:border-gray-700 flex flex-wrap gap-4 justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
-                        <div className="flex items-center gap-4">
+                        <div className="flex flex-wrap items-center gap-4">
                             <h2 className="font-semibold text-gray-800 dark:text-gray-200">スタッフ一覧と報酬管理</h2>
                             <input
                                 type="month"
@@ -683,6 +699,24 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 onChange={(e) => setSelectedMonth(e.target.value)}
                                 className="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm focus:outline-none font-bold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800"
                             />
+                            <div className="flex gap-2">
+                                <input 
+                                    type="text" 
+                                    placeholder="🔍 名前で検索..." 
+                                    className="border border-gray-300 dark:border-gray-600 lg:w-[150px] w-full px-2 py-1 text-sm rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300" 
+                                    value={staffSearchQuery} 
+                                    onChange={(e) => setStaffSearchQuery(e.target.value)}
+                                />
+                                <select 
+                                    value={staffSortOption} 
+                                    onChange={(e) => setStaffSortOption(e.target.value as any)}
+                                    className="border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                                >
+                                    <option value="sales_desc">今月の売上順</option>
+                                    <option value="totalSales_desc">累計の売上順</option>
+                                    <option value="name_asc">名前順</option>
+                                </select>
+                            </div>
                         </div>
                         <button
                             onClick={async () => {
@@ -825,11 +859,29 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
             {/* お客様デポジット管理タブ (フェーズ5用デモ) */}
             {activeTab === 'deposit' && (
                 <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border overflow-hidden">
-                    <div className="px-6 py-4 border-b dark:border-gray-700 flex flex-wrap justify-between items-center gap-4 bg-gray-50/50 dark:bg-gray-800/50">
-                        <div className="flex items-center gap-4">
+                    <div className="px-6 py-4 border-b dark:border-gray-700 flex flex-col gap-4 bg-gray-50/50 dark:bg-gray-800/50">
+                        <div className="flex flex-wrap items-center justify-between gap-4">
                             <h2 className="font-semibold text-gray-800 dark:text-gray-200">お客様管理 (前払いデポジット含む)</h2>
+                            <div className="flex gap-3 items-center flex-wrap">
+                                <input 
+                                    type="text" 
+                                    placeholder="🔍 名前や電話番号で検索..." 
+                                    className="border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 min-w-[200px]" 
+                                    value={customerSearchQuery} 
+                                    onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                                />
+                                <label className="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 font-bold hover:text-gray-900 cursor-pointer">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={showBlacklistOnly} 
+                                        onChange={(e) => setShowBlacklistOnly(e.target.checked)} 
+                                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-600 w-4 h-4"
+                                    />
+                                    🚫 ブラックリストのみ表示
+                                </label>
+                            </div>
                         </div>
-                        <div className="flex flex-wrap items-center gap-4">
+                        <div className="flex flex-wrap items-center justify-end gap-4 mt-2">
                             {/* ボーナス設定 UI */}
                             <div className="flex flex-col bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-100">
                                 <span className="text-[10px] text-indigo-800 font-bold mb-1 flex items-center gap-1">🎁 前払いボーナス設定</span>
