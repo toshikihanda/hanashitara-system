@@ -248,6 +248,12 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
 
     // 4. スタッフ別集計（今月）
     const staffStatsMap = new Map<string, { sales: number, share: number }>();
+
+    // すべての登録済みスタッフを初期化（売上0でも表示させるため）
+    Object.keys(staffEmails).forEach(name => {
+        staffStatsMap.set(name, { sales: 0, share: 0 });
+    });
+
     monthReports.forEach(r => {
         const current = staffStatsMap.get(r.staff) || { sales: 0, share: 0 };
         staffStatsMap.set(r.staff, {
@@ -576,6 +582,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         body: JSON.stringify({ action: 'addStaff', name, password, email })
                                     });
                                     alert(`${name}さんを登録しました。マイページからIDとパスワードを利用してログイン可能です。`);
+                                    setStaffEmails(prev => ({ ...prev, [name]: email })); // 即時UI反映
                                     fetchStaffList(); // リスト更新
                                 } catch (e) {
                                     alert('エラーが発生しました。');
@@ -741,7 +748,6 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 <div className="flex flex-col gap-1">
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-bold text-gray-900">{customerName}</span>
-                                                        {balance > 0 && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold shadow-sm">✨ お得意様</span>}
                                                     </div>
                                                     <span className="text-[11px] text-gray-400">{phone}</span>
                                                 </div>
