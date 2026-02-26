@@ -722,31 +722,6 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 <option value="totalSales_desc">累計順</option>
                                 <option value="name_asc">五十音</option>
                             </select>
-
-                            <button
-                                onClick={async () => {
-                                    const name = window.prompt('追加するスタッフ名(※マイページのIDになります)を入力してください');
-                                    if (!name) return;
-                                    const password = window.prompt(`${name}さんの ログインパスワード を設定してください`);
-                                    if (!password) return;
-                                    const email = window.prompt(`${name}さんの 給与明細送信先メールアドレス を入力してください（任意）`) || '';
-
-                                    try {
-                                        await fetch(GAS_URL, {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'text/plain' },
-                                            body: JSON.stringify({ action: 'addStaff', name, password, email })
-                                        });
-                                        alert(`${name}さんを登録しました。マイページからIDとパスワードを利用してログイン可能です。`);
-                                        setStaffEmails(prev => ({ ...prev, [name]: email })); // 即時UI反映
-                                        fetchStaffList(); // リスト更新
-                                    } catch (e) {
-                                        alert('エラーが発生しました。');
-                                    }
-                                }}
-                                className="px-5 py-2 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded-lg text-sm font-semibold hover:bg-gray-800 dark:hover:bg-white transition-colors shadow-sm whitespace-nowrap">
-                                ＋ 新規追加
-                            </button>
                         </div>
                     </div>
                     <div className="overflow-x-auto relative p-6">
@@ -760,6 +735,61 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                <tr className="bg-gray-50/50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700">
+                                    <td colSpan={4} className="px-6 py-4">
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            <span className="text-xs font-bold text-gray-500 dark:text-gray-400 mr-2">✨ クイック追加</span>
+                                            <input
+                                                type="text"
+                                                id="quickStaffName"
+                                                placeholder="スタッフ名 (必須)"
+                                                className="border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-sm rounded bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all font-medium"
+                                            />
+                                            <input
+                                                type="text"
+                                                id="quickStaffPass"
+                                                placeholder="ログインパスワード (必須)"
+                                                className="border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-sm rounded bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all font-medium"
+                                            />
+                                            <input
+                                                type="email"
+                                                id="quickStaffEmail"
+                                                placeholder="メールアドレス (任意)"
+                                                className="border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-sm rounded bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all font-medium w-48"
+                                            />
+                                            <button
+                                                onClick={async () => {
+                                                    const n = (document.getElementById('quickStaffName') as HTMLInputElement).value;
+                                                    const p = (document.getElementById('quickStaffPass') as HTMLInputElement).value;
+                                                    const e = (document.getElementById('quickStaffEmail') as HTMLInputElement).value;
+                                                    if (!n || !p) return alert('スタッフ名とパスワードは必須です');
+                                                    try {
+                                                        const btn = document.getElementById('quickStaffBtn') as HTMLButtonElement;
+                                                        btn.disabled = true;
+                                                        btn.innerText = '追加中...';
+                                                        await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'addStaff', name: n, password: p, email: e }) });
+                                                        setStaffEmails(prev => ({ ...prev, [n]: e }));
+                                                        fetchStaffList();
+                                                        (document.getElementById('quickStaffName') as HTMLInputElement).value = '';
+                                                        (document.getElementById('quickStaffPass') as HTMLInputElement).value = '';
+                                                        (document.getElementById('quickStaffEmail') as HTMLInputElement).value = '';
+                                                        btn.disabled = false;
+                                                        btn.innerText = '＋ 追加する';
+                                                    } catch (err) {
+                                                        alert('エラーが発生しました');
+                                                        const btn = document.getElementById('quickStaffBtn') as HTMLButtonElement;
+                                                        btn.disabled = false;
+                                                        btn.innerText = '＋ 追加する';
+                                                    }
+                                                }}
+                                                id="quickStaffBtn"
+                                                className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 font-bold px-4 py-1.5 rounded-lg text-sm hover:bg-gray-800 dark:hover:bg-white transition-colors shadow-sm whitespace-nowrap ml-auto"
+                                            >
+                                                ＋ 追加する
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
                                 {staffStats.length === 0 && (
                                     <tr>
                                         <td colSpan={3} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">データがありません</td>
@@ -920,27 +950,6 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     <option value="name_asc">五十音</option>
                                     <option value="number_asc">番号順</option>
                                 </select>
-
-                                <button
-                                    onClick={async () => {
-                                        const name = window.prompt('新しいお客様名を入力してください');
-                                        if (name) {
-                                            const phone = window.prompt(`${name} 様の電話番号を入力してください（任意）`) || '';
-                                            setDeposits(prev => ({ ...prev, [name]: 0 }));
-                                            if (phone) setCustomerPhones(prev => ({ ...prev, [name]: phone }));
-
-                                            try {
-                                                await fetch(GAS_URL, {
-                                                    method: 'POST',
-                                                    headers: { 'Content-Type': 'text/plain' },
-                                                    body: JSON.stringify({ action: 'addCustomer', customerName: name, customerPhone: phone })
-                                                });
-                                            } catch (e) { console.error(e); }
-                                        }
-                                    }}
-                                    className="px-5 py-2 ml-1 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded-lg text-sm font-semibold hover:bg-gray-800 dark:hover:bg-white transition-colors shadow-sm whitespace-nowrap">
-                                    ＋ 新規追加
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -957,10 +966,60 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                <tr className="bg-gray-50/50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700">
+                                    <td colSpan={6} className="px-6 py-4 text-left">
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            <span className="text-xs font-bold text-gray-500 dark:text-gray-400 mr-2">✨ クイック追加</span>
+                                            <input
+                                                type="text"
+                                                id="quickCustName"
+                                                placeholder="お客様名 (必須)"
+                                                className="border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-sm rounded bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all font-medium w-48"
+                                            />
+                                            <input
+                                                type="text"
+                                                id="quickCustPhone"
+                                                placeholder="電話番号 (任意)"
+                                                className="border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-sm rounded bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all font-medium w-48"
+                                            />
+                                            <button
+                                                onClick={async () => {
+                                                    const n = (document.getElementById('quickCustName') as HTMLInputElement).value;
+                                                    const p = (document.getElementById('quickCustPhone') as HTMLInputElement).value;
+                                                    if (!n) return alert('お客様名は必須です');
+
+                                                    const btn = document.getElementById('quickCustBtn') as HTMLButtonElement;
+                                                    btn.disabled = true;
+                                                    btn.innerText = '追加中...';
+
+                                                    setDeposits(prev => ({ ...prev, [n]: 0 }));
+                                                    if (p) setCustomerPhones(prev => ({ ...prev, [n]: p }));
+                                                    try {
+                                                        await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'addCustomer', customerName: n, customerPhone: p }) });
+                                                        fetchDeposits(); // reload the whole list to get the ID and sorted position right
+                                                        (document.getElementById('quickCustName') as HTMLInputElement).value = '';
+                                                        (document.getElementById('quickCustPhone') as HTMLInputElement).value = '';
+                                                        btn.disabled = false;
+                                                        btn.innerText = '＋ 追加する';
+                                                    } catch (err) {
+                                                        console.error(err);
+                                                        alert('エラーが発生しました');
+                                                        btn.disabled = false;
+                                                        btn.innerText = '＋ 追加する';
+                                                    }
+                                                }}
+                                                id="quickCustBtn"
+                                                className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 font-bold px-4 py-1.5 rounded-lg text-sm hover:bg-gray-800 dark:hover:bg-white transition-colors shadow-sm whitespace-nowrap ml-auto"
+                                            >
+                                                ＋ 追加する
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
                                 {customerList.length === 0 ? (
                                     <tr>
                                         <td colSpan={6} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">
-                                            データがありません。右下の「新規のお客様を追加」からお試しください。
+                                            データがありません。上のクイック追加からお試しください。
                                         </td>
                                     </tr>
                                 ) : (
