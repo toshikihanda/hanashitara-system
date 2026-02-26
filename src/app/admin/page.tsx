@@ -607,7 +607,16 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                         {/* 報告データ一覧・入金チェック */}
                         <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border overflow-hidden">
                             <div className="px-6 py-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
-                                <h2 className="font-semibold text-gray-800 dark:text-gray-200">最新の業務報告 / 入金確認</h2>
+                                <h2 className="font-semibold text-gray-800 dark:text-gray-200">業務報告 / 入金確認</h2>
+                                <div className="flex items-center gap-2 bg-white dark:bg-gray-900 px-3 py-1.5 rounded border border-gray-200 dark:border-gray-700 shadow-sm">
+                                    <span className="text-xs text-gray-500 dark:text-gray-400 font-bold whitespace-nowrap">表示月:</span>
+                                    <input
+                                        type="month"
+                                        value={selectedMonth}
+                                        onChange={(e) => setSelectedMonth(e.target.value)}
+                                        className="text-sm font-bold bg-transparent dark:text-gray-200 border-none focus:outline-none cursor-pointer"
+                                    />
+                                </div>
                             </div>
                             <div className="overflow-x-auto relative">
 
@@ -635,14 +644,14 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                        {reports.length === 0 && !isLoading && !errorText && (
+                                        {monthReports.length === 0 && !isLoading && !errorText && (
                                             <tr>
                                                 <td colSpan={6} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">
-                                                    報告データがまだありません
+                                                    当月の報告データがありません
                                                 </td>
                                             </tr>
                                         )}
-                                        {reports.map((report) => {
+                                        {monthReports.map((report) => {
                                             const isEditing = editingReportId === report.id;
                                             return (
                                                 <tr key={report.id} className={`hover:bg-gray-50/50 dark:bg-gray-800/50 transition-colors ${!report.isPaid && report.daysPending >= 3 ? 'bg-red-50/30' : ''}`}>
