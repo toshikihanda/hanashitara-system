@@ -65,13 +65,14 @@ export default function AdminDashboard() {
 
     const [editingCustomerName, setEditingCustomerName] = useState<string | null>(null);
     const [editCustomerData, setEditCustomerData] = useState<{ customerName: string, customerPhone: string }>({ customerName: '', customerPhone: '' });
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
 
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
 
     // ②初回読み込み時に全データを取得する
     useEffect(() => {
-        fetchReports();
+        fetchReports(true);
         fetchBlacklist();
         fetchDeposits();
         fetchStaffList();
@@ -135,8 +136,8 @@ export default function AdminDashboard() {
         }
     };
 
-    const fetchReports = async () => {
-        setIsLoading(true);
+    const fetchReports = async (showLoader = true) => {
+        if (showLoader) setIsLoading(true);
         try {
             // GASの doGet 側を叩く (action=getReports)
             const res = await fetch(`${GAS_URL}?action=getReports`);
@@ -182,7 +183,21 @@ export default function AdminDashboard() {
             console.error(err);
             setErrorText('通信エラーが発生しました。');
         } finally {
-            setIsLoading(false);
+            if (showLoader) setIsLoading(false);
+        }
+    };
+
+    const handleRefreshData = async () => {
+        setIsRefreshing(true);
+        try {
+            await Promise.all([
+                fetchReports(false),
+                fetchBlacklist(),
+                fetchDeposits(),
+                fetchStaffList()
+            ]);
+        } finally {
+            setIsRefreshing(false);
         }
     };
 
@@ -404,6 +419,22 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">オーナーダッシュボード</h1>
                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">売上管理・スタッフ管理</p>
                 </div>
+                <button
+                    onClick={handleRefreshData}
+                    disabled={isRefreshing}
+                    className={`flex items-center gap-2 px-4 py-2 ${isRefreshing ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 cursor-not-allowed' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700'} rounded-lg text-sm font-bold shadow-sm transition-all`}
+                >
+                    <svg
+                        className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg"
+                    >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    {isRefreshing ? '更新中...' : 'データを最新に更新'}
+                </button>
             </header>
 
             {/* タブナビゲーション */}
