@@ -104,7 +104,11 @@ export default function AdminDashboard() {
             const json = await res.json();
             if (json.success) {
                 setDeposits(json.deposits || {});
-                setCustomerPhones(json.phones || {});
+                const safePhones: Record<string, string> = {};
+                for (const [k, v] of Object.entries(json.phones || {})) {
+                    safePhones[k] = String(v).trim();
+                }
+                setCustomerPhones(safePhones);
             }
         } catch (err) {
             console.error('デポジット取得エラー:', err);
@@ -129,7 +133,8 @@ export default function AdminDashboard() {
             const res = await fetch(`${GAS_URL}?action=getBlacklistPhones`);
             const json = await res.json();
             if (json.success) {
-                setBlacklistedPhones(json.phones || []);
+                const safeBlacklist = (json.phones || []).map((p: any) => String(p).trim());
+                setBlacklistedPhones(safeBlacklist);
             }
         } catch (err) {
             console.error('ブラックリスト取得エラー:', err);
@@ -162,10 +167,10 @@ export default function AdminDashboard() {
                     return {
                         id: row[0],
                         date: row[1],
-                        staff: row[2],
-                        customerPhone: row[3],
-                        customerName: row[4],
-                        services: row[5],
+                        staff: String(row[2] || ''),
+                        customerPhone: String(row[3] || '').trim(),
+                        customerName: String(row[4] || ''),
+                        services: String(row[5] || ''),
                         totalSales: Number(row[6]) || 0,
                         staffShare: Number(row[7]) || 0,
                         isPaid: isPaidStatus,
