@@ -348,9 +348,9 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                 totalPaid: 0,
                 registeredDate: r.date
             };
-            if (r.isPaid) {
-                current.totalPaid += r.totalSales;
-            }
+            // 報告がある＝利用があったとみなし、isPaidに関わらず累計売上に加算する
+            current.totalPaid += r.totalSales;
+
             if (new Date(r.date) < new Date(current.registeredDate)) {
                 current.registeredDate = r.date;
             }
@@ -757,19 +757,11 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                     </div>
                     <div className="overflow-x-auto relative p-6">
                         <table className="w-full text-sm text-left border rounded-lg overflow-hidden">
-                            <thead className="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-b dark:border-gray-700">
-                                <tr>
-                                    <th className="px-6 py-3 font-medium">スタッフ名</th>
-                                    <th className="px-6 py-3 font-medium text-right">今月の報酬額</th>
-                                    <th className="px-6 py-3 font-medium text-right">累計の報酬額</th>
-                                    <th className="px-6 py-3 font-medium text-center">操作・アクション</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                <tr className="bg-gray-50/50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700">
+                            <thead className="bg-transparent text-gray-600 dark:text-gray-400 border-b dark:border-gray-700">
+                                <tr className="bg-indigo-50/30 dark:bg-indigo-900/10 border-b border-indigo-100 dark:border-indigo-800">
                                     <td colSpan={4} className="px-6 py-4">
                                         <div className="flex flex-wrap items-center gap-3">
-                                            <span className="text-xs font-bold text-gray-500 dark:text-gray-400 mr-2">✨ クイック追加</span>
+                                            <span className="text-xs font-bold text-indigo-500 dark:text-indigo-400 mr-2">✨ クイック追加</span>
                                             <input
                                                 type="text"
                                                 id="quickStaffName"
@@ -821,9 +813,17 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         </div>
                                     </td>
                                 </tr>
+                                <tr className="bg-gray-50 dark:bg-gray-900">
+                                    <th className="px-6 py-3 font-medium">スタッフ名</th>
+                                    <th className="px-6 py-3 font-medium text-right">今月の報酬額</th>
+                                    <th className="px-6 py-3 font-medium text-right">累計の報酬額</th>
+                                    <th className="px-6 py-3 font-medium text-center">操作・アクション</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                 {staffStats.length === 0 && (
                                     <tr>
-                                        <td colSpan={3} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">データがありません</td>
+                                        <td colSpan={4} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">データがありません</td>
                                     </tr>
                                 )}
                                 {staffStats.map((s) => {
@@ -986,21 +986,11 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                     </div>
                     <div className="overflow-x-auto relative p-6">
                         <table className="w-full text-sm text-left border rounded-lg overflow-hidden">
-                            <thead className="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-b dark:border-gray-700">
-                                <tr>
-                                    <th className="px-6 py-3 font-medium">No.</th>
-                                    <th className="px-6 py-3 font-medium">お客様名</th>
-                                    <th className="px-6 py-3 font-medium">登録日</th>
-                                    <th className="px-6 py-3 font-medium text-right">累計支払額</th>
-                                    <th className="px-6 py-3 font-medium text-right">現在の前払い残高</th>
-                                    <th className="px-6 py-3 font-medium text-center">操作・アクション</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                <tr className="bg-gray-50/50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700">
+                            <thead className="bg-transparent text-gray-600 dark:text-gray-400 border-b dark:border-gray-700">
+                                <tr className="bg-indigo-50/30 dark:bg-indigo-900/10 border-b border-indigo-100 dark:border-indigo-800">
                                     <td colSpan={6} className="px-6 py-4 text-left">
                                         <div className="flex flex-wrap items-center gap-3">
-                                            <span className="text-xs font-bold text-gray-500 dark:text-gray-400 mr-2">✨ クイック追加</span>
+                                            <span className="text-xs font-bold text-indigo-500 dark:text-indigo-400 mr-2">✨ クイック追加</span>
                                             <input
                                                 type="text"
                                                 id="quickCustName"
@@ -1047,6 +1037,16 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         </div>
                                     </td>
                                 </tr>
+                                <tr className="bg-gray-50 dark:bg-gray-900">
+                                    <th className="px-6 py-3 font-medium">No.</th>
+                                    <th className="px-6 py-3 font-medium">お客様名</th>
+                                    <th className="px-6 py-3 font-medium">登録日</th>
+                                    <th className="px-6 py-3 font-medium text-right">累計支払額</th>
+                                    <th className="px-6 py-3 font-medium text-right">現在の前払い残高</th>
+                                    <th className="px-6 py-3 font-medium text-center">操作・アクション</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                 {customerList.length === 0 ? (
                                     <tr>
                                         <td colSpan={6} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">
