@@ -702,61 +702,66 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                             </td>
                                                             <td className="px-6 py-4 text-right font-medium text-gray-900 dark:text-gray-100">¥{report.totalSales.toLocaleString()}</td>
                                                             <td className="px-6 py-4 text-right text-gray-600 dark:text-gray-400">¥{report.staffShare.toLocaleString()}</td>
-                                                            <td className="px-6 py-4">
-                                                                <div className="flex flex-col items-center gap-2">
-                                                                    <button
-                                                                        onClick={() => togglePaidStatus(report.id, report.isPaid)}
-                                                                        className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors border shadow-sm w-full max-w-[100px] ${report.isPaid
-                                                                            ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
-                                                                            : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:bg-gray-900'
-                                                                            }`}
-                                                                    >
-                                                                        {report.isPaid ? '✓ 入金済' : '未入金'}
-                                                                    </button>
-                                                                    {!report.isPaid && (
-                                                                        <div className="flex flex-col items-center gap-1.5 w-full">
-                                                                            {report.daysPending >= 3 && (
-                                                                                <span className="text-[10px] text-red-600 font-bold bg-red-100 px-2 py-0.5 rounded w-full text-center">3日経過!</span>
-                                                                            )}
+                                                            <td className="px-4 py-3 align-middle">
+                                                                <div className="flex flex-col gap-1.5 w-full max-w-[150px] mx-auto">
+                                                                    {/* 1段目: ステータス */}
+                                                                    <div className="flex items-center gap-1 w-full">
+                                                                        <button
+                                                                            onClick={() => togglePaidStatus(report.id, report.isPaid)}
+                                                                            className={`flex-1 py-1 rounded text-[11px] font-bold transition-colors border shadow-sm ${report.isPaid
+                                                                                ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                                                                                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:bg-gray-900'
+                                                                                }`}
+                                                                        >
+                                                                            {report.isPaid ? '✓ 入金済' : '未入金'}
+                                                                        </button>
+                                                                        {!report.isPaid && report.daysPending >= 3 && (
+                                                                            <span className="text-[9px] text-red-600 font-bold bg-red-100 px-1 py-1 rounded whitespace-nowrap text-center border border-red-200 leading-tight shadow-sm shrink-0">
+                                                                                3日超過
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+
+                                                                    {/* 2段目: アクション */}
+                                                                    <div className="flex items-center justify-between gap-1 w-full">
+                                                                        {!report.isPaid && (
                                                                             <button
                                                                                 onClick={() => handleCopyRemind(report)}
-                                                                                className={`text-[10px] w-full max-w-[100px] py-1 border rounded transition-colors flex justify-center items-center ${copiedId === report.id ? 'bg-green-50 text-green-600 border-green-200' : 'border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
+                                                                                className={`flex-1 text-[10px] py-1 border rounded transition-colors flex justify-center items-center ${copiedId === report.id ? 'bg-green-50 text-green-600 border-green-200' : 'border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
                                                                             >
-                                                                                {copiedId === report.id ? '✓ コピー完了' : '📝督促をコピー'}
+                                                                                {copiedId === report.id ? '✓ コピー済' : '📝督促'}
                                                                             </button>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {/* 管理者用：修正ボタン */}
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setEditingReportId(report.id);
-                                                                            setEditReportData({
-                                                                                customerName: report.customerName,
-                                                                                customerPhone: report.customerPhone,
-                                                                                totalSales: report.totalSales
-                                                                            });
-                                                                        }}
-                                                                        className="text-[10px] w-full max-w-[100px] py-1 border rounded transition-colors flex justify-center items-center border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-900 mt-1"
-                                                                    >
-                                                                        ✏️ 修正する
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={async () => {
-                                                                            if (!window.confirm(`この報告を完全に削除しますか？\n(復元できません)`)) return;
-                                                                            setReports(reports.filter(r => r.id !== report.id));
-                                                                            try {
-                                                                                await fetch(GAS_URL, {
-                                                                                    method: 'POST',
-                                                                                    headers: { 'Content-Type': 'text/plain' },
-                                                                                    body: JSON.stringify({ action: 'deleteReport', id: report.id })
+                                                                        )}
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setEditingReportId(report.id);
+                                                                                setEditReportData({
+                                                                                    customerName: report.customerName,
+                                                                                    customerPhone: report.customerPhone,
+                                                                                    totalSales: report.totalSales
                                                                                 });
-                                                                            } catch (err) { alert('エラーが発生しました。'); }
-                                                                        }}
-                                                                        className="text-[10px] w-full max-w-[100px] py-1 border rounded transition-colors flex justify-center items-center border-red-200 text-red-600 bg-red-50 hover:bg-red-100 mt-1"
-                                                                    >
-                                                                        🗑️ 削除する
-                                                                    </button>
+                                                                            }}
+                                                                            className="flex-1 text-[10px] py-1 border rounded transition-colors flex justify-center items-center border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-900"
+                                                                        >
+                                                                            ✏️修正
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={async () => {
+                                                                                if (!window.confirm(`この報告を完全に削除しますか？\n(復元できません)`)) return;
+                                                                                setReports(reports.filter(r => r.id !== report.id));
+                                                                                try {
+                                                                                    await fetch(GAS_URL, {
+                                                                                        method: 'POST',
+                                                                                        headers: { 'Content-Type': 'text/plain' },
+                                                                                        body: JSON.stringify({ action: 'deleteReport', id: report.id })
+                                                                                    });
+                                                                                } catch (err) { alert('エラーが発生しました。'); }
+                                                                            }}
+                                                                            className="flex-1 text-[10px] py-1 border rounded transition-colors flex justify-center items-center border-red-200 text-red-600 bg-red-50 hover:bg-red-100"
+                                                                        >
+                                                                            🗑️削除
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
                                                             </td>
                                                         </>
