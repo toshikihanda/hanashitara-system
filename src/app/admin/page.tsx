@@ -318,7 +318,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
     if (staffSearchQuery.trim()) {
         staffStats = staffStats.filter(s => s.name.toLowerCase().includes(staffSearchQuery.toLowerCase()));
     }
-    
+
     staffStats.sort((a, b) => {
         if (staffSortOption === 'sales_desc') return b.sales - a.sales;
         if (staffSortOption === 'totalSales_desc') return b.totalSales - a.totalSales;
@@ -690,58 +690,61 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
             {/* スタッフ管理 (新規追加・給与明細等) */}
             {activeTab === 'staff' && (
                 <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border overflow-hidden">
-                    <div className="px-6 py-4 border-b dark:border-gray-700 flex flex-wrap gap-4 justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
-                        <div className="flex flex-wrap items-center gap-4">
-                            <h2 className="font-semibold text-gray-800 dark:text-gray-200">スタッフ一覧と報酬管理</h2>
+                    <div className="px-5 py-3 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b dark:border-gray-700 bg-white dark:bg-gray-800">
+                        <div className="flex items-center gap-3">
+                            <h2 className="font-semibold text-gray-800 dark:text-gray-200">スタッフ管理</h2>
                             <input
                                 type="month"
                                 value={selectedMonth}
                                 onChange={(e) => setSelectedMonth(e.target.value)}
-                                className="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm focus:outline-none font-bold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800"
+                                className="border border-gray-200 dark:border-gray-700 rounded-full px-3 py-1 text-xs focus:outline-none font-bold text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 cursor-pointer"
                             />
-                            <div className="flex gap-2">
-                                <input 
-                                    type="text" 
-                                    placeholder="🔍 名前で検索..." 
-                                    className="border border-gray-300 dark:border-gray-600 lg:w-[150px] w-full px-2 py-1 text-sm rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300" 
-                                    value={staffSearchQuery} 
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    placeholder="🔍 検索"
+                                    className="border border-gray-200 dark:border-gray-700 pl-3 pr-2 py-1 text-xs rounded-full bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 w-28 focus:w-40 focus:outline-none focus:ring-1 focus:ring-gray-300 transition-all font-medium"
+                                    value={staffSearchQuery}
                                     onChange={(e) => setStaffSearchQuery(e.target.value)}
                                 />
-                                <select 
-                                    value={staffSortOption} 
-                                    onChange={(e) => setStaffSortOption(e.target.value as any)}
-                                    className="border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-                                >
-                                    <option value="sales_desc">今月の売上順</option>
-                                    <option value="totalSales_desc">累計の売上順</option>
-                                    <option value="name_asc">名前順</option>
-                                </select>
                             </div>
-                        </div>
-                        <button
-                            onClick={async () => {
-                                const name = window.prompt('追加するスタッフ名(※マイページのIDになります)を入力してください');
-                                if (!name) return;
-                                const password = window.prompt(`${name}さんの ログインパスワード を設定してください`);
-                                if (!password) return;
-                                const email = window.prompt(`${name}さんの 給与明細送信先メールアドレス を入力してください（任意）`) || '';
+                            <select
+                                value={staffSortOption}
+                                onChange={(e) => setStaffSortOption(e.target.value as any)}
+                                className="border-none bg-transparent text-gray-500 dark:text-gray-400 focus:outline-none font-medium text-[11px] cursor-pointer hover:text-gray-900 transition-colors"
+                            >
+                                <option value="sales_desc">売上順▼</option>
+                                <option value="totalSales_desc">累計順▼</option>
+                                <option value="name_asc">名前順▲</option>
+                            </select>
+                            <button
+                                onClick={async () => {
+                                    const name = window.prompt('追加するスタッフ名(※マイページのIDになります)を入力してください');
+                                    if (!name) return;
+                                    const password = window.prompt(`${name}さんの ログインパスワード を設定してください`);
+                                    if (!password) return;
+                                    const email = window.prompt(`${name}さんの 給与明細送信先メールアドレス を入力してください（任意）`) || '';
 
-                                try {
-                                    await fetch(GAS_URL, {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'text/plain' },
-                                        body: JSON.stringify({ action: 'addStaff', name, password, email })
-                                    });
-                                    alert(`${name}さんを登録しました。マイページからIDとパスワードを利用してログイン可能です。`);
-                                    setStaffEmails(prev => ({ ...prev, [name]: email })); // 即時UI反映
-                                    fetchStaffList(); // リスト更新
-                                } catch (e) {
-                                    alert('エラーが発生しました。');
-                                }
-                            }}
-                            className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded font-bold hover:bg-gray-800 transition-colors shadow-sm">
-                            ➕ 新規スタッフ追加
-                        </button>
+                                    try {
+                                        await fetch(GAS_URL, {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'text/plain' },
+                                            body: JSON.stringify({ action: 'addStaff', name, password, email })
+                                        });
+                                        alert(`${name}さんを登録しました。マイページからIDとパスワードを利用してログイン可能です。`);
+                                        setStaffEmails(prev => ({ ...prev, [name]: email })); // 即時UI反映
+                                        fetchStaffList(); // リスト更新
+                                    } catch (e) {
+                                        alert('エラーが発生しました。');
+                                    }
+                                }}
+                                className="px-3 py-1 ml-1 bg-[#1c1c1e] dark:bg-white text-white dark:text-[#1c1c1e] rounded-full text-xs font-bold hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors shadow-sm whitespace-nowrap">
+                                ＋ 新規追加
+                            </button>
+                        </div>
                     </div>
                     <div className="overflow-x-auto relative p-6">
                         <table className="w-full text-sm text-left border rounded-lg overflow-hidden">
@@ -859,57 +862,55 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
             {/* お客様デポジット管理タブ (フェーズ5用デモ) */}
             {activeTab === 'deposit' && (
                 <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border overflow-hidden">
-                    <div className="px-6 py-4 border-b dark:border-gray-700 flex flex-col gap-4 bg-gray-50/50 dark:bg-gray-800/50">
-                        <div className="flex flex-wrap items-center justify-between gap-4">
-                            <h2 className="font-semibold text-gray-800 dark:text-gray-200">お客様管理 (前払いデポジット含む)</h2>
-                            <div className="flex gap-3 items-center flex-wrap">
-                                <input 
-                                    type="text" 
-                                    placeholder="🔍 名前や電話番号で検索..." 
-                                    className="border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 min-w-[200px]" 
-                                    value={customerSearchQuery} 
+                    <div className="px-5 py-3 border-b dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+                        <h2 className="font-semibold text-gray-800 dark:text-gray-200 whitespace-nowrap">お客様管理</h2>
+
+                        <div className="flex flex-wrap items-center gap-3 text-sm">
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    placeholder="🔍 名前・電話番号検索"
+                                    className="border border-gray-200 dark:border-gray-700 pl-3 pr-2 py-1.5 rounded-full bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 w-44 focus:w-48 focus:outline-none focus:ring-1 focus:ring-gray-300 transition-all font-medium text-xs"
+                                    value={customerSearchQuery}
                                     onChange={(e) => setCustomerSearchQuery(e.target.value)}
                                 />
-                                <label className="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 font-bold hover:text-gray-900 cursor-pointer">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={showBlacklistOnly} 
-                                        onChange={(e) => setShowBlacklistOnly(e.target.checked)} 
-                                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-600 w-4 h-4"
-                                    />
-                                    🚫 ブラックリストのみ表示
-                                </label>
                             </div>
-                        </div>
-                        <div className="flex flex-wrap items-center justify-end gap-4 mt-2">
-                            {/* ボーナス設定 UI */}
-                            <div className="flex flex-col bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-100">
-                                <span className="text-[10px] text-indigo-800 font-bold mb-1 flex items-center gap-1">🎁 前払いボーナス設定</span>
-                                <div className="flex items-center gap-2">
-                                    <input type="number" value={bonusThreshold} onChange={e => setBonusThreshold(Number(e.target.value))} className="w-20 px-1.5 py-1 text-sm rounded border" /> <span className="text-xs text-gray-600 dark:text-gray-400 font-bold">円以上で</span>
-                                    <input type="number" value={bonusRate} onChange={e => setBonusRate(Number(e.target.value))} className="w-16 px-1.5 py-1 text-sm rounded border" /> <span className="text-xs text-gray-600 dark:text-gray-400 font-bold">％付与</span>
-                                    <button onClick={() => {
-                                        localStorage.setItem('depositBonusThreshold', String(bonusThreshold));
-                                        localStorage.setItem('depositBonusRate', String(bonusRate));
-                                        alert('次回のチャージから設定されたボーナス条件が適用されます。');
-                                    }} className="ml-2 bg-indigo-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-indigo-700 transition shadow-sm">保存</button>
-                                </div>
+
+                            <label className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 font-medium cursor-pointer hover:text-gray-900 dark:hover:text-gray-200 transition-colors mr-1">
+                                <input
+                                    type="checkbox"
+                                    checked={showBlacklistOnly}
+                                    onChange={(e) => setShowBlacklistOnly(e.target.checked)}
+                                    className="rounded border-gray-300 text-gray-900 focus:ring-gray-900 w-3.5 h-3.5"
+                                />
+                                <span className="text-[11px]">🚫 除外</span>
+                            </label>
+
+                            <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-400 dark:text-gray-500 border-l border-r dark:border-gray-700 px-3">
+                                <span title="前払いボーナス設定" className="text-sm">🎁</span>
+                                <input type="number" value={bonusThreshold} onChange={e => setBonusThreshold(Number(e.target.value))} className="w-12 px-1 py-0.5 border dark:border-gray-700 rounded bg-transparent text-center focus:outline-none focus:border-gray-400 transition-colors" />
+                                <span>円=</span>
+                                <input type="number" value={bonusRate} onChange={e => setBonusRate(Number(e.target.value))} className="w-8 px-1 py-0.5 border dark:border-gray-700 rounded bg-transparent text-center focus:outline-none focus:border-gray-400 transition-colors" />
+                                <span>%</span>
+                                <button onClick={() => {
+                                    localStorage.setItem('depositBonusThreshold', String(bonusThreshold));
+                                    localStorage.setItem('depositBonusRate', String(bonusRate));
+                                }} className="text-[10px] ml-1 text-gray-400 hover:text-indigo-500 font-bold transition-colors">保存</button>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <label className="text-sm text-gray-600 dark:text-gray-400 font-medium">並べ替え:</label>
-                                <select
-                                    value={customerSortBy}
-                                    onChange={(e) => setCustomerSortBy(e.target.value as CustomerSortOption)}
-                                    className="border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:border-indigo-500 font-medium"
-                                >
-                                    <option value="deposit">前払い有り (お得意様順)</option>
-                                    <option value="paid_desc">累計支払額が多い順</option>
-                                    <option value="registered_asc">登録日が古い順</option>
-                                    <option value="registered_desc">登録日が新しい順</option>
-                                    <option value="number_asc">お客様番号順</option>
-                                    <option value="name_asc">五十音順</option>
-                                </select>
-                            </div>
+
+                            <select
+                                value={customerSortBy}
+                                onChange={(e) => setCustomerSortBy(e.target.value as CustomerSortOption)}
+                                className="border-none bg-transparent text-gray-500 dark:text-gray-400 focus:outline-none font-medium text-[11px] cursor-pointer hover:text-gray-900 dark:hover:text-gray-200 transition-colors ml-1"
+                            >
+                                <option value="deposit">前払い有▼</option>
+                                <option value="paid_desc">支払額▼</option>
+                                <option value="registered_asc">登録古▲</option>
+                                <option value="registered_desc">登録新▼</option>
+                                <option value="number_asc">番号順▲</option>
+                                <option value="name_asc">名前順▲</option>
+                            </select>
+
                             <button
                                 onClick={async () => {
                                     const name = window.prompt('新しいお客様名を入力してください');
@@ -927,8 +928,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         } catch (e) { console.error(e); }
                                     }
                                 }}
-                                className="px-3 py-1.5 bg-gray-900 text-white rounded text-sm font-bold hover:bg-gray-800 transition-colors shadow-sm">
-                                ＋ 新規のお客様を追加
+                                className="px-3 py-1.5 ml-1 bg-[#1c1c1e] dark:bg-white text-white dark:text-[#1c1c1e] rounded-full text-xs font-bold hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors shadow-sm whitespace-nowrap">
+                                ＋ 新規追加
                             </button>
                         </div>
                     </div>
