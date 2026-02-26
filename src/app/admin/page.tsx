@@ -754,7 +754,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             <input
                                                 type="email"
                                                 id="quickStaffEmail"
-                                                placeholder="メールアドレス (任意)"
+                                                placeholder="メールアドレス (必須)"
                                                 className="border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-sm rounded bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all font-medium w-48"
                                             />
                                             <button
@@ -762,7 +762,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     const n = (document.getElementById('quickStaffName') as HTMLInputElement).value;
                                                     const p = (document.getElementById('quickStaffPass') as HTMLInputElement).value;
                                                     const e = (document.getElementById('quickStaffEmail') as HTMLInputElement).value;
-                                                    if (!n || !p) return alert('スタッフ名とパスワードは必須です');
+                                                    if (!n || !p || !e) return alert('スタッフ名、パスワード、メールアドレスはすべて必須です');
                                                     try {
                                                         const btn = document.getElementById('quickStaffBtn') as HTMLButtonElement;
                                                         btn.disabled = true;
@@ -979,21 +979,21 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             <input
                                                 type="text"
                                                 id="quickCustPhone"
-                                                placeholder="電話番号 (任意)"
+                                                placeholder="電話番号 (必須)"
                                                 className="border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-sm rounded bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all font-medium w-48"
                                             />
                                             <button
                                                 onClick={async () => {
                                                     const n = (document.getElementById('quickCustName') as HTMLInputElement).value;
                                                     const p = (document.getElementById('quickCustPhone') as HTMLInputElement).value;
-                                                    if (!n) return alert('お客様名は必須です');
+                                                    if (!n || !p) return alert('お客様名と電話番号はすべて必須です');
 
                                                     const btn = document.getElementById('quickCustBtn') as HTMLButtonElement;
                                                     btn.disabled = true;
                                                     btn.innerText = '追加中...';
 
                                                     setDeposits(prev => ({ ...prev, [n]: 0 }));
-                                                    if (p) setCustomerPhones(prev => ({ ...prev, [n]: p }));
+                                                    setCustomerPhones(prev => ({ ...prev, [n]: p }));
                                                     try {
                                                         await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'addCustomer', customerName: n, customerPhone: p }) });
                                                         fetchDeposits(); // reload the whole list to get the ID and sorted position right
