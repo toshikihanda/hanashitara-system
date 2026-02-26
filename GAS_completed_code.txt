@@ -425,6 +425,20 @@ function doGet(e) {
       return output.setContent(JSON.stringify({ success: true, staff: list }));
     }
 
+    // ブラックリスト取得
+    if (action === 'getBlacklistPhones') {
+      const blSheet = ss.getSheetByName('ブラックリスト');
+      const phones = [];
+      if (blSheet) {
+        const blData = blSheet.getDataRange().getValues();
+        for (let i = 1; i < blData.length; i++) {
+          const phone = String(blData[i][0]).trim();
+          if (phone) phones.push(phone);
+        }
+      }
+      return output.setContent(JSON.stringify({ success: true, phones: phones }));
+    }
+
     // 顧客情報とブラックリストの取得
     if (action === 'getCustomerInfo') {
       const result = { success: true, customers: {}, blacklistedPhones: [] };
