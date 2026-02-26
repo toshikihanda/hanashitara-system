@@ -340,6 +340,34 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         return a.name.localeCompare(b.name, 'ja');
     });
 
+    // フェーズ6: 売上推移（直近6ヶ月）
+    const trendData = [];
+    if (selectedMonth) {
+        const baseDate = new Date(`${selectedMonth}-01`);
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date(baseDate.getFullYear(), baseDate.getMonth() - i, 1);
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const monthKey = `${yyyy}-${mm}`;
+
+            const mReports = reports.filter(r => {
+                const rd = new Date(r.date);
+                return rd.getFullYear() === yyyy && String(rd.getMonth() + 1).padStart(2, '0') === mm;
+            });
+
+            const mSales = mReports.reduce((sum, r) => sum + r.totalSales, 0);
+            const mProfit = mReports.reduce((sum, r) => sum + (r.totalSales - r.staffShare), 0);
+
+            trendData.push({
+                monthStr: `${d.getMonth() + 1}月`,
+                fullMonth: monthKey,
+                sales: mSales,
+                profit: mProfit
+            });
+        }
+    }
+    const maxTrendSales = Math.max(...trendData.map(d => d.sales), 1);
+
     // フェーズ5: お客様一覧の生成（デポジット利用者優先＋その他のソート）
     const customerMap = new Map<string, { totalPaid: number, registeredDate: string }>();
     reports.forEach(r => {
@@ -544,6 +572,30 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         </ul>
                                     )}
                                 </div>
+                            </div>
+                        </section>
+
+                        {/* 売上推移チャート */}
+                        <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col gap-4">
+                            <h2 className="font-bold text-gray-800 dark:text-gray-200 border-b dark:border-gray-700 border-gray-100 dark:border-gray-700 pb-2">売上推移（直近6ヶ月）</h2>
+                            <div className="flex items-end justify-between gap-1 sm:gap-4 h-48 mt-4">
+                                {trendData.map((data, idx) => (
+                                    <div key={idx} className="flex flex-col items-center flex-1 gap-2">
+                                        <div className="w-full flex justify-center items-end h-36 relative group">
+                                            {/* ツールチップ */}
+                                            <div className="absolute -top-12 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none flex flex-col items-center">
+                                                <span>売上: ¥{data.sales.toLocaleString()}</span>
+                                                <span className="text-[10px] text-blue-300">利益: ¥{data.profit.toLocaleString()}</span>
+                                            </div>
+                                            {/* バー本体 */}
+                                            <div
+                                                className="w-1/2 max-w-[40px] bg-indigo-500/80 hover:bg-indigo-500 rounded-t-md transition-all duration-500 ease-out cursor-pointer"
+                                                style={{ height: `${Math.max((data.sales / maxTrendSales) * 100, 1)}%` }}
+                                            ></div>
+                                        </div>
+                                        <div className="text-xs text-gray-500 dark:text-gray-400 font-bold whitespace-nowrap">{data.monthStr}</div>
+                                    </div>
+                                ))}
                             </div>
                         </section>
 
