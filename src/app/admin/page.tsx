@@ -668,7 +668,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                             )}
                                                                             <button
                                                                                 onClick={() => handleCopyRemind(report)}
-                                                                                className={`text-[10px] w-full max-w-[100px] py-1 border rounded transition-colors flex justify-center items-center ${copiedId === report.id ? 'bg-green-50 text-green-600 border-green-200' : 'border-b dark:border-gray-700lue-200 text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
+                                                                                className={`text-[10px] w-full max-w-[100px] py-1 border rounded transition-colors flex justify-center items-center ${copiedId === report.id ? 'bg-green-50 text-green-600 border-green-200' : 'border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
                                                                             >
                                                                                 {copiedId === report.id ? '✓ コピー完了' : '📝督促をコピー'}
                                                                             </button>
@@ -895,7 +895,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                 if (!window.confirm(`${s.name}さん (${toEmail}) へ給与明細メールを送信しますか？`)) return;
 
                                                                 try {
-                                                                    await fetch(GAS_URL, {
+                                                                    const res = await fetch(GAS_URL, {
                                                                         method: 'POST',
                                                                         headers: { 'Content-Type': 'text/plain' },
                                                                         body: JSON.stringify({
@@ -905,12 +905,18 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                             body: `${s.name} 様\n\nお疲れ様です。ハナシタラ.comです。\n${currentMonthStr.replace('-', '年')}月分の給与計算が完了いたしました。\n\n【合計振込額】: ¥${s.share.toLocaleString()}\n\n詳細はスタッフマイページにログインの上、PDFにてご確認ください。\n引き続きよろしくお願いいたします。`
                                                                         })
                                                                     });
-                                                                    alert('メールを送信しました！');
+                                                                    const json = await res.json();
+                                                                    if (json.success) {
+                                                                        alert('メールを送信しました！');
+                                                                    } else {
+                                                                        alert(`送信に失敗しました。\n理由: ${json.message || '不明なエラー'}`);
+                                                                    }
                                                                 } catch (e) {
-                                                                    alert('送信に失敗しました。');
+                                                                    console.error('通信エラー:', e);
+                                                                    alert('通信エラーが発生したため、送信できませんでした。');
                                                                 }
                                                             }}
-                                                            className="px-3 py-1.5 bg-blue-50 text-blue-600 border border-b dark:border-gray-700lue-200 rounded text-xs font-bold hover:bg-blue-100 transition-colors">
+                                                            className="px-3 py-1.5 bg-blue-50 text-blue-600 border border-blue-200 rounded text-xs font-bold hover:bg-blue-100 transition-colors">
                                                             ✉️ メール送信
                                                         </button>
                                                     </div>
