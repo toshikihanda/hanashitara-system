@@ -91,29 +91,29 @@ export default function StaffMyPage() {
     // --- ログイン前画面 ---
     if (!isLoggedIn) {
         return (
-            <div className="min-h-screen bg-gray-50/50 flex flex-col items-center pt-20 px-4">
-                <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-                    <h1 className="text-2xl font-bold text-gray-900 text-center mb-6">給与・明細の確認</h1>
+            <div className="min-h-screen bg-gray-50/50 dark:bg-gray-800/50 flex flex-col items-center pt-20 px-4">
+                <div className="w-full max-w-md bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 text-center mb-6">給与・明細の確認</h1>
                     <form onSubmit={handleLogin} className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">スタッフ名 (ID)</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">スタッフ名 (ID)</label>
                             <input
                                 type="text"
                                 required
                                 value={staffName}
                                 onChange={(e) => setStaffName(e.target.value)}
                                 placeholder="例: テストスタッフ様"
-                                className="w-full bg-gray-50 border border-gray-200 text-gray-900 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#007AFF] focus:border-transparent outline-none transition-all mb-4"
+                                className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#007AFF] focus:border-transparent outline-none transition-all mb-4"
                             />
 
-                            <label className="block text-sm font-medium text-gray-700 mb-1">パスワード</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">パスワード</label>
                             <input
                                 type="password"
                                 required
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 placeholder="パスワードを入力"
-                                className="w-full bg-gray-50 border border-gray-200 text-gray-900 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#007AFF] focus:border-transparent outline-none transition-all"
+                                className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#007AFF] focus:border-transparent outline-none transition-all"
                             />
                         </div>
                         {errorText && <p className="text-red-500 text-sm">{errorText}</p>}
@@ -126,7 +126,7 @@ export default function StaffMyPage() {
                         </button>
                     </form>
                     <div className="mt-6 text-center">
-                        <Link href="/" className="text-sm text-gray-500 hover:text-gray-800 underline">
+                        <Link href="/" className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:text-gray-200 underline">
                             業務報告フォームへ戻る
                         </Link>
                     </div>
@@ -137,7 +137,7 @@ export default function StaffMyPage() {
 
     // --- ログイン後（マイページ＆明細書） ---
     return (
-        <div className="min-h-screen bg-gray-50/50 pt-10 pb-20 px-4 print:bg-white print:pt-0 print:pb-0">
+        <div className="min-h-screen bg-gray-50/50 dark:bg-gray-800/50 pt-10 pb-20 px-4 print:bg-white dark:bg-gray-800 print:pt-0 print:pb-0">
             <div className="max-w-3xl mx-auto space-y-6">
 
                 {/* ヘッダーボタンエリア（印刷時は完全に隠す） */}
@@ -154,47 +154,47 @@ export default function StaffMyPage() {
                 </div>
 
                 {/* --- ここから下が「明細書」として印刷（PDF化）されるエリア --- */}
-                <div ref={printRef} className="bg-white p-8 sm:p-12 rounded-2xl shadow-sm border border-gray-100 print:shadow-none print:border-none print:p-0">
+                <div ref={printRef} className="bg-white dark:bg-gray-800 p-8 sm:p-12 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 print:shadow-none print:border-none print:p-0">
 
-                    <div className="flex justify-between items-start border-b pb-6 mb-8">
+                    <div className="flex justify-between items-start border-b dark:border-gray-700 pb-6 mb-8">
                         <div>
-                            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">給与支払明細書</h1>
-                            <p className="text-gray-500 mt-2">ハナシタラ.com</p>
+                            <h1 className="text-3xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight">給与支払明細書</h1>
+                            <p className="text-gray-500 dark:text-gray-400 mt-2">ハナシタラ.com</p>
                         </div>
                         <div className="text-right">
-                            <p className="text-sm text-gray-500">発行日: {new Date().toLocaleDateString('ja-JP')}</p>
-                            <p className="text-xl font-bold text-gray-900 mt-1">{staffName} <span className="text-sm font-normal text-gray-600">様</span></p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">発行日: {new Date().toLocaleDateString('ja-JP')}</p>
+                            <p className="text-xl font-bold text-gray-900 dark:text-gray-100 mt-1">{staffName} <span className="text-sm font-normal text-gray-600 dark:text-gray-400">様</span></p>
                         </div>
                     </div>
 
-                    <div className="bg-gray-50 rounded-xl p-6 mb-8 flex justify-between items-center print:border print:border-gray-200 print:bg-transparent">
-                        <span className="text-lg font-medium text-gray-700">合計支給額（スタッフ報酬）</span>
-                        <span className="text-3xl font-bold text-gray-900">¥{totalMyShare.toLocaleString()}</span>
+                    <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-6 mb-8 flex justify-between items-center print:border print:border-gray-200 dark:border-gray-700 print:bg-transparent">
+                        <span className="text-lg font-medium text-gray-700 dark:text-gray-300">合計支給額（スタッフ報酬）</span>
+                        <span className="text-3xl font-bold text-gray-900 dark:text-gray-100">¥{totalMyShare.toLocaleString()}</span>
                     </div>
 
-                    <h2 className="text-sm font-bold text-gray-500 mb-4 px-1">今月の業務履歴・明細</h2>
+                    <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 mb-4 px-1">今月の業務履歴・明細</h2>
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left border-collapse">
                             <thead>
-                                <tr className="border-b-2 border-gray-800 text-gray-900">
+                                <tr className="border-b-2 border-gray-800 text-gray-900 dark:text-gray-100">
                                     <th className="py-3 px-2 font-semibold">日付</th>
                                     <th className="py-3 px-2 font-semibold">お客様名</th>
                                     <th className="py-3 px-2 font-semibold text-right">総売上</th>
                                     <th className="py-3 px-2 font-semibold text-right text-[#007AFF]">あなたの報酬額</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                 {reports.length === 0 ? (
                                     <tr>
-                                        <td colSpan={4} className="py-8 text-center text-gray-400">履歴がありません</td>
+                                        <td colSpan={4} className="py-8 text-center text-gray-400 dark:text-gray-500">履歴がありません</td>
                                     </tr>
                                 ) : (
                                     reports.map((r, i) => (
-                                        <tr key={i} className="text-gray-700 print:text-black">
+                                        <tr key={i} className="text-gray-700 dark:text-gray-300 print:text-black">
                                             <td className="py-4 px-2">{new Date(r.date).toLocaleDateString('ja-JP')}</td>
                                             <td className="py-4 px-2">{r.customerName}</td>
                                             <td className="py-4 px-2 text-right">¥{r.totalSales.toLocaleString()}</td>
-                                            <td className="py-4 px-2 text-right font-bold text-gray-900">¥{r.staffShare.toLocaleString()}</td>
+                                            <td className="py-4 px-2 text-right font-bold text-gray-900 dark:text-gray-100">¥{r.staffShare.toLocaleString()}</td>
                                         </tr>
                                     ))
                                 )}
@@ -202,7 +202,7 @@ export default function StaffMyPage() {
                         </table>
                     </div>
 
-                    <div className="mt-16 pt-8 border-t border-gray-100 text-center text-xs text-gray-400">
+                    <div className="mt-16 pt-8 border-t border-gray-100 dark:border-gray-700 text-center text-xs text-gray-400 dark:text-gray-500">
                         <p>※本明細書はシステムによって自動生成されています。</p>
                         <p className="mt-1">ハナシタラ.com サポートセンター</p>
                     </div>

@@ -158,15 +158,80 @@ function doPost(e) {
       return output.setContent(JSON.stringify({ success: true }));
     }
 
-    // ⑥ チャージ・利用（ボーナス対応）
+    // ⑤-1.5 お客様の名前・電話情報の修正
+    if (action === 'editCustomer') {
+      const oldName = data.oldName;
+      const newName = data.newName;
+      const phone = data.phone;
+      
+      // 1. 顧客リストの更新
+      const custSheet = ss.getSheetByName("顧客リスト");
+      if (custSheet) {
+        const values = custSheet.getDataRange().getValues();
+        for (let i = 1; i < values.length; i++) {
+          if (values[i][0] === oldName) {
+             custSheet.getRange(i + 1, 1).setValue(newName);
+             custSheet.getRange(i + 1, 2).setValue(phone);
+          }
+        }
+      }
+      
+      // 2. 前払い管理の更新
+      const depSheet = ss.getSheetByName("前払い管理");
+      if (depSheet) {
+        const values = depSheet.getDataRange().getValues();
+        for (let i = 1; i < values.length; i++) {
+          if (values[i][0] === oldName) {
+             depSheet.getRange(i + 1, 1).setValue(newName);
+             depSheet.getRange(i + 1, 2).setValue(phone);
+          }
+        }
+      }
+
+      // 3. 業務報告の名前・電話番号も一貫性のために更新
+      const reportSheet = ss.getSheetByName("業務報告");
+      if (reportSheet) {
+        const values = reportSheet.getDataRange().getValues();
+        for (let i = 1; i < values.length; i++) {
+          if (values[i][4] === oldName) {
+             reportSheet.getRange(i + 1, 4).setValue(phone);
+             reportSheet.getRange(i + 1, 5).setValue(newName);
+          }
+        }
+      }
+      
+      return output.setContent(JSON.stringify({ success: true }));
+    }
+
+    // ⑤-2 業務報告の削除
+    if (action === 'deleteReport') {
+      const sheet = ss.getSheetByName("業務報告");
+      if (!sheet) return output.setContent(JSON.stringify({ success: false, message: '業務報告シートがありません' }));
+      const values = sheet.getDataRange().getValues();
+      for (let i = 1; i < values.length; i++) {
+        if (values[i][0] === data.id) {
+          sheet.deleteRow(i + 1);
+          return output.setContent(JSON.stringify({ success: true }));
+        }
+      }
+      return output.setContent(JSON.stringify({ success: false, message: '対象の報告が見つかりません' }));
+    }
+
+    // ⑥ チャージ・利用（ボーナス対応 ＆ 履歴保存）
     if (action === 'updateDeposit') {
       const sheet = ss.getSheetByName("前払い管理");
+      let historySheet = ss.getSheetByName("デポジット履歴");
+      if (!historySheet) {
+        historySheet = ss.insertSheet("デポジット履歴");
+        historySheet.appendRow(["日時", "お客様名", "増減額", "種別", "残高"]);
+      }
+
       if (!sheet) {
         return output.setContent(JSON.stringify({ success: false, message: '前払い管理シートがありません' }));
       }
       
       const customerName = data.customerName;
-      const amount = Number(data.amount) || 0; // ボーナス込みの金額が渡ってくる前提
+      const amount = Number(data.amount) || 0; 
       
       const values = sheet.getDataRange().getValues();
       let customerRowIndex = -1;
@@ -174,18 +239,23 @@ function doPost(e) {
       
       for (let i = 1; i < values.length; i++) {
         if (values[i][0] === customerName) {
-          customerRowIndex = i + 1; // 1ベース
-          currentBalance = Number(values[i][2]) || 0; // 3列目
+          customerRowIndex = i + 1;
+          currentBalance = Number(values[i][2]) || 0;
           break;
         }
       }
       
+      let newBalance = currentBalance + amount;
       if (customerRowIndex !== -1) {
-        const newBalance = currentBalance + amount;
         sheet.getRange(customerRowIndex, 3).setValue(newBalance);
       } else {
         sheet.appendRow([customerName, '', amount]);
+        newBalance = amount;
       }
+
+      // 履歴に記録
+      const typeLabel = data.type === 'charge' ? 'チャージ' : '利用';
+      historySheet.appendRow([new Date().toLocaleString('ja-JP'), customerName, amount, typeLabel, newBalance]);
       
       return output.setContent(JSON.stringify({ success: true }));
     }
@@ -199,6 +269,35 @@ function doPost(e) {
       }
       sheet.appendRow([data.name, data.password, data.email]);
       return output.setContent(JSON.stringify({ success: true }));
+    }
+
+    // ⑦-2 スタッフの編集（パスワード・メアド）
+    if (action === 'editStaff') {
+      let sheet = ss.getSheetByName("スタッフマスタ");
+      if (!sheet) return output.setContent(JSON.stringify({ success: false, message: 'マスタが見つかりません' }));
+      const values = sheet.getDataRange().getValues();
+      for (let i = 1; i < values.length; i++) {
+        if (values[i][0] === data.name) {
+          if (data.password) sheet.getRange(i + 1, 2).setValue(data.password);
+          if (data.email !== undefined) sheet.getRange(i + 1, 3).setValue(data.email);
+          return output.setContent(JSON.stringify({ success: true }));
+        }
+      }
+      return output.setContent(JSON.stringify({ success: false, message: 'スタッフが見つかりません' }));
+    }
+
+    // ⑦-3 スタッフの削除
+    if (action === 'deleteStaff') {
+      let sheet = ss.getSheetByName("スタッフマスタ");
+      if (!sheet) return output.setContent(JSON.stringify({ success: false, message: 'マスタが見つかりません' }));
+      const values = sheet.getDataRange().getValues();
+      for (let i = 1; i < values.length; i++) {
+        if (values[i][0] === data.name) {
+          sheet.deleteRow(i + 1);
+          return output.setContent(JSON.stringify({ success: true }));
+        }
+      }
+      return output.setContent(JSON.stringify({ success: false, message: 'スタッフが見つかりません' }));
     }
 
     // ⑧ マイページログイン認証
@@ -228,7 +327,7 @@ function doPost(e) {
     // ⑩ テストデータ一括生成（デモ用）
     if (action === 'initDemoData') {
       // シートのリセットと作成
-      const sheetsToInit = ['スタッフマスタ', '顧客リスト', 'ブラックリスト', '前払い管理', '業務報告'];
+      const sheetsToInit = ['スタッフマスタ', '顧客リスト', 'ブラックリスト', '前払い管理', 'デポジット履歴', '業務報告'];
       sheetsToInit.forEach(sName => {
         let sheet = ss.getSheetByName(sName);
         if (!sheet) {
@@ -386,6 +485,26 @@ function doGet(e) {
         }
       }
       return output.setContent(JSON.stringify({ success: true, deposits: deposits, phones: phones }));
+    }
+    // デポジット履歴取得
+    if (action === 'getDepositHistory') {
+      const sheet = ss.getSheetByName("デポジット履歴");
+      const history = [];
+      if (sheet) {
+        const data = sheet.getDataRange().getValues();
+        if (data.length > 0) data.shift(); // ヘッダーを削除
+        data.forEach(row => {
+          history.push({
+            date: row[0],
+            customerName: row[1],
+            amount: Number(row[2]) || 0,
+            type: row[3],
+            balance: Number(row[4]) || 0
+          });
+        });
+      }
+      history.reverse();
+      return output.setContent(JSON.stringify({ success: true, history: history }));
     }
     
     return output.setContent(JSON.stringify({ success: false, message: 'Invalid action' }));

@@ -172,22 +172,22 @@ export default function ReportForm() {
     };
 
     return (
-        <div className="max-w-2xl mx-auto p-4 sm:p-6 bg-white rounded-2xl shadow-sm border border-gray-100">
-            <div className="mb-6 pb-4 border-b border-gray-100">
-                <h2 className="text-xl font-semibold text-gray-800 tracking-tight">日々の業務報告</h2>
-                <p className="text-sm text-gray-500 mt-1">通話内容と金額を入力してください</p>
+        <div className="max-w-2xl mx-auto p-4 sm:p-6 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+            <div className="mb-6 pb-4 border-b dark:border-gray-700 border-gray-100 dark:border-gray-700">
+                <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200 tracking-tight">日々の業務報告</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">通話内容と金額を入力してください</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
                 {/* スタッフ情報と日付 */}
-                <div className="space-y-4 border-b border-gray-100 pb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-4 border-b dark:border-gray-700 border-gray-100 dark:border-gray-700 pb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-4 mt-0">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             スタッフ名 <span className="text-red-500">*</span>
                         </label>
                         <select
                             required
-                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                            className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800"
                             value={staffName}
                             onChange={(e) => setStaffName(e.target.value)}
                         >
@@ -198,13 +198,13 @@ export default function ReportForm() {
                         </select>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             対応日 (報告を忘れた場合は過去を選択)
                         </label>
                         <input
                             type="date"
                             required
-                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                            className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800"
                             value={reportDate}
                             onChange={(e) => setReportDate(e.target.value)}
                         />
@@ -214,13 +214,13 @@ export default function ReportForm() {
                 {/* お客様情報 */}
                 <div className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             お客様の電話番号 <span className="text-red-500">*</span>
                         </label>
                         <input
                             type="tel"
                             required
-                            className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow ${isBlacklisted ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
+                            className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow ${isBlacklisted ? 'border-red-400 bg-red-50' : 'border-gray-200 dark:border-gray-700'}`}
                             placeholder="090-1234-5678"
                             value={phoneNumber}
                             onChange={(e) => {
@@ -239,12 +239,12 @@ export default function ReportForm() {
                         )}
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             お客様名（ニックネーム可）
                         </label>
                         <input
                             type="text"
-                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
+                            className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
                             placeholder="鈴木 サトシ"
                             value={customerName}
                             onChange={(e) => setCustomerName(e.target.value)}
@@ -253,15 +253,15 @@ export default function ReportForm() {
                 </div>
 
                 {/* サービス内容（複数混在対応） */}
-                <div className="bg-gray-50 -mx-4 sm:-mx-6 px-4 sm:px-6 py-5 rounded-lg border border-gray-100">
-                    <label className="block text-sm font-medium text-gray-700 mb-3">提供サービスと通話時間（実際の通話分数を入力）</label>
-                    <p className="text-xs text-gray-500 mb-3">※システム側で自動的に5分単位の四捨五入が行われます。</p>
+                <div className="bg-gray-50 dark:bg-gray-900 -mx-4 sm:-mx-6 px-4 sm:px-6 py-5 rounded-lg border border-gray-100 dark:border-gray-700">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">提供サービスと通話時間（実際の通話分数を入力）</label>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">※システム側で自動的に5分単位の四捨五入が行われます。</p>
 
                     <div className="space-y-3">
                         {services.map((service, index) => (
                             <div key={index} className="flex items-center gap-2">
                                 <select
-                                    className="flex-1 min-w-[120px] px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                    className="flex-1 min-w-[120px] px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800"
                                     value={service.type}
                                     onChange={(e) => handleServiceChange(index, 'type', e.target.value)}
                                 >
@@ -275,19 +275,19 @@ export default function ReportForm() {
                                         type="number"
                                         min="0"
                                         step="1"
-                                        className="w-20 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-right"
+                                        className="w-20 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-right"
                                         placeholder="0"
                                         value={service.minutes || ''}
                                         onChange={(e) => handleServiceChange(index, 'minutes', parseInt(e.target.value) || 0)}
                                     />
-                                    <span className="text-sm text-gray-500 whitespace-nowrap">分</span>
+                                    <span className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">分</span>
                                 </div>
 
                                 {services.length > 1 && (
                                     <button
                                         type="button"
                                         onClick={() => handleRemoveService(index)}
-                                        className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                                        className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors"
                                     >
                                         ✕
                                     </button>
@@ -306,14 +306,14 @@ export default function ReportForm() {
                 </div>
 
                 {/* 自動計算結果 */}
-                <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
+                <div className="bg-blue-50/50 rounded-xl p-4 border border-b dark:border-gray-700lue-100">
                     <h3 className="text-sm font-medium text-blue-900 mb-3">今回のお給料計算（自動）</h3>
                     <div className="space-y-2 text-sm">
-                        <div className="flex justify-between items-center text-gray-600">
+                        <div className="flex justify-between items-center text-gray-600 dark:text-gray-400">
                             <span>お客様への総請求予定額（売上）</span>
                             <span className="font-semibold">{Math.floor(totals.totalSales).toLocaleString()} 円</span>
                         </div>
-                        <div className="flex justify-between items-center border-t border-blue-100/50 pt-2">
+                        <div className="flex justify-between items-center border-t border-b dark:border-gray-700lue-100/50 pt-2">
                             <span className="text-blue-800 font-medium">スタッフ様 取り分</span>
                             <span className="text-lg font-bold text-blue-600">{Math.floor(totals.staffShare).toLocaleString()} 円</span>
                         </div>
