@@ -28,6 +28,7 @@ export default function AdminDashboard() {
     const [staffSortOption, setStaffSortOption] = useState<'sales_desc' | 'totalSales_desc' | 'name_asc'>('sales_desc');
     const [customerSearchQuery, setCustomerSearchQuery] = useState('');
     const [showBlacklistOnly, setShowBlacklistOnly] = useState(false);
+    const [showDepositOnly, setShowDepositOnly] = useState(false);
     // ボーナス設定状態
     const [bonusThreshold, setBonusThreshold] = useState(5000);
     const [bonusRate, setBonusRate] = useState(14);
@@ -131,13 +132,12 @@ export default function AdminDashboard() {
         }
     };
 
-    const fetchDepositLogs = async (retryForCustomer?: string) => {
+    const fetchDepositLogs = async () => {
         try {
             const res = await fetch(`${GAS_URL}?action=getDepositHistory`);
             const json = await res.json();
             if (json.success && json.history) {
                 setDepositLogs(json.history);
-                if (retryForCustomer) setShowHistoryForCustomer(retryForCustomer);
             }
         } catch (err) {
             console.error('履歴取得エラー:', err);
@@ -325,11 +325,13 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
 
     // サービス名をパースして簡潔に表示（例: 「占い(40分 -> 計算40分)」→「占い 40分」）
     const parseServiceName = (serviceName: string) => {
-        const match = serviceName.match(/^(.+?)\((\d+)分/);
+        // "-> 計算〇分" などの部分を削除
+        const cleanedService = serviceName.replace(/\s*->\s*.*/, '');
+        const match = cleanedService.match(/^(.+?)\((\d+)分/);
         if (match) {
             return `${match[1]} ${match[2]}分`;
         }
-        return serviceName;
+        return cleanedService;
     };
 
     // 入金日を「月日」形式にフォーマット（例: 「3月3日」）
@@ -516,6 +518,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         return 0;
     }).filter(customer => {
         if (showBlacklistOnly && (!customer.phone || !blacklistedPhones.includes(customer.phone))) return false;
+        if (showDepositOnly && customer.balance === 0) return false;
         if (customerSearchQuery.trim()) {
             const query = customerSearchQuery.trim().toLowerCase();
             return customer.name.toLowerCase().includes(query) || (customer.phone && customer.phone.includes(query));
@@ -1147,6 +1150,16 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 <span className="font-medium text-sm">NG顧客</span>
                                             </label>
 
+                                            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer hover:text-gray-900 dark:hover:text-gray-200 transition-colors">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={showDepositOnly}
+                                                    onChange={(e) => setShowDepositOnly(e.target.checked)}
+                                                    className="rounded border-gray-300 text-gray-900 focus:ring-gray-900 w-4 h-4"
+                                                />
+                                                <span className="font-medium text-sm">💰 デポジット管理</span>
+                                            </label>
+
                                             <div className="h-4 w-px bg-gray-300 dark:bg-gray-700 hidden sm:block"></div>
 
                                             <select
@@ -1221,9 +1234,12 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     💰 チャージ
                                                                 </button>
                                                                 <button
-                                                                    onClick={() => {
+                                                                    onClick={async () => {
+                                                                        // データがない場合は先にフェッチしてから開く
+                                                                        if (depositLogs.length === 0) {
+                                                                            await fetchDepositLogs();
+                                                                        }
                                                                         setShowHistoryForCustomer(customerName);
-                                                                        if (depositLogs.length === 0) fetchDepositLogs(customerName);
                                                                     }}
                                                                     className="px-2.5 py-1 bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded text-xs font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors whitespace-nowrap">
                                                                     📄 デポジット履歴
