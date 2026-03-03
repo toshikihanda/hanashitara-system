@@ -14,6 +14,7 @@ interface ReportData {
     staffShare: number;
     isPaid: boolean;
     daysPending: number; // 未入金日数（フロントエンドで計算）
+    paymentDate?: string; // 入金日（入金チェックを押した日付）
 }
 
 export default function AdminDashboard() {
@@ -167,8 +168,8 @@ export default function AdminDashboard() {
                 // 取得した二次元配列をオブジェクト形式に整形＋日数の計算
                 const today = new Date();
                 const formattedData: ReportData[] = json.data.map((row: any[]) => {
-                    // A:ID(0), B:日付(1), C:スタッフ(2), D:顧客電話(3), E:顧客名(4), 
-                    // F:提供サービス(5), G:総売上(6), H:スタッフ報酬(7), I:入金済(8)
+                    // A:ID(0), B:日付(1), C:スタッフ(2), D:顧客電話(3), E:顧客名(4),
+                    // F:提供サービス(5), G:総売上(6), H:スタッフ報酬(7), I:入金済(8), J:入金日(9)
 
                     // 未入金日数の計算
                     let days = 0;
@@ -189,7 +190,8 @@ export default function AdminDashboard() {
                         totalSales: Number(row[6]) || 0,
                         staffShare: Number(row[7]) || 0,
                         isPaid: isPaidStatus,
-                        daysPending: days
+                        daysPending: days,
+                        paymentDate: row[9] ? String(row[9]) : undefined
                     };
                 });
 
@@ -223,8 +225,10 @@ export default function AdminDashboard() {
 
     const togglePaidStatus = async (id: string, currentPaid: boolean) => {
         const newPaidStatus = !currentPaid;
+        const paymentDate = newPaidStatus ? new Date().toISOString() : undefined;
+
         // 画面上の見た目を即座に切り替える
-        setReports(reports.map(r => r.id === id ? { ...r, isPaid: newPaidStatus } : r));
+        setReports(reports.map(r => r.id === id ? { ...r, isPaid: newPaidStatus, paymentDate } : r));
 
         try {
             // GASへ通信してスプレッドシートを更新
@@ -234,14 +238,15 @@ export default function AdminDashboard() {
                 body: JSON.stringify({
                     action: 'updatePaidStatus',
                     id: id,
-                    isPaid: newPaidStatus
+                    isPaid: newPaidStatus,
+                    paymentDate: paymentDate
                 }),
             });
         } catch (error) {
             console.error('更新エラー:', error);
             alert('通信エラーが発生しました。元の状態に戻ります。');
             // エラー時は画面を元に戻す
-            setReports(reports.map(r => r.id === id ? { ...r, isPaid: currentPaid } : r));
+            setReports(reports.map(r => r.id === id ? { ...r, isPaid: currentPaid, paymentDate: undefined } : r));
         }
     };
 
@@ -805,7 +810,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                             <td className="px-6 py-4 font-bold text-gray-900 dark:text-gray-100">¥{report.totalSales.toLocaleString()}</td>
                                                             <td className="px-6 py-4">
                                                                 <span className={`text-[12px] font-bold ${report.isPaid ? 'text-[#4cd9c0]' : 'text-red-400'}`}>
-                                                                    {report.isPaid ? formatPaymentDate(report.date) : '未入金'}
+                                                                    {report.isPaid ? formatPaymentDate(report.paymentDate || report.date) : '未入金'}
                                                                 </span>
                                                             </td>
                                                         </tr>
@@ -1163,6 +1168,67 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         </tbody>
                                     </table>
                                 </div>
+
+                                {/* 顧客編集モーダル */}
+                                {editingCustomerName && (
+                                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setEditingCustomerName(null)}>
+                                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+                                            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">顧客情報の編集</h3>
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">お客様名</label>
+                                                    <input
+                                                        type="text"
+                                                        value={editCustomerData.customerName}
+                                                        onChange={(e) => setEditCustomerData({ ...editCustomerData, customerName: e.target.value })}
+                                                        className="w-full border border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">電話番号</label>
+                                                    <input
+                                                        type="text"
+                                                        value={editCustomerData.customerPhone}
+                                                        onChange={(e) => setEditCustomerData({ ...editCustomerData, customerPhone: e.target.value })}
+                                                        className="w-full border border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-3 mt-6">
+                                                <button
+                                                    onClick={() => setEditingCustomerName(null)}
+                                                    className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-bold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                                                >
+                                                    キャンセル
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        try {
+                                                            setEditingCustomerName(null);
+                                                            await fetch(GAS_URL, {
+                                                                method: 'POST',
+                                                                body: JSON.stringify({
+                                                                    action: 'editCustomer',
+                                                                    oldName: editingCustomerName,
+                                                                    newName: editCustomerData.customerName,
+                                                                    phone: editCustomerData.customerPhone
+                                                                })
+                                                            });
+                                                            fetchDeposits();
+                                                            fetchReports();
+                                                            alert('お客様情報を更新しました。');
+                                                        } catch (e) {
+                                                            alert('エラーが発生しました。');
+                                                        }
+                                                    }}
+                                                    className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors"
+                                                >
+                                                    保存する
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </section>
                         )}
 
@@ -1327,7 +1393,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 </div>
                             </section>
                         )}
-\n                    </div> {/* END OF print:hidden wrapper */}
+                    </div> {/* END OF print:hidden wrapper */}
 
                     {/* 給与明細PDFプレビューモーダル */}
                     {selectedPdfStaff && (

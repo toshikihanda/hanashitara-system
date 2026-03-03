@@ -64,7 +64,8 @@ function doPost(e) {
         data.services,
         sales,
         data.staffShare,
-        paidStatus
+        paidStatus,
+        paidStatus === '入金済' ? new Date().toISOString() : '' // 入金日（自動引き落としの場合は現在日時）
       ]);
       
       return output.setContent(JSON.stringify({ 
@@ -97,11 +98,18 @@ function doPost(e) {
       const sheet = ss.getSheetByName('業務報告');
       const targetId = data.id;
       const newStatus = data.isPaid ? '入金済' : '未入金';
-      
+      const paymentDate = data.paymentDate || ''; // 入金日（入金チェックを押した日付）
+
       const values = sheet.getDataRange().getValues();
       for (let i = 1; i < values.length; i++) {
         if (values[i][0] === targetId) {
           sheet.getRange(i + 1, 9).setValue(newStatus);
+          // J列（10列目）に入金日を保存
+          if (data.isPaid && paymentDate) {
+            sheet.getRange(i + 1, 10).setValue(paymentDate);
+          } else {
+            sheet.getRange(i + 1, 10).setValue(''); // 未入金の場合は空にする
+          }
           return output.setContent(JSON.stringify({ success: true }));
         }
       }
