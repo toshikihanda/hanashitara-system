@@ -91,9 +91,9 @@ export default function AdminDashboard() {
 
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
 
-    // 電話番号を正規化（ハイフンを削除）
+    // 電話番号を正規化（ハイフンと先頭のシングルクォートを削除）
     const normalizePhone = (phone: string) => {
-        return phone.replace(/-/g, '');
+        return phone.replace(/^'/, '').replace(/-/g, '');
     };
 
     // 電話番号を表示用にフォーマット（XXX-XXXX-XXXX形式に変換）
@@ -177,7 +177,7 @@ export default function AdminDashboard() {
                 setDeposits(json.deposits || {});
                 const safePhones: Record<string, string> = {};
                 for (const [k, v] of Object.entries(json.phones || {})) {
-                    safePhones[k] = String(v).trim();
+                    safePhones[k] = String(v).trim().replace(/^'/, '');
                 }
                 setCustomerPhones(safePhones);
             }
@@ -203,7 +203,7 @@ export default function AdminDashboard() {
             const res = await fetch(`${GAS_URL}?action=getBlacklistPhones`);
             const json = await res.json();
             if (json.success) {
-                const safeBlacklist = (json.phones || []).map((p: any) => String(p).trim());
+                const safeBlacklist = (json.phones || []).map((p: any) => String(p).trim().replace(/^'/, ''));
                 setBlacklistedPhones(safeBlacklist);
             }
         } catch (err) {
@@ -239,7 +239,7 @@ export default function AdminDashboard() {
                         id: row[0],
                         date: row[1],
                         staff: String(row[2] || ''),
-                        customerPhone: String(row[3] || '').trim(),
+                        customerPhone: String(row[3] || '').trim().replace(/^'/, ''),
                         customerName: String(row[4] || ''),
                         services: String(row[5] || ''),
                         totalSales: Number(row[6]) || 0,
@@ -430,7 +430,14 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         const d = new Date(r.date);
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === currentMonthStr;
     }).sort((a, b) => {
-        // 新しい報告を上に表示（降順）
+        // 3日以上経過した未入金報告を最優先で上に表示
+        const aUrgent = !a.isPaid && a.daysPending >= 3;
+        const bUrgent = !b.isPaid && b.daysPending >= 3;
+
+        if (aUrgent && !bUrgent) return -1; // aを上に
+        if (!aUrgent && bUrgent) return 1;  // bを上に
+
+        // それ以外は新しい報告を上に表示（降順）
         return new Date(b.date).getTime() - new Date(a.date).getTime();
     });
     const totalMonthSales = monthReports.reduce((sum, r) => sum + r.totalSales, 0);
@@ -839,20 +846,22 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     <th className="px-6 py-4 font-medium">デポジット</th>
                                                     <th className="px-6 py-4 font-medium">請求額</th>
                                                     <th className="px-6 py-4 font-medium">入金日</th>
+                                                    <th className="px-6 py-4 font-medium text-center">操作</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                                 {monthReports.length === 0 && !isLoading && !errorText && (
                                                     <tr>
-                                                        <td colSpan={10} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">
+                                                        <td colSpan={11} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">
                                                             当月の報告データがありません
                                                         </td>
                                                     </tr>
                                                 )}
                                                 {monthReports.map((report) => {
                                                     const isEditing = editingReportId === report.id;
+                                                    const isUrgent = !report.isPaid && report.daysPending >= 3;
                                                     return (
-                                                        <tr key={report.id} className="hover:bg-gray-50/50 dark:bg-gray-800/50 transition-colors border-b dark:border-gray-700">
+                                                        <tr key={report.id} className={`hover:bg-gray-50/50 dark:bg-gray-800/50 transition-colors border-b dark:border-gray-700 ${isUrgent ? 'bg-red-50 dark:bg-red-900/20' : ''}`}>
                                                             <td className="px-6 py-4">
                                                                 <button
                                                                     onClick={() => togglePaidStatus(report.id, report.isPaid)}
@@ -865,8 +874,36 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                 {new Date(report.date).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })}
                                                             </td>
                                                             <td className="px-6 py-4 font-bold text-gray-900 dark:text-gray-100">{report.staff}</td>
-                                                            <td className="px-6 py-4 text-gray-900 dark:text-gray-100">{report.customerName}</td>
-                                                            <td className="px-6 py-4 text-gray-500 dark:text-gray-400">{formatPhone(report.customerPhone)}</td>
+                                                            <td className="px-6 py-4 text-gray-900 dark:text-gray-100">
+                                                                {isEditing ? (
+                                                                    <input
+                                                                        type="text"
+                                                                        value={editReportData.customerName}
+                                                                        onChange={(e) => setEditReportData({ ...editReportData, customerName: e.target.value })}
+                                                                        className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-sm"
+                                                                    />
+                                                                ) : (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span>{report.customerName}</span>
+                                                                        {isUrgent && (
+                                                                            <span className="text-[10px] px-2 py-0.5 rounded bg-red-500 text-white font-bold whitespace-nowrap">催促要</span>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
+                                                                {isEditing ? (
+                                                                    <input
+                                                                        type="tel"
+                                                                        value={editReportData.customerPhone}
+                                                                        onChange={(e) => setEditReportData({ ...editReportData, customerPhone: e.target.value })}
+                                                                        className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-sm"
+                                                                        placeholder="090-1234-5678"
+                                                                    />
+                                                                ) : (
+                                                                    formatPhone(report.customerPhone)
+                                                                )}
+                                                            </td>
                                                             <td className="px-6 py-4">
                                                                 {report.services.split(', ').map(s => {
                                                                     const parsedService = parseServiceName(s);
@@ -876,7 +913,18 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     return <span key={s} className={`text-[11px] px-2 py-0.5 rounded mr-1 ${bgClass}`}>{parsedService}</span>;
                                                                 })}
                                                             </td>
-                                                            <td className="px-6 py-4 font-bold text-gray-900 dark:text-gray-100">¥{report.totalSales.toLocaleString()}</td>
+                                                            <td className="px-6 py-4 font-bold text-gray-900 dark:text-gray-100">
+                                                                {isEditing ? (
+                                                                    <input
+                                                                        type="number"
+                                                                        value={editReportData.totalSales}
+                                                                        onChange={(e) => setEditReportData({ ...editReportData, totalSales: Number(e.target.value) })}
+                                                                        className="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-sm"
+                                                                    />
+                                                                ) : (
+                                                                    `¥${report.totalSales.toLocaleString()}`
+                                                                )}
+                                                            </td>
                                                             <td className="px-6 py-4">
                                                                 {report.depositUsed > 0 ? (
                                                                     <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold">-¥{report.depositUsed.toLocaleString()}</span>
@@ -901,6 +949,97 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     {report.isPaid ? formatPaymentDate(report.paymentDate || report.date) : '未入金'}
                                                                 </span>
                                                             </td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex items-center justify-center gap-2">
+                                                                    {!isEditing && (
+                                                                        <>
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    setEditingReportId(report.id);
+                                                                                    setEditReportData({
+                                                                                        customerName: report.customerName,
+                                                                                        customerPhone: report.customerPhone,
+                                                                                        totalSales: report.totalSales
+                                                                                    });
+                                                                                }}
+                                                                                className="px-2 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                                                                            >
+                                                                                編集
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={async () => {
+                                                                                    if (!confirm('この報告を削除しますか？この操作は取り消せません。')) return;
+                                                                                    setIsSaving(true);
+                                                                                    try {
+                                                                                        const res = await fetch(GAS_URL, {
+                                                                                            method: 'POST',
+                                                                                            body: JSON.stringify({ action: 'deleteReport', id: report.id })
+                                                                                        });
+                                                                                        const json = await res.json();
+                                                                                        if (json.success) {
+                                                                                            fetchReports(false);
+                                                                                            showToast('報告を削除しました');
+                                                                                        } else {
+                                                                                            alert('エラー: ' + (json.message || '削除に失敗しました'));
+                                                                                        }
+                                                                                    } catch (e) {
+                                                                                        console.error(e);
+                                                                                        alert('エラーが発生しました');
+                                                                                    } finally {
+                                                                                        setIsSaving(false);
+                                                                                    }
+                                                                                }}
+                                                                                className="px-2 py-1 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
+                                                                            >
+                                                                                削除
+                                                                            </button>
+                                                                        </>
+                                                                    )}
+                                                                    {isEditing && (
+                                                                        <div className="flex gap-2">
+                                                                            <button
+                                                                                onClick={async () => {
+                                                                                    setIsSaving(true);
+                                                                                    try {
+                                                                                        const res = await fetch(GAS_URL, {
+                                                                                            method: 'POST',
+                                                                                            body: JSON.stringify({
+                                                                                                action: 'editReport',
+                                                                                                id: report.id,
+                                                                                                customerName: editReportData.customerName,
+                                                                                                customerPhone: normalizePhone(editReportData.customerPhone),
+                                                                                                totalSales: editReportData.totalSales
+                                                                                            })
+                                                                                        });
+                                                                                        const json = await res.json();
+                                                                                        if (json.success) {
+                                                                                            setEditingReportId(null);
+                                                                                            fetchReports(false);
+                                                                                            showToast('報告を更新しました');
+                                                                                        } else {
+                                                                                            alert('エラー: ' + (json.message || '更新に失敗しました'));
+                                                                                        }
+                                                                                    } catch (e) {
+                                                                                        console.error(e);
+                                                                                        alert('エラーが発生しました');
+                                                                                    } finally {
+                                                                                        setIsSaving(false);
+                                                                                    }
+                                                                                }}
+                                                                                className="px-2 py-1 bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded text-xs font-bold hover:bg-green-100 dark:hover:bg-green-900/50"
+                                                                            >
+                                                                                保存
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => setEditingReportId(null)}
+                                                                                className="px-2 py-1 bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded text-xs font-bold hover:bg-gray-100 dark:hover:bg-gray-600"
+                                                                            >
+                                                                                キャンセル
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </td>
                                                         </tr>
                                                     );
                                                 })}
@@ -922,6 +1061,33 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 font-bold px-4 py-1.5 rounded-lg text-sm hover:bg-gray-800 dark:hover:bg-white transition-colors shadow-sm whitespace-nowrap"
                                         >
                                             ＋ スタッフを追加する
+                                        </button>
+                                        <button
+                                            onClick={async () => {
+                                                if (!confirm('⚠️ すべてのデータが削除され、デモデータで初期化されます。\n本当に実行しますか？')) return;
+                                                setIsSaving(true);
+                                                try {
+                                                    const res = await fetch(GAS_URL, {
+                                                        method: 'POST',
+                                                        body: JSON.stringify({ action: 'initDemoData' })
+                                                    });
+                                                    const json = await res.json();
+                                                    if (json.success) {
+                                                        alert('✅ デモデータの初期化が完了しました！');
+                                                        window.location.reload();
+                                                    } else {
+                                                        alert('❌ エラーが発生しました: ' + (json.message || json.error));
+                                                    }
+                                                } catch (err) {
+                                                    console.error(err);
+                                                    alert('❌ エラーが発生しました');
+                                                } finally {
+                                                    setIsSaving(false);
+                                                }
+                                            }}
+                                            className="bg-red-600 dark:bg-red-500 text-white font-bold px-4 py-1.5 rounded-lg text-sm hover:bg-red-700 dark:hover:bg-red-600 transition-colors shadow-sm whitespace-nowrap"
+                                        >
+                                            🔄 デモデータ初期化
                                         </button>
                                         <input
                                             type="month"
@@ -1154,6 +1320,36 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors"
                                                 >
                                                     保存
+                                                </button>
+                                            </div>
+                                            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                                                <button
+                                                    onClick={async () => {
+                                                        if (!confirm(`${editingStaffName}さんを削除しますか？\nこの操作は取り消せません。`)) return;
+                                                        setIsSaving(true);
+                                                        try {
+                                                            const res = await fetch(GAS_URL, {
+                                                                method: 'POST',
+                                                                body: JSON.stringify({ action: 'deleteStaff', name: editingStaffName })
+                                                            });
+                                                            const json = await res.json();
+                                                            if (json.success) {
+                                                                setEditingStaffName(null);
+                                                                fetchStaffList();
+                                                                showToast('スタッフを削除しました');
+                                                            } else {
+                                                                alert('エラー: ' + (json.message || '削除に失敗しました'));
+                                                            }
+                                                        } catch (e) {
+                                                            console.error(e);
+                                                            alert('エラーが発生しました');
+                                                        } finally {
+                                                            setIsSaving(false);
+                                                        }
+                                                    }}
+                                                    className="w-full px-4 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-colors"
+                                                >
+                                                    このスタッフを削除
                                                 </button>
                                             </div>
                                         </div>

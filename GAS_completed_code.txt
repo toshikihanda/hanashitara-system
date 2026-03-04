@@ -76,7 +76,7 @@ function doPost(e) {
         newId,
         data.date,
         data.staff,
-        data.customerPhone,
+        `'${data.customerPhone}`,
         data.customerName,
         data.services,
         sales,
@@ -103,7 +103,7 @@ function doPost(e) {
       for(let i = 1; i < values.length; i++) {
         if(values[i][0] === data.id) {
           // D列(電話), E列(名前), G列(売上額) を更新
-          sheet.getRange(i + 1, 4).setValue(data.customerPhone);
+          sheet.getRange(i + 1, 4).setValue(`'${data.customerPhone}`);
           sheet.getRange(i + 1, 5).setValue(data.customerName);
           sheet.getRange(i + 1, 7).setValue(data.totalSales);
           return output.setContent(JSON.stringify({ success: true }));
@@ -139,7 +139,7 @@ function doPost(e) {
     if (action === 'addBlacklist') {
       const sheet = ss.getSheetByName('ブラックリスト');
       sheet.appendRow([
-        data.phone,
+        `'${data.phone}`,
         data.name,
         data.reason,
         new Date().toLocaleString('ja-JP')
@@ -168,7 +168,7 @@ function doPost(e) {
       }
       
       if (!exists) {
-        sheet.appendRow([customerName, phone, new Date().toLocaleString('ja-JP')]);
+        sheet.appendRow([customerName, `'${phone}`, new Date().toLocaleString('ja-JP')]);
       }
       
       // デポジット用にも0円で枠を作っておく
@@ -179,7 +179,7 @@ function doPost(e) {
         for (let i = 1; i < depValues.length; i++) {
           if (depValues[i][0] === customerName) depExists = true;
         }
-        if (!depExists) depSheet.appendRow([customerName, phone, 0]);
+        if (!depExists) depSheet.appendRow([customerName, `'${phone}`, 0]);
       }
 
       return output.setContent(JSON.stringify({ success: true }));
@@ -198,11 +198,11 @@ function doPost(e) {
         for (let i = 1; i < values.length; i++) {
           if (values[i][0] === oldName) {
              custSheet.getRange(i + 1, 1).setValue(newName);
-             custSheet.getRange(i + 1, 2).setValue(phone);
+             custSheet.getRange(i + 1, 2).setValue(`'${phone}`);
           }
         }
       }
-      
+
       // 2. 前払い管理の更新
       const depSheet = ss.getSheetByName("前払い管理");
       if (depSheet) {
@@ -210,7 +210,7 @@ function doPost(e) {
         for (let i = 1; i < values.length; i++) {
           if (values[i][0] === oldName) {
              depSheet.getRange(i + 1, 1).setValue(newName);
-             depSheet.getRange(i + 1, 2).setValue(phone);
+             depSheet.getRange(i + 1, 2).setValue(`'${phone}`);
           }
         }
       }
@@ -221,7 +221,7 @@ function doPost(e) {
         const values = reportSheet.getDataRange().getValues();
         for (let i = 1; i < values.length; i++) {
           if (values[i][4] === oldName) {
-             reportSheet.getRange(i + 1, 4).setValue(phone);
+             reportSheet.getRange(i + 1, 4).setValue(`'${phone}`);
              reportSheet.getRange(i + 1, 5).setValue(newName);
           }
         }
@@ -382,18 +382,18 @@ function doPost(e) {
       const customers = [];
       for (let i = 1; i <= 20; i++) {
         customers.push({ name: `テスト顧客${i}号`, phone: `090-${String(i).padStart(4, '0')}-0000` });
-        ss.getSheetByName("顧客リスト").appendRow([`テスト顧客${i}号`, `090-${String(i).padStart(4, '0')}-0000`, new Date().toLocaleDateString('ja-JP')]);
+        ss.getSheetByName("顧客リスト").appendRow([`テスト顧客${i}号`, `'090-${String(i).padStart(4, '0')}-0000`, new Date().toLocaleDateString('ja-JP')]);
       }
 
       // ブラックリスト2名
-      ss.getSheetByName("ブラックリスト").appendRow(["090-9999-9999", "悪質ユーザーA", "未払いが続いたため", new Date().toLocaleString('ja-JP')]);
-      ss.getSheetByName("ブラックリスト").appendRow(["080-8888-8888", "イタズラ迷惑客", "暴言・イタズラ電話", new Date().toLocaleString('ja-JP')]);
+      ss.getSheetByName("ブラックリスト").appendRow(["'090-9999-9999", "悪質ユーザーA", "未払いが続いたため", new Date().toLocaleString('ja-JP')]);
+      ss.getSheetByName("ブラックリスト").appendRow(["'080-8888-8888", "イタズラ迷惑客", "暴言・イタズラ電話", new Date().toLocaleString('ja-JP')]);
 
       // 前払い3名
       const prepayCust = customers.slice(0, 3);
       prepayCust.forEach((c, idx) => {
         const bl = [10000, 5000, 20000][idx];
-        ss.getSheetByName("前払い管理").appendRow([c.name, c.phone, bl]);
+        ss.getSheetByName("前払い管理").appendRow([c.name, `'${c.phone}`, bl]);
       });
 
       // 業務報告30件
@@ -411,7 +411,7 @@ function doPost(e) {
           Utilities.getUuid(),
           d.toLocaleDateString('ja-JP'),
           rStaff,
-          rCust.phone,
+          `'${rCust.phone}`,
           rCust.name,
           "傾聴(45分 -> 計算45分)",
           sales,
