@@ -44,8 +44,8 @@ export default function AdminDashboard() {
     const [staffEmails, setStaffEmails] = useState<Record<string, string>>({});
     const [staffServices, setStaffServices] = useState<Record<string, string>>({});
 
-    type CustomerSortOption = 'deposit' | 'paid_desc' | 'registered_asc' | 'registered_desc' | 'name_asc' | 'number_asc';
-    const [customerSortBy, setCustomerSortBy] = useState<CustomerSortOption>('deposit');
+    type CustomerSortOption = 'deposit' | 'paid_desc' | 'registered_asc' | 'registered_desc' | 'name_asc' | 'number_asc' | 'balance_desc' | 'monthly_amount_desc' | 'call_count_desc';
+    const [customerSortBy, setCustomerSortBy] = useState<CustomerSortOption>('registered_desc');
 
     // コピー完了アニメーション表示用
     const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -588,6 +588,15 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         }
         if (customerSortBy === 'name_asc') {
             return a.name.localeCompare(b.name, 'ja');
+        }
+        if (customerSortBy === 'balance_desc') {
+            return b.balance - a.balance;
+        }
+        if (customerSortBy === 'monthly_amount_desc') {
+            return b.monthlyAmount - a.monthlyAmount;
+        }
+        if (customerSortBy === 'call_count_desc') {
+            return b.callCount - a.callCount;
         }
         return 0;
     }).filter(customer => {
@@ -1490,6 +1499,10 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 <option value="registered_asc">古い順</option>
                                                 <option value="name_asc">五十音</option>
                                                 <option value="number_asc">番号順</option>
+                                                <option value="balance_desc">デポジット残高順</option>
+                                                <option value="paid_desc">累計利用額順</option>
+                                                <option value="monthly_amount_desc">今月の利用額順</option>
+                                                <option value="call_count_desc">通話回数順</option>
                                             </select>
                                         </div>
                                     </div>
@@ -1498,13 +1511,13 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     <table className="w-full text-sm text-left border rounded-lg overflow-hidden">
                                         <thead className="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-b dark:border-gray-700">
                                             <tr className="border-b border-gray-200 dark:border-gray-700">
-                                                <th className="px-4 py-3 font-medium cursor-pointer" onClick={() => setCustomerSortBy('name_asc')}>名前 {customerSortBy === 'name_asc' ? '▲' : ''}</th>
+                                                <th className="px-4 py-3 font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onClick={() => setCustomerSortBy('name_asc')}>名前 {customerSortBy === 'name_asc' ? '▲' : ''}</th>
                                                 <th className="px-4 py-3 font-medium">電話番号</th>
-                                                <th className="px-4 py-3 font-medium cursor-pointer" onClick={() => setCustomerSortBy('registered_desc')}>登録日 {customerSortBy === 'registered_desc' ? '▼' : ''}</th>
-                                                <th className="px-4 py-3 font-medium text-right">通話回数</th>
-                                                <th className="px-4 py-3 font-medium text-right">今月の通話利用額</th>
-                                                <th className="px-4 py-3 font-medium text-right">累計利用額</th>
-                                                <th className="px-4 py-3 font-medium text-right">デポジット残高</th>
+                                                <th className="px-4 py-3 font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onClick={() => setCustomerSortBy('registered_desc')}>登録日 {customerSortBy === 'registered_desc' ? '▼' : ''}</th>
+                                                <th className="px-4 py-3 font-medium text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onClick={() => setCustomerSortBy('call_count_desc')}>通話回数 {customerSortBy === 'call_count_desc' ? '▼' : ''}</th>
+                                                <th className="px-4 py-3 font-medium text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onClick={() => setCustomerSortBy('monthly_amount_desc')}>今月の通話利用額 {customerSortBy === 'monthly_amount_desc' ? '▼' : ''}</th>
+                                                <th className="px-4 py-3 font-medium text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onClick={() => setCustomerSortBy('paid_desc')}>累計利用額 {customerSortBy === 'paid_desc' ? '▼' : ''}</th>
+                                                <th className="px-4 py-3 font-medium text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onClick={() => setCustomerSortBy('balance_desc')}>デポジット残高 {customerSortBy === 'balance_desc' ? '▼' : ''}</th>
                                                 <th className="px-4 py-3 font-medium text-center">操作</th>
                                             </tr>
                                         </thead>
