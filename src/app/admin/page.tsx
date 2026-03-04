@@ -429,6 +429,9 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
     const monthReports = reports.filter(r => {
         const d = new Date(r.date);
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === currentMonthStr;
+    }).sort((a, b) => {
+        // 新しい報告を上に表示（降順）
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
     });
     const totalMonthSales = monthReports.reduce((sum, r) => sum + r.totalSales, 0);
     const totalMonthProfit = monthReports.reduce((sum, r) => sum + (r.totalSales - r.staffShare), 0);
