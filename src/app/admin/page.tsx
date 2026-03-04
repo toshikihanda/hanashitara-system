@@ -121,6 +121,35 @@ export default function AdminDashboard() {
         if (savedRate) setBonusRate(Number(savedRate));
     }, []);
 
+    // ③定期的なデータ更新（30秒ごと）
+    useEffect(() => {
+        const interval = setInterval(() => {
+            fetchReports(false); // ローディング表示なしで更新
+            fetchDeposits();
+        }, 30000); // 30秒ごと
+
+        return () => clearInterval(interval);
+    }, []);
+
+    // ④ページがフォーカスされたときにデータを更新
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (!document.hidden) {
+                // ページが表示されたときにデータを更新
+                fetchReports(false);
+                fetchDeposits();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleVisibilityChange);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleVisibilityChange);
+        };
+    }, []);
+
     const fetchStaffList = async () => {
         try {
             const res = await fetch(`${GAS_URL}?action=getStaffList`);
