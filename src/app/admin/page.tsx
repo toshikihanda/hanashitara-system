@@ -20,6 +20,7 @@ interface ReportData {
 export default function AdminDashboard() {
     const [reports, setReports] = useState<ReportData[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
     const [errorText, setErrorText] = useState('');
 
     // タブ状態管理
@@ -236,6 +237,7 @@ export default function AdminDashboard() {
         // 画面上の見た目を即座に切り替える
         setReports(reports.map(r => r.id === id ? { ...r, isPaid: newPaidStatus, paymentDate } : r));
 
+        setIsSaving(true);
         try {
             // GASへ通信してスプレッドシートを更新
             await fetch(GAS_URL, {
@@ -253,6 +255,8 @@ export default function AdminDashboard() {
             alert('通信エラーが発生しました。元の状態に戻ります。');
             // エラー時は画面を元に戻す
             setReports(reports.map(r => r.id === id ? { ...r, isPaid: currentPaid, paymentDate: undefined } : r));
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -263,6 +267,7 @@ export default function AdminDashboard() {
         // 即座にUIへ反映
         setBlacklistedPhones(prev => [...prev, phone]);
 
+        setIsSaving(true);
         try {
             await fetch(GAS_URL, {
                 method: 'POST',
@@ -275,6 +280,8 @@ export default function AdminDashboard() {
             alert('通信エラーが発生しました。時間を置いて再度お試しください。');
             // エラー時は元に戻す
             setBlacklistedPhones(prev => prev.filter(p => p !== phone));
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -1043,6 +1050,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 </button>
                                                 <button
                                                     onClick={async () => {
+                                                        setIsSaving(true);
                                                         try {
                                                             setEditingStaffName(null);
                                                             await fetch(GAS_URL, {
@@ -1062,6 +1070,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         } catch (e) {
                                                             setToastMessage('エラーが発生しました');
                                                             setTimeout(() => setToastMessage(null), 3000);
+                                                        } finally {
+                                                            setIsSaving(false);
                                                         }
                                                     }}
                                                     className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors"
@@ -1141,6 +1151,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 </button>
                                                 <button
                                                     onClick={async () => {
+                                                        setIsSaving(true);
                                                         try {
                                                             setShowAddStaffModal(false);
                                                             await fetch(GAS_URL, {
@@ -1160,6 +1171,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         } catch (e) {
                                                             setToastMessage('エラーが発生しました');
                                                             setTimeout(() => setToastMessage(null), 3000);
+                                                        } finally {
+                                                            setIsSaving(false);
                                                         }
                                                     }}
                                                     className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors"
@@ -1369,6 +1382,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     </button>
                                                     <button
                                                         onClick={async () => {
+                                                            setIsSaving(true);
                                                             try {
                                                                 setEditingCustomerName(null);
                                                                 await fetch(GAS_URL, {
@@ -1385,6 +1399,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                 alert('お客様情報を更新しました。');
                                                             } catch (e) {
                                                                 alert('エラーが発生しました。');
+                                                            } finally {
+                                                                setIsSaving(false);
                                                             }
                                                         }}
                                                         className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors"
@@ -1473,6 +1489,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             }
                                             if (!window.confirm(`${selectedPdfStaff}さん (${toEmail}) へ給与明細メールを送信しますか？`)) return;
 
+                                            setIsSaving(true);
                                             try {
                                                 const staffShare = staffStats.find(s => s.name === selectedPdfStaff)?.share || 0;
                                                 const res = await fetch(GAS_URL, {
@@ -1495,6 +1512,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             } catch (e) {
                                                 console.error('通信エラー:', e);
                                                 alert('通信エラーが発生しました。');
+                                            } finally {
+                                                setIsSaving(false);
                                             }
                                         }}
                                         className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-bold shadow hover:bg-blue-700 transition flex items-center gap-2"
@@ -1690,6 +1709,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     if (!newCustomerData.name || !newCustomerData.phone) {
                                         return alert('お客様名と電話番号は必須です');
                                     }
+                                    setIsSaving(true);
                                     try {
                                         setDeposits(prev => ({ ...prev, [newCustomerData.name]: 0 }));
                                         setCustomerPhones(prev => ({ ...prev, [newCustomerData.name]: newCustomerData.phone }));
@@ -1707,6 +1727,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     } catch (err) {
                                         console.error(err);
                                         alert('エラーが発生しました');
+                                    } finally {
+                                        setIsSaving(false);
                                     }
                                 }}
                                 className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors"
@@ -1762,6 +1784,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     if (!chargeData.amount || Number(chargeData.amount) <= 0) {
                                         return alert('有効な金額を入力してください');
                                     }
+                                    setIsSaving(true);
                                     try {
                                         const bonusAmount = Number(chargeData.amount) * (Number(chargeData.bonusRate) / 100);
                                         const totalAmount = Number(chargeData.amount) + bonusAmount;
@@ -1787,6 +1810,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     } catch (err) {
                                         console.error(err);
                                         alert('エラーが発生しました');
+                                    } finally {
+                                        setIsSaving(false);
                                     }
                                 }}
                                 className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition-colors"
@@ -1795,6 +1820,14 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                             </button>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* ローディング（保存中）UI */}
+            {isSaving && (
+                <div className="fixed inset-0 bg-black/50 flex flex-col items-center justify-center z-[100]">
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-white/20 border-t-white mb-4"></div>
+                    <p className="text-white font-bold tracking-wider">保存中...</p>
                 </div>
             )}
 
