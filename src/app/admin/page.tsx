@@ -1258,13 +1258,14 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 <th className="px-4 py-3 font-medium text-right">通話回数</th>
                                                 <th className="px-4 py-3 font-medium text-right">今月の通話利用額</th>
                                                 <th className="px-4 py-3 font-medium text-right">累計利用額</th>
+                                                <th className="px-4 py-3 font-medium text-right">デポジット残高</th>
                                                 <th className="px-4 py-3 font-medium text-center">操作</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                             {customerList.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={7} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500">
+                                                    <td colSpan={8} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500">
                                                         データがありません。上の「＋ 追加する」ボタンから顧客を追加してください。
                                                     </td>
                                                 </tr>
@@ -1296,6 +1297,11 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         <td className="px-4 py-3 text-right">
                                                             <span className="text-gray-900 dark:text-gray-100 font-bold">¥{totalPaid.toLocaleString()}</span>
                                                         </td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            <span className={`font-bold ${balance > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                                                                ¥{balance.toLocaleString()}
+                                                            </span>
+                                                        </td>
                                                         <td className="px-4 py-3">
                                                             <div className="flex flex-wrap items-center justify-center gap-1.5">
                                                                 <button
@@ -1308,14 +1314,18 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                 </button>
                                                                 <button
                                                                     onClick={async () => {
-                                                                        // データがない場合は先にフェッチしてから開く
-                                                                        if (depositLogs.length === 0) {
+                                                                        setIsSaving(true);
+                                                                        try {
+                                                                            // 両方のデータが揃うまで待機
                                                                             await fetchDepositLogs();
+                                                                            // reportsは既に取得済みなので、両方揃った状態でモーダルを開く
+                                                                            setShowHistoryForCustomer(customerName);
+                                                                        } finally {
+                                                                            setIsSaving(false);
                                                                         }
-                                                                        setShowHistoryForCustomer(customerName);
                                                                     }}
                                                                     className="px-2.5 py-1 bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded text-xs font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors whitespace-nowrap">
-                                                                    📄 デポジット履歴
+                                                                    📄 ご利用履歴
                                                                 </button>
                                                                 <button
                                                                     onClick={() => {
@@ -1602,19 +1612,23 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 <tbody>
                                                     {reports.filter(r => r.customerName === showHistoryForCustomer)
                                                         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                                                        .map(r => (
-                                                            <tr key={r.id} className="border-b dark:border-gray-700 hover:bg-gray-50/50 dark:bg-gray-800/50">
-                                                                <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{new Date(r.date).toLocaleDateString('ja-JP')}</td>
-                                                                <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">{r.staff}</td>
-                                                                <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-pre-wrap">{r.services}</td>
-                                                                <td className="px-4 py-3 text-right font-bold text-gray-700 dark:text-gray-300">¥{r.totalSales.toLocaleString()}</td>
-                                                                <td className="px-4 py-3 text-center">
-                                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${r.isPaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                                        {r.isPaid ? '入金済' : '未入金'}
-                                                                    </span>
-                                                                </td>
-                                                            </tr>
-                                                        ))}
+                                                        .map(r => {
+                                                            // サービス表示から「-> 計算XX分」を削除
+                                                            const cleanServices = r.services.replace(/\s*->\s*計算\d+分/g, '').replace(/\((\d+)分\)/g, ' $1分');
+                                                            return (
+                                                                <tr key={r.id} className="border-b dark:border-gray-700 hover:bg-gray-50/50 dark:bg-gray-800/50">
+                                                                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{new Date(r.date).toLocaleDateString('ja-JP')}</td>
+                                                                    <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">{r.staff}</td>
+                                                                    <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-pre-wrap">{cleanServices}</td>
+                                                                    <td className="px-4 py-3 text-right font-bold text-gray-700 dark:text-gray-300">¥{r.totalSales.toLocaleString()}</td>
+                                                                    <td className="px-4 py-3 text-center">
+                                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${r.isPaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                                            {r.isPaid ? '入金済' : '未入金'}
+                                                                        </span>
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
                                                     {reports.filter(r => r.customerName === showHistoryForCustomer).length === 0 && (
                                                         <tr>
                                                             <td colSpan={5} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500">通話のご利用履歴がありません</td>
