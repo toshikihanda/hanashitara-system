@@ -89,6 +89,22 @@ export default function AdminDashboard() {
 
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
 
+    // 電話番号を正規化（ハイフンを削除）
+    const normalizePhone = (phone: string) => {
+        return phone.replace(/-/g, '');
+    };
+
+    // 電話番号を表示用にフォーマット（XXX-XXXX-XXXX形式に変換）
+    const formatPhone = (phone: string) => {
+        const normalized = normalizePhone(phone);
+        if (normalized.length === 11) {
+            return `${normalized.slice(0, 3)}-${normalized.slice(3, 7)}-${normalized.slice(7)}`;
+        } else if (normalized.length === 10) {
+            return `${normalized.slice(0, 3)}-${normalized.slice(3, 6)}-${normalized.slice(6)}`;
+        }
+        return phone; // そのまま返す
+    };
+
     // ②初回読み込み時に全データを取得する
     useEffect(() => {
         fetchReports(true);
@@ -261,25 +277,26 @@ export default function AdminDashboard() {
     };
 
     const handleAddBlacklist = async (phone: string, name: string) => {
-        const reason = window.prompt(`${name}さん (${phone}) をブラックリストに登録する理由を入力してください（イタズラ、未払い等）`);
+        const normalizedPhone = normalizePhone(phone);
+        const reason = window.prompt(`${name}さん (${formatPhone(phone)}) をブラックリストに登録する理由を入力してください（イタズラ、未払い等）`);
         if (!reason) return; // キャンセル
 
-        // 即座にUIへ反映
-        setBlacklistedPhones(prev => [...prev, phone]);
+        // 即座にUIへ反映（正規化した電話番号で保存）
+        setBlacklistedPhones(prev => [...prev, normalizedPhone]);
 
         setIsSaving(true);
         try {
             await fetch(GAS_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain' },
-                body: JSON.stringify({ action: 'addBlacklist', phone, name, reason }),
+                body: JSON.stringify({ action: 'addBlacklist', phone: normalizedPhone, name, reason }),
             });
             alert('ブラックリストに登録しました。');
         } catch (err) {
             console.error('ブラックリスト登録エラー:', err);
             alert('通信エラーが発生しました。時間を置いて再度お試しください。');
             // エラー時は元に戻す
-            setBlacklistedPhones(prev => prev.filter(p => p !== phone));
+            setBlacklistedPhones(prev => prev.filter(p => p !== normalizedPhone));
         } finally {
             setIsSaving(false);
         }
@@ -1275,13 +1292,13 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         <td className="px-4 py-3">
                                                             <div className="flex items-center gap-2">
                                                                 <span className="font-bold text-gray-900 dark:text-gray-100">{customerName}</span>
-                                                                {blacklistedPhones.includes(phone) && phone && phone !== '登録なし' && (
+                                                                {phone && phone !== '登録なし' && blacklistedPhones.some(bl => normalizePhone(bl) === normalizePhone(phone)) && (
                                                                     <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold border border-red-200 whitespace-nowrap">NG</span>
                                                                 )}
                                                             </div>
                                                         </td>
                                                         <td className="px-4 py-3">
-                                                            <span className="text-gray-600 dark:text-gray-400 text-sm">{phone}</span>
+                                                            <span className="text-gray-600 dark:text-gray-400 text-sm">{phone && phone !== '登録なし' ? formatPhone(phone) : phone}</span>
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             <span className="text-gray-500 dark:text-gray-400 text-sm">
@@ -1371,7 +1388,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             </div>
                                             <div className="space-y-3 mt-6">
                                                 {/* ブラックリスト登録ボタン */}
-                                                {editCustomerData.customerPhone && editCustomerData.customerPhone !== '登録なし' && !blacklistedPhones.includes(editCustomerData.customerPhone) && (
+                                                {editCustomerData.customerPhone && editCustomerData.customerPhone !== '登録なし' && !blacklistedPhones.some(bl => normalizePhone(bl) === normalizePhone(editCustomerData.customerPhone)) && (
                                                     <button
                                                         onClick={async () => {
                                                             await handleAddBlacklist(editCustomerData.customerPhone, editCustomerData.customerName);
@@ -1395,13 +1412,14 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                             setIsSaving(true);
                                                             try {
                                                                 setEditingCustomerName(null);
+                                                                const normalizedPhone = normalizePhone(editCustomerData.customerPhone);
                                                                 await fetch(GAS_URL, {
                                                                     method: 'POST',
                                                                     body: JSON.stringify({
                                                                         action: 'editCustomer',
                                                                         oldName: editingCustomerName,
                                                                         newName: editCustomerData.customerName,
-                                                                        phone: editCustomerData.customerPhone
+                                                                        phone: normalizedPhone
                                                                     })
                                                                 });
                                                                 fetchDeposits();
@@ -1725,14 +1743,15 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     }
                                     setIsSaving(true);
                                     try {
+                                        const normalizedPhone = normalizePhone(newCustomerData.phone);
                                         setDeposits(prev => ({ ...prev, [newCustomerData.name]: 0 }));
-                                        setCustomerPhones(prev => ({ ...prev, [newCustomerData.name]: newCustomerData.phone }));
+                                        setCustomerPhones(prev => ({ ...prev, [newCustomerData.name]: normalizedPhone }));
                                         await fetch(GAS_URL, {
                                             method: 'POST',
                                             body: JSON.stringify({
                                                 action: 'addCustomer',
                                                 customerName: newCustomerData.name,
-                                                customerPhone: newCustomerData.phone
+                                                customerPhone: normalizedPhone
                                             })
                                         });
                                         fetchDeposits();

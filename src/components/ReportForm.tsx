@@ -20,14 +20,30 @@ export default function ReportForm() {
     const [services, setServices] = useState<ServiceDetail[]>([{ type: 'listen', minutes: 0 }]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // スタッフリストをGASから取得する
-    const [staffList, setStaffList] = useState<string[]>(['吉川', 'スタッフA', 'スタッフB', 'スタッフC']);
+    // スタッフリストをGASから取得する（デフォルトは空、ローディング中は「読み込み中...」を表示）
+    const [staffList, setStaffList] = useState<string[]>([]);
 
     // お客様データ保持用（名前自動補完）とブラックリスト
     const [customersMap, setCustomersMap] = useState<Record<string, string>>({});
     const [blacklistedPhones, setBlacklistedPhones] = useState<string[]>([]);
 
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
+
+    // 電話番号を正規化（ハイフンを削除）
+    const normalizePhone = (phone: string) => {
+        return phone.replace(/-/g, '');
+    };
+
+    // 電話番号を表示用にフォーマット（XXX-XXXX-XXXX形式に変換）
+    const formatPhone = (phone: string) => {
+        const normalized = normalizePhone(phone);
+        if (normalized.length === 11) {
+            return `${normalized.slice(0, 3)}-${normalized.slice(3, 7)}-${normalized.slice(7)}`;
+        } else if (normalized.length === 10) {
+            return `${normalized.slice(0, 3)}-${normalized.slice(3, 6)}-${normalized.slice(6)}`;
+        }
+        return phone; // そのまま返す
+    };
 
     useEffect(() => {
         // 初回のみ顧客情報とブラックリスト、スタッフリストを取得
@@ -49,7 +65,8 @@ export default function ReportForm() {
             }).catch(err => console.error('スタッフ取得エラー:', err));
     }, []);
 
-    const isBlacklisted = phoneNumber && blacklistedPhones.includes(phoneNumber);
+    // ブラックリストチェック（ハイフンを削除して比較）
+    const isBlacklisted = phoneNumber && blacklistedPhones.some(bl => normalizePhone(bl) === normalizePhone(phoneNumber));
 
     // サービス追加用のハンドラ
     const handleAddService = () => {
@@ -112,7 +129,7 @@ export default function ReportForm() {
                 checkDuplicate: !forceSubmit, // 初回送信時は重複チェックをお願いする
                 date: formattedDate,
                 staff: staffName,
-                customerPhone: phoneNumber,
+                customerPhone: normalizePhone(phoneNumber), // ハイフンを削除して保存
                 customerName: customerName || '名無し',
                 services: services.map(s => {
                     const typeName = s.type === 'listen' ? '傾聴' : s.type === 'fortune' ? '占い' : '性的な相談';
