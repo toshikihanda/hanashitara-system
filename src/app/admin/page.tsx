@@ -15,6 +15,8 @@ interface ReportData {
     isPaid: boolean;
     daysPending: number; // 未入金日数（フロントエンドで計算）
     paymentDate?: string; // 入金日（入金チェックを押した日付）
+    depositUsed: number; // デポジット使用額
+    billingAmount: number; // 請求額
 }
 
 export default function AdminDashboard() {
@@ -192,7 +194,8 @@ export default function AdminDashboard() {
                 const today = new Date();
                 const formattedData: ReportData[] = json.data.map((row: any[]) => {
                     // A:ID(0), B:日付(1), C:スタッフ(2), D:顧客電話(3), E:顧客名(4),
-                    // F:提供サービス(5), G:総売上(6), H:スタッフ報酬(7), I:入金済(8), J:入金日(9)
+                    // F:提供サービス(5), G:総売上(6), H:スタッフ報酬(7), I:入金済(8), J:入金日(9),
+                    // K:デポジット使用額(10), L:請求額(11)
 
                     // 未入金日数の計算
                     let days = 0;
@@ -214,7 +217,9 @@ export default function AdminDashboard() {
                         staffShare: Number(row[7]) || 0,
                         isPaid: isPaidStatus,
                         daysPending: days,
-                        paymentDate: row[9] ? String(row[9]) : undefined
+                        paymentDate: row[9] ? String(row[9]) : undefined,
+                        depositUsed: Number(row[10]) || 0,
+                        billingAmount: Number(row[11]) || 0
                     };
                 });
 
@@ -798,14 +803,16 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     <th className="px-6 py-4 font-medium">お客様名</th>
                                                     <th className="px-6 py-4 font-medium">電話番号</th>
                                                     <th className="px-6 py-4 font-medium">サービス</th>
-                                                    <th className="px-6 py-4 font-medium">金額</th>
+                                                    <th className="px-6 py-4 font-medium">売上</th>
+                                                    <th className="px-6 py-4 font-medium">デポジット</th>
+                                                    <th className="px-6 py-4 font-medium">請求額</th>
                                                     <th className="px-6 py-4 font-medium">入金日</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                                 {monthReports.length === 0 && !isLoading && !errorText && (
                                                     <tr>
-                                                        <td colSpan={6} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">
+                                                        <td colSpan={10} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">
                                                             当月の報告データがありません
                                                         </td>
                                                     </tr>
@@ -838,6 +845,25 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                 })}
                                                             </td>
                                                             <td className="px-6 py-4 font-bold text-gray-900 dark:text-gray-100">¥{report.totalSales.toLocaleString()}</td>
+                                                            <td className="px-6 py-4">
+                                                                {report.depositUsed > 0 ? (
+                                                                    <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold">-¥{report.depositUsed.toLocaleString()}</span>
+                                                                ) : (
+                                                                    <span className="text-[11px] text-gray-400 dark:text-gray-500">-</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                {report.billingAmount === 0 ? (
+                                                                    <span className="text-[11px] text-green-600 dark:text-green-400 font-bold">全額充当</span>
+                                                                ) : report.depositUsed > 0 ? (
+                                                                    <div className="flex flex-col">
+                                                                        <span className="font-bold text-orange-600 dark:text-orange-400">¥{report.billingAmount.toLocaleString()}</span>
+                                                                        <span className="text-[10px] text-gray-500 dark:text-gray-400">（一部充当）</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="font-bold text-gray-900 dark:text-gray-100">¥{report.billingAmount.toLocaleString()}</span>
+                                                                )}
+                                                            </td>
                                                             <td className="px-6 py-4">
                                                                 <span className={`text-[12px] font-bold ${report.isPaid ? 'text-[#4cd9c0]' : 'text-red-400'}`}>
                                                                     {report.isPaid ? formatPaymentDate(report.paymentDate || report.date) : '未入金'}
