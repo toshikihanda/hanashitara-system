@@ -822,10 +822,12 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     {report.isPaid && <span className="text-sm">✓</span>}
                                                                 </button>
                                                             </td>
-                                                            <td className="px-6 py-4 text-gray-700 dark:text-gray-300 whitespace-nowrap">{report.date}</td>
+                                                            <td className="px-6 py-4 text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                                                                {new Date(report.date).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })}
+                                                            </td>
                                                             <td className="px-6 py-4 font-bold text-gray-900 dark:text-gray-100">{report.staff}</td>
                                                             <td className="px-6 py-4 text-gray-900 dark:text-gray-100">{report.customerName}</td>
-                                                            <td className="px-6 py-4 text-gray-500 dark:text-gray-400">{report.customerPhone}</td>
+                                                            <td className="px-6 py-4 text-gray-500 dark:text-gray-400">{formatPhone(report.customerPhone)}</td>
                                                             <td className="px-6 py-4">
                                                                 {report.services.split(', ').map(s => {
                                                                     const parsedService = parseServiceName(s);

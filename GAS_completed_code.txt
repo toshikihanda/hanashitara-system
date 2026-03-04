@@ -45,7 +45,7 @@ function doPost(e) {
             currentDeposit = Number(dValues[i][2]) || 0; // 残高は3列目(C列)に変更
             if (currentDeposit >= sales) {
               depositSheet.getRange(i + 1, 3).setValue(currentDeposit - sales);
-              paidStatus = '入金済'; 
+              // paidStatus = '入金済';  // オーナーが手動でチェックするため、自動入金は無効化
               autoDeducted = true;
             } else if (currentDeposit > 0) {
               insufficientBalance = true;
@@ -64,8 +64,8 @@ function doPost(e) {
         data.services,
         sales,
         data.staffShare,
-        paidStatus,
-        paidStatus === '入金済' ? new Date().toISOString() : '' // 入金日（自動引き落としの場合は現在日時）
+        paidStatus,  // 常に「未入金」で保存
+        '' // 入金日は空（オーナーが手動でチェックした際に記録）
       ]);
       
       return output.setContent(JSON.stringify({ 
