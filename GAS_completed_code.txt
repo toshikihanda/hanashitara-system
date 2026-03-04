@@ -333,14 +333,16 @@ function doPost(e) {
     if (action === 'login') {
       const sheet = ss.getSheetByName("スタッフマスタ");
       if (!sheet) return output.setContent(JSON.stringify({ success: false, message: 'マスタが見つかりません' }));
-      
+
       const values = sheet.getDataRange().getValues();
       for (let i = 1; i < values.length; i++) {
-        if (values[i][0] === data.staffId && String(values[i][1]) === String(data.password)) {
-          return output.setContent(JSON.stringify({ success: true }));
+        // メールアドレス（3列目）とパスワード（2列目）で認証
+        if (values[i][2] === data.staffId && String(values[i][1]) === String(data.password)) {
+          // 認証成功時にスタッフ名も返す
+          return output.setContent(JSON.stringify({ success: true, staffName: values[i][0] }));
         }
       }
-      return output.setContent(JSON.stringify({ success: false, message: 'IDまたはパスワードが違います' }));
+      return output.setContent(JSON.stringify({ success: false, message: 'メールアドレスまたはパスワードが違います' }));
     }
 
     // ⑨ 給与明細メール送信

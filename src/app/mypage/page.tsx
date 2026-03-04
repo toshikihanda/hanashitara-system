@@ -14,9 +14,10 @@ interface ReportData {
 }
 
 export default function StaffMyPage() {
-    const [staffName, setStaffName] = useState('');
+    const [staffName, setStaffName] = useState(''); // メールアドレスを格納
     const [password, setPassword] = useState('');
     const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [loggedInStaffName, setLoggedInStaffName] = useState(''); // 認証成功時のスタッフ名
 
     const [reports, setReports] = useState<ReportData[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -48,6 +49,10 @@ export default function StaffMyPage() {
                 return;
             }
 
+            // 認証成功時にスタッフ名を保存
+            const authenticatedStaffName = authJson.staffName || '';
+            setLoggedInStaffName(authenticatedStaffName);
+
             // ② 認証成功したらデータを取得
             const res = await fetch(`${GAS_URL}?action=getReports`);
             const json = await res.json();
@@ -55,7 +60,7 @@ export default function StaffMyPage() {
             if (json.success) {
                 // 自分のデータだけを抽出
                 const myData = json.data
-                    .filter((row: any[]) => row[2] === staffName)
+                    .filter((row: any[]) => row[2] === authenticatedStaffName)
                     .map((row: any[]) => ({
                         id: row[0],
                         date: row[1],
@@ -96,13 +101,13 @@ export default function StaffMyPage() {
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 text-center mb-6">給与・明細の確認</h1>
                     <form onSubmit={handleLogin} className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">スタッフ名 (ID)</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">メールアドレス</label>
                             <input
-                                type="text"
+                                type="email"
                                 required
                                 value={staffName}
                                 onChange={(e) => setStaffName(e.target.value)}
-                                placeholder="例: テストスタッフ様"
+                                placeholder="例: staff@example.com"
                                 className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#007AFF] focus:border-transparent outline-none transition-all mb-4"
                             />
 
