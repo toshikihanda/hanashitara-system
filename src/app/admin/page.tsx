@@ -1062,33 +1062,6 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         >
                                             ＋ スタッフを追加する
                                         </button>
-                                        <button
-                                            onClick={async () => {
-                                                if (!confirm('⚠️ すべてのデータが削除され、デモデータで初期化されます。\n本当に実行しますか？')) return;
-                                                setIsSaving(true);
-                                                try {
-                                                    const res = await fetch(GAS_URL, {
-                                                        method: 'POST',
-                                                        body: JSON.stringify({ action: 'initDemoData' })
-                                                    });
-                                                    const json = await res.json();
-                                                    if (json.success) {
-                                                        alert('✅ デモデータの初期化が完了しました！');
-                                                        window.location.reload();
-                                                    } else {
-                                                        alert('❌ エラーが発生しました: ' + (json.message || json.error));
-                                                    }
-                                                } catch (err) {
-                                                    console.error(err);
-                                                    alert('❌ エラーが発生しました');
-                                                } finally {
-                                                    setIsSaving(false);
-                                                }
-                                            }}
-                                            className="bg-red-600 dark:bg-red-500 text-white font-bold px-4 py-1.5 rounded-lg text-sm hover:bg-red-700 dark:hover:bg-red-600 transition-colors shadow-sm whitespace-nowrap"
-                                        >
-                                            🔄 デモデータ初期化
-                                        </button>
                                         <input
                                             type="month"
                                             value={selectedMonth}
