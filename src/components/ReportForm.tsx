@@ -22,6 +22,7 @@ export default function ReportForm() {
 
     // スタッフリストをGASから取得する（デフォルトは空、ローディング中は「読み込み中...」を表示）
     const [staffList, setStaffList] = useState<string[]>([]);
+    const [isLoadingStaffList, setIsLoadingStaffList] = useState(true);
 
     // お客様データ保持用（名前自動補完）とブラックリスト
     const [customersMap, setCustomersMap] = useState<Record<string, string>>({});
@@ -62,11 +63,35 @@ export default function ReportForm() {
                 if (json.success && json.staff && json.staff.length > 0) {
                     setStaffList(json.staff.map((s: any) => s.name));
                 }
-            }).catch(err => console.error('スタッフ取得エラー:', err));
+            })
+            .catch(err => console.error('スタッフ取得エラー:', err))
+            .finally(() => setIsLoadingStaffList(false));
     }, []);
 
     // ブラックリストチェック（ハイフンを削除して比較）
     const isBlacklisted = phoneNumber && blacklistedPhones.some(bl => normalizePhone(bl) === normalizePhone(phoneNumber));
+
+    // 電話番号変更時のハンドラ（顧客名自動補完）
+    const handlePhoneNumberChange = (value: string) => {
+        setPhoneNumber(value);
+
+        // 電話番号から顧客名を検索（ハイフンを削除して照合）
+        const normalizedInput = normalizePhone(value);
+        let foundName = '';
+
+        // customersMapの各エントリーを確認
+        for (const [phone, name] of Object.entries(customersMap)) {
+            if (normalizePhone(phone) === normalizedInput) {
+                foundName = name;
+                break;
+            }
+        }
+
+        // 見つかった顧客名を自動設定
+        if (foundName) {
+            setCustomerName(foundName);
+        }
+    };
 
     // サービス追加用のハンドラ
     const handleAddService = () => {
@@ -204,11 +229,14 @@ export default function ReportForm() {
                         </label>
                         <select
                             required
-                            className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800"
+                            disabled={isLoadingStaffList}
+                            className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                             value={staffName}
                             onChange={(e) => setStaffName(e.target.value)}
                         >
-                            <option value="">（お名前を選択してください）</option>
+                            <option value="">
+                                {isLoadingStaffList ? '読み込み中...' : '（お名前を選択してください）'}
+                            </option>
                             {staffList.map(name => (
                                 <option key={name} value={name}>{name}</option>
                             ))}
@@ -240,14 +268,7 @@ export default function ReportForm() {
                             className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow ${isBlacklisted ? 'border-red-400 bg-red-50' : 'border-gray-200 dark:border-gray-700'}`}
                             placeholder="090-1234-5678"
                             value={phoneNumber}
-                            onChange={(e) => {
-                                const val = e.target.value;
-                                setPhoneNumber(val);
-                                // 電話番号に変更があった時、過去の履歴からお客様名を自動補完する
-                                if (customersMap[val]) {
-                                    setCustomerName(customersMap[val]);
-                                }
-                            }}
+                            onChange={(e) => handlePhoneNumberChange(e.target.value)}
                         />
                         {isBlacklisted && (
                             <p className="mt-2 text-sm font-semibold text-red-600 bg-red-100/50 p-2 rounded border border-red-200">
