@@ -273,9 +273,9 @@ function doPost(e) {
       let sheet = ss.getSheetByName("スタッフマスタ");
       if (!sheet) {
         sheet = ss.insertSheet("スタッフマスタ");
-        sheet.appendRow(["スタッフ名(ID)", "パスワード", "メールアドレス"]); 
+        sheet.appendRow(["スタッフ名(ID)", "パスワード", "メールアドレス", "対応サービス"]); 
       }
-      sheet.appendRow([data.name, data.password, data.email]);
+      sheet.appendRow([data.name, data.password, data.email, data.services || '']);
       return output.setContent(JSON.stringify({ success: true }));
     }
 
@@ -288,6 +288,7 @@ function doPost(e) {
         if (values[i][0] === data.name) {
           if (data.password) sheet.getRange(i + 1, 2).setValue(data.password);
           if (data.email !== undefined) sheet.getRange(i + 1, 3).setValue(data.email);
+          if (data.services !== undefined) sheet.getRange(i + 1, 4).setValue(data.services);
           return output.setContent(JSON.stringify({ success: true }));
         }
       }
@@ -427,7 +428,7 @@ function doGet(e) {
       if (sheet) {
         const data = sheet.getDataRange().getValues();
         for(let i=1; i<data.length; i++) {
-           if(data[i][0]) list.push({ name: data[i][0], email: data[i][2] });
+           if(data[i][0]) list.push({ name: data[i][0], email: data[i][2], services: data[i][3] || '' });
         }
       }
       return output.setContent(JSON.stringify({ success: true, staff: list }));

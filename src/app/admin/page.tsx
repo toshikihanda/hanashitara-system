@@ -37,8 +37,9 @@ export default function AdminDashboard() {
     // 前払いデポジット状態と顧客電話番号
     const [deposits, setDeposits] = useState<Record<string, number>>({});
     const [customerPhones, setCustomerPhones] = useState<Record<string, string>>({});
-    // スタッフのメアド保持用
+    // スタッフのメアド保持用・対応サービス保持用
     const [staffEmails, setStaffEmails] = useState<Record<string, string>>({});
+    const [staffServices, setStaffServices] = useState<Record<string, string>>({});
 
     type CustomerSortOption = 'deposit' | 'paid_desc' | 'registered_asc' | 'registered_desc' | 'name_asc' | 'number_asc';
     const [customerSortBy, setCustomerSortBy] = useState<CustomerSortOption>('deposit');
@@ -65,7 +66,7 @@ export default function AdminDashboard() {
     const [editReportData, setEditReportData] = useState<{ customerName: string, customerPhone: string, totalSales: number }>({ customerName: '', customerPhone: '', totalSales: 0 });
 
     const [editingStaffName, setEditingStaffName] = useState<string | null>(null);
-    const [editStaffData, setEditStaffData] = useState<{ name: string, password: string, email: string }>({ name: '', password: '', email: '' });
+    const [editStaffData, setEditStaffData] = useState<{ name: string, password: string, email: string, services: string[] }>({ name: '', password: '', email: '', services: [] });
 
     const [editingCustomerName, setEditingCustomerName] = useState<string | null>(null);
     const [editCustomerData, setEditCustomerData] = useState<{ customerName: string, customerPhone: string }>({ customerName: '', customerPhone: '' });
@@ -80,7 +81,7 @@ export default function AdminDashboard() {
 
     // スタッフ追加モーダル用ステート
     const [showAddStaffModal, setShowAddStaffModal] = useState(false);
-    const [newStaffData, setNewStaffData] = useState({ name: '', password: '', email: '' });
+    const [newStaffData, setNewStaffData] = useState<{ name: string, password: string, email: string, services: string[] }>({ name: '', password: '', email: '', services: [] });
 
     // トースト通知用ステート
     const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -107,8 +108,13 @@ export default function AdminDashboard() {
             const json = await res.json();
             if (json.success && json.staff) {
                 const emails: Record<string, string> = {};
-                json.staff.forEach((s: any) => { emails[s.name] = s.email; });
+                const servicesMap: Record<string, string> = {};
+                json.staff.forEach((s: any) => {
+                    emails[s.name] = s.email;
+                    servicesMap[s.name] = s.services || '';
+                });
                 setStaffEmails(emails);
+                setStaffServices(servicesMap);
             }
         } catch (err) {
             console.error('スタッフ取得エラー:', err);
@@ -873,7 +879,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 <th className="px-4 py-3 font-medium text-right">今月の売上額</th>
                                                 <th className="px-4 py-3 font-medium text-right">今月の取り分</th>
                                                 <th className="px-4 py-3 font-medium text-right">累計の報酬額</th>
-                                                <th className="px-4 py-3 font-medium">内訳</th>
+                                                <th className="px-4 py-3 font-medium">対応サービス</th>
                                                 <th className="px-4 py-3 font-medium text-center">操作</th>
                                             </tr>
                                         </thead>
@@ -917,18 +923,21 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             <div className="flex flex-wrap gap-1">
-                                                                {Array.from(serviceBreakdown.entries()).map(([serviceName, amount]) => {
-                                                                    let bgClass = "bg-blue-50 text-blue-700 border-blue-200";
-                                                                    if (serviceName.includes('占い')) bgClass = "bg-pink-50 text-pink-700 border-pink-200";
-                                                                    if (serviceName.includes('傾聴')) bgClass = "bg-green-50 text-green-700 border-green-200";
-                                                                    if (serviceName.includes('性的')) bgClass = "bg-yellow-50 text-yellow-700 border-yellow-200";
-                                                                    return (
-                                                                        <span key={serviceName} className={`text-[10px] px-2 py-0.5 rounded border ${bgClass} font-medium whitespace-nowrap`}>
-                                                                            {serviceName} ¥{amount.toLocaleString()}
-                                                                        </span>
-                                                                    );
-                                                                })}
-                                                                {serviceBreakdown.size === 0 && <span className="text-xs text-gray-400">-</span>}
+                                                                {(() => {
+                                                                    const svcs = (staffServices[s.name] || '').split(',').map(ss => ss.trim()).filter(Boolean);
+                                                                    if (svcs.length === 0) return <span className="text-xs text-gray-400">-</span>;
+                                                                    return svcs.map(serviceName => {
+                                                                        let bgClass = "bg-blue-50 text-blue-700 border-blue-200";
+                                                                        if (serviceName.includes('占い')) bgClass = "bg-pink-50 text-pink-700 border-pink-200";
+                                                                        if (serviceName.includes('傾聴')) bgClass = "bg-green-50 text-green-700 border-green-200";
+                                                                        if (serviceName.includes('性的')) bgClass = "bg-yellow-50 text-yellow-700 border-yellow-200";
+                                                                        return (
+                                                                            <span key={serviceName} className={`text-[10px] px-2 py-0.5 rounded border ${bgClass} font-medium whitespace-nowrap`}>
+                                                                                {serviceName}
+                                                                            </span>
+                                                                        );
+                                                                    });
+                                                                })()}
                                                             </div>
                                                         </td>
                                                         <td className="px-4 py-3">
@@ -948,7 +957,12 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                 <button
                                                                     onClick={() => {
                                                                         setEditingStaffName(s.name);
-                                                                        setEditStaffData({ name: s.name, password: '', email: staffEmails[s.name] || '' });
+                                                                        setEditStaffData({
+                                                                            name: s.name,
+                                                                            password: '',
+                                                                            email: staffEmails[s.name] || '',
+                                                                            services: (staffServices[s.name] || '').split(',').map(ss => ss.trim()).filter(Boolean)
+                                                                        });
                                                                     }}
                                                                     className="px-2.5 py-1 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded text-xs font-bold hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors whitespace-nowrap"
                                                                     title="設定変更">
@@ -997,6 +1011,28 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         className="w-full border border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
                                                     />
                                                 </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">対応サービス</label>
+                                                    <div className="flex gap-4 items-center flex-wrap mt-2">
+                                                        {['傾聴', '占い', '性的な相談'].map(srv => (
+                                                            <label key={srv} className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-700 dark:text-gray-200">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={editStaffData.services.includes(srv)}
+                                                                    onChange={(e) => {
+                                                                        if (e.target.checked) {
+                                                                            setEditStaffData(prev => ({ ...prev, services: [...prev.services, srv] }));
+                                                                        } else {
+                                                                            setEditStaffData(prev => ({ ...prev, services: prev.services.filter(s => s !== srv) }));
+                                                                        }
+                                                                    }}
+                                                                    className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                                                />
+                                                                {srv}
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                </div>
                                             </div>
                                             <div className="flex gap-3 mt-6">
                                                 <button
@@ -1016,7 +1052,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     oldName: editingStaffName,
                                                                     newName: editStaffData.name,
                                                                     password: editStaffData.password,
-                                                                    email: editStaffData.email
+                                                                    email: editStaffData.email,
+                                                                    services: editStaffData.services.join(', ')
                                                                 })
                                                             });
                                                             fetchStaffList();
@@ -1069,12 +1106,34 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         className="w-full border border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
                                                     />
                                                 </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">対応サービス</label>
+                                                    <div className="flex gap-4 items-center flex-wrap mt-2">
+                                                        {['傾聴', '占い', '性的な相談'].map(srv => (
+                                                            <label key={srv} className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-700 dark:text-gray-200">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={newStaffData.services.includes(srv)}
+                                                                    onChange={(e) => {
+                                                                        if (e.target.checked) {
+                                                                            setNewStaffData(prev => ({ ...prev, services: [...prev.services, srv] }));
+                                                                        } else {
+                                                                            setNewStaffData(prev => ({ ...prev, services: prev.services.filter(s => s !== srv) }));
+                                                                        }
+                                                                    }}
+                                                                    className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                                                />
+                                                                {srv}
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                </div>
                                             </div>
                                             <div className="flex gap-3 mt-6">
                                                 <button
                                                     onClick={() => {
                                                         setShowAddStaffModal(false);
-                                                        setNewStaffData({ name: '', password: '', email: '' });
+                                                        setNewStaffData({ name: '', password: '', email: '', services: [] });
                                                     }}
                                                     className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-bold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
                                                 >
@@ -1090,10 +1149,11 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     action: 'addStaff',
                                                                     name: newStaffData.name,
                                                                     password: newStaffData.password,
-                                                                    email: newStaffData.email
+                                                                    email: newStaffData.email,
+                                                                    services: newStaffData.services.join(', ')
                                                                 })
                                                             });
-                                                            setNewStaffData({ name: '', password: '', email: '' });
+                                                            setNewStaffData({ name: '', password: '', email: '', services: [] });
                                                             fetchStaffList();
                                                             setToastMessage('スタッフを追加しました');
                                                             setTimeout(() => setToastMessage(null), 3000);
@@ -1711,7 +1771,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         await fetch(GAS_URL, {
                                             method: 'POST',
                                             body: JSON.stringify({
-                                                action: 'addDeposit',
+                                                action: 'updateDeposit',
+                                                type: 'charge',
                                                 customerName: chargeTarget,
                                                 amount: totalAmount,
                                                 rawAmount: Number(chargeData.amount),
