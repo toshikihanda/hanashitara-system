@@ -845,17 +845,17 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         <table className="w-full text-sm text-left">
                                             <thead className="bg-transparent border-b dark:border-gray-700">
                                                 <tr className="text-gray-600 dark:text-gray-400">
-                                                    <th className="px-6 py-4 font-medium">入金</th>
-                                                    <th className="px-6 py-4 font-medium">日付</th>
-                                                    <th className="px-6 py-4 font-medium">スタッフ</th>
-                                                    <th className="px-6 py-4 font-medium">お客様名</th>
-                                                    <th className="px-6 py-4 font-medium">電話番号</th>
-                                                    <th className="px-6 py-4 font-medium">サービス</th>
-                                                    <th className="px-6 py-4 font-medium">売上</th>
-                                                    <th className="px-6 py-4 font-medium">デポジット</th>
-                                                    <th className="px-6 py-4 font-medium">請求額</th>
-                                                    <th className="px-6 py-4 font-medium">入金日</th>
-                                                    <th className="px-6 py-4 font-medium text-center">操作</th>
+                                                    <th className="px-6 py-4 font-medium whitespace-nowrap">入金</th>
+                                                    <th className="px-6 py-4 font-medium whitespace-nowrap">日付</th>
+                                                    <th className="px-6 py-4 font-medium whitespace-nowrap">スタッフ</th>
+                                                    <th className="px-6 py-4 font-medium whitespace-nowrap">お客様名</th>
+                                                    <th className="px-6 py-4 font-medium whitespace-nowrap">電話番号</th>
+                                                    <th className="px-6 py-4 font-medium whitespace-nowrap">サービス</th>
+                                                    <th className="px-6 py-4 font-medium whitespace-nowrap">売上</th>
+                                                    <th className="px-6 py-4 font-medium whitespace-nowrap">デポジット</th>
+                                                    <th className="px-6 py-4 font-medium whitespace-nowrap">請求額</th>
+                                                    <th className="px-6 py-4 font-medium whitespace-nowrap">入金日</th>
+                                                    <th className="px-6 py-4 font-medium whitespace-nowrap text-center">操作</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -883,7 +883,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                 {new Date(report.date).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })}
                                                             </td>
                                                             <td className="px-6 py-4 font-bold text-gray-900 dark:text-gray-100">{report.staff}</td>
-                                                            <td className="px-6 py-4 text-gray-900 dark:text-gray-100">
+                                                            <td className="px-6 py-4 text-gray-900 dark:text-gray-100 min-w-[6em] max-w-[8em]">
                                                                 {isEditing ? (
                                                                     <input
                                                                         type="text"
@@ -893,7 +893,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     />
                                                                 ) : (
                                                                     <div className="flex items-center gap-2">
-                                                                        <span>{report.customerName}</span>
+                                                                        <span className="break-words">{report.customerName}</span>
                                                                         {isUrgent && (
                                                                             <span className="text-[10px] px-2 py-0.5 rounded bg-red-500 text-white font-bold whitespace-nowrap">催促要</span>
                                                                         )}
@@ -958,7 +958,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     {report.isPaid ? formatPaymentDate(report.paymentDate || report.date) : '未入金'}
                                                                 </span>
                                                             </td>
-                                                            <td className="px-6 py-4">
+                                                            <td className="px-6 py-4 whitespace-nowrap">
                                                                 <div className="flex items-center justify-center gap-2">
                                                                     {!isEditing && (
                                                                         <>
@@ -971,7 +971,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                                         totalSales: report.totalSales
                                                                                     });
                                                                                 }}
-                                                                                className="px-2 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                                                                                className="px-2 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors whitespace-nowrap"
                                                                             >
                                                                                 編集
                                                                             </button>
@@ -998,7 +998,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                                         setIsSaving(false);
                                                                                     }
                                                                                 }}
-                                                                                className="px-2 py-1 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
+                                                                                className="px-2 py-1 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors whitespace-nowrap"
                                                                             >
                                                                                 削除
                                                                             </button>
