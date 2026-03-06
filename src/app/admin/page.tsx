@@ -32,6 +32,8 @@ export default function AdminDashboard() {
     const [customerSearchQuery, setCustomerSearchQuery] = useState('');
     const [showBlacklistOnly, setShowBlacklistOnly] = useState(false);
     const [showDepositOnly, setShowDepositOnly] = useState(false);
+    // 未入金フィルタ状態（ダッシュボードからの遷移用）
+    const [showUnpaidOnly, setShowUnpaidOnly] = useState(false);
     // ボーナス設定状態
     const [bonusThreshold, setBonusThreshold] = useState(5000);
     const [bonusRate, setBonusRate] = useState(14);
@@ -203,7 +205,7 @@ export default function AdminDashboard() {
             const res = await fetch(`${GAS_URL}?action=getBlacklistPhones`);
             const json = await res.json();
             if (json.success) {
-                const safeBlacklist = (json.phones || []).map((p: any) => String(p).trim().replace(/^'/, ''));
+                const safeBlacklist = (json.phones || []).map((p: any) => normalizePhone(String(p).trim()));
                 setBlacklistedPhones(safeBlacklist);
             }
         } catch (err) {
@@ -420,6 +422,19 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
     const totalYearSales = yearReports.reduce((sum, r) => sum + r.totalSales, 0);
     const totalYearProfit = yearReports.reduce((sum, r) => sum + (r.totalSales - r.staffShare), 0);
 
+    // 1.1. 年単位の売上推移データ（全年度）
+    const yearlyStatsMap = new Map<number, { sales: number, profit: number }>();
+    reports.forEach(r => {
+        const y = new Date(r.date).getFullYear();
+        const current = yearlyStatsMap.get(y) || { sales: 0, profit: 0 };
+        current.sales += r.totalSales;
+        current.profit += (r.totalSales - r.staffShare);
+        yearlyStatsMap.set(y, current);
+    });
+    const yearlyStats = Array.from(yearlyStatsMap.entries())
+        .map(([year, data]) => ({ year, ...data }))
+        .sort((a, b) => a.year - b.year);
+
     // 1.5. 本日の売上（当日）
     const todayStr = new Date().toLocaleDateString('ja-JP');
     const todayReports = reports.filter(r => new Date(r.date).toLocaleDateString('ja-JP') === todayStr);
@@ -600,7 +615,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         }
         return 0;
     }).filter(customer => {
-        if (showBlacklistOnly && (!customer.phone || !blacklistedPhones.includes(customer.phone))) return false;
+        if (showBlacklistOnly && (!customer.phone || customer.phone === '登録なし' || !blacklistedPhones.some(bl => normalizePhone(bl) === normalizePhone(customer.phone)))) return false;
         if (showDepositOnly && customer.balance === 0) return false;
         if (customerSearchQuery.trim()) {
             const query = customerSearchQuery.trim().toLowerCase();
@@ -723,10 +738,14 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         <p className="text-2xl font-black text-gray-900 dark:text-gray-100">¥{totalMonthProfit.toLocaleString()}</p>
                                         <p className="text-[10px] text-gray-400 mt-1">全体の{totalMonthSales > 0 ? Math.round(totalMonthProfit / totalMonthSales * 100) : 0}%</p>
                                     </div>
-                                    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border-l-4 border-red-400 flex flex-col justify-center">
+                                    <div
+                                        onClick={() => { setActiveTab('reports'); setShowUnpaidOnly(true); }}
+                                        className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border-l-4 border-red-400 flex flex-col justify-center cursor-pointer hover:shadow-md hover:bg-red-50/30 transition-all"
+                                        title="クリックで未入金一覧を表示"
+                                    >
                                         <p className="text-xs text-gray-500 font-medium mb-1">未入金額</p>
                                         <p className="text-2xl font-black text-gray-900 dark:text-gray-100">¥{totalUnpaid.toLocaleString()}</p>
-                                        <p className="text-[10px] text-gray-400 mt-1">{unpaidCount}件未入金</p>
+                                        <p className="text-[10px] text-gray-400 mt-1">{unpaidCount}件未入金 →</p>
                                     </div>
                                     <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border-l-4 border-purple-400 flex flex-col justify-center">
                                         <p className="text-xs text-gray-500 font-medium mb-1">通話件数</p>
@@ -771,6 +790,47 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     </div>
                                 </section>
 
+                                {/* 年間売上推移テーブル */}
+                                {yearlyStats.length > 0 && (
+                                    <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col gap-4 mt-6">
+                                        <h2 className="font-bold text-gray-800 dark:text-gray-200 border-b dark:border-gray-700 border-gray-100 pb-2 flex items-center gap-2">
+                                            📊 年間売上推移
+                                        </h2>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm text-left">
+                                                <thead>
+                                                    <tr className="text-gray-500 font-medium border-b border-gray-100 dark:border-gray-700">
+                                                        <th className="py-2 px-4">年度</th>
+                                                        <th className="py-2 px-4">売上合計</th>
+                                                        <th className="py-2 px-4">オーナー取り分</th>
+                                                        <th className="py-2 px-4">利益率</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                                    {yearlyStats.map(ys => (
+                                                        <tr key={ys.year} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${ys.year === currentYear ? 'bg-indigo-50/50 dark:bg-indigo-900/10 font-bold' : ''}`}>
+                                                            <td className="py-3 px-4 text-gray-800 dark:text-gray-200">{ys.year}年{ys.year === currentYear ? ' (今年)' : ''}</td>
+                                                            <td className="py-3 px-4 text-gray-900 dark:text-gray-100">¥{ys.sales.toLocaleString()}</td>
+                                                            <td className="py-3 px-4 text-gray-900 dark:text-gray-100">¥{ys.profit.toLocaleString()}</td>
+                                                            <td className="py-3 px-4 text-gray-600 dark:text-gray-400">{ys.sales > 0 ? Math.round(ys.profit / ys.sales * 100) : 0}%</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                                <tfoot>
+                                                    <tr className="border-t-2 border-gray-200 dark:border-gray-600 font-bold">
+                                                        <td className="py-3 px-4 text-gray-800 dark:text-gray-200">累計</td>
+                                                        <td className="py-3 px-4 text-gray-900 dark:text-gray-100">¥{yearlyStats.reduce((s, ys) => s + ys.sales, 0).toLocaleString()}</td>
+                                                        <td className="py-3 px-4 text-gray-900 dark:text-gray-100">¥{yearlyStats.reduce((s, ys) => s + ys.profit, 0).toLocaleString()}</td>
+                                                        <td className="py-3 px-4 text-gray-600 dark:text-gray-400">
+                                                            {(() => { const ts = yearlyStats.reduce((s, ys) => s + ys.sales, 0); const tp = yearlyStats.reduce((s, ys) => s + ys.profit, 0); return ts > 0 ? Math.round(tp / ts * 100) : 0; })()}%
+                                                        </td>
+                                                    </tr>
+                                                </tfoot>
+                                            </table>
+                                        </div>
+                                    </section>
+                                )}
+
                                 {/* スタッフ別実績（ダッシュボード用） */}
                                 <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col overflow-hidden mt-6">
                                     <h2 className="font-bold text-gray-800 dark:text-gray-200 border-b dark:border-gray-700 border-gray-100 dark:border-gray-700 pb-2 mb-3 flex items-center gap-2">
@@ -808,7 +868,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
 
                         {activeTab === 'reports' && (
                             <>
-                                <section className="flex flex-wrap gap-3 mb-6">
+                                <section className="flex flex-wrap gap-3 mb-6 items-center">
                                     <div className="bg-white dark:bg-gray-800 px-4 py-3 rounded-lg shadow-sm border-l-4 border-teal-400 flex items-center gap-3">
                                         <p className="text-xs text-gray-500 font-medium">入金済み</p>
                                         <p className="text-xl font-black text-gray-900 dark:text-gray-100">{paidCount}件</p>
@@ -821,6 +881,12 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         <p className="text-xs text-gray-500 font-medium">未入金合計</p>
                                         <p className="text-xl font-black text-gray-900 dark:text-gray-100">¥{totalUnpaid.toLocaleString()}</p>
                                     </div>
+                                    <button
+                                        onClick={() => setShowUnpaidOnly(!showUnpaidOnly)}
+                                        className={`px-4 py-2.5 rounded-lg text-sm font-bold transition-all border ${showUnpaidOnly ? 'bg-red-500 text-white border-red-500 shadow-sm' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                                    >
+                                        {showUnpaidOnly ? '✕ フィルタ解除' : '未入金のみ表示'}
+                                    </button>
                                 </section>
 
                                 <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border overflow-hidden">
@@ -859,14 +925,17 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                                {monthReports.length === 0 && !isLoading && !errorText && (
-                                                    <tr>
-                                                        <td colSpan={11} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">
-                                                            当月の報告データがありません
-                                                        </td>
-                                                    </tr>
-                                                )}
-                                                {monthReports.map((report) => {
+                                                {(() => {
+                                                    const filteredReports = showUnpaidOnly ? monthReports.filter(r => !r.isPaid) : monthReports;
+                                                    return filteredReports.length === 0 && !isLoading && !errorText ? (
+                                                        <tr>
+                                                            <td colSpan={11} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">
+                                                                {showUnpaidOnly ? '未入金の報告データがありません' : '当月の報告データがありません'}
+                                                            </td>
+                                                        </tr>
+                                                    ) : null;
+                                                })()}
+                                                {(showUnpaidOnly ? monthReports.filter(r => !r.isPaid) : monthReports).map((report) => {
                                                     const isEditing = editingReportId === report.id;
                                                     const isUrgent = !report.isPaid && report.daysPending >= 3;
                                                     return (
