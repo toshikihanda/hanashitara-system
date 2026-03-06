@@ -60,6 +60,7 @@ export default function AdminDashboard() {
     const [selectedMonth, setSelectedMonth] = useState(currentMonthStrDefault);
     const [showMonthPicker, setShowMonthPicker] = useState(false); // 年月ドロップダウン表示用
     const [trendOffset, setTrendOffset] = useState(0); // グラフスライド用オフセット
+    const [trendMonths, setTrendMonths] = useState<6 | 12>(6); // 売上推移の表示期間（6ヶ月 or 12ヶ月）
 
     // 履歴モーダル・スタッフ詳細用
     const [depositLogs, setDepositLogs] = useState<any[]>([]);
@@ -433,7 +434,9 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
     });
     const yearlyStats = Array.from(yearlyStatsMap.entries())
         .map(([year, data]) => ({ year, ...data }))
-        .sort((a, b) => a.year - b.year);
+        .sort((a, b) => a.year - b.year)
+        .slice(-6); // 直近6年分のみ表示
+    const maxYearlySales = Math.max(...yearlyStats.map(d => Math.max(d.sales, d.profit)), 1);
 
     // 1.5. 本日の売上（当日）
     const todayStr = new Date().toLocaleDateString('ja-JP');
@@ -504,12 +507,12 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         return a.name.localeCompare(b.name, 'ja');
     });
 
-    // フェーズ6: 売上推移（直近6ヶ月、スライド機能付き）
+    // フェーズ6: 売上推移（直近N ヶ月、スライド機能付き）
     const trendData = [];
     if (selectedMonth) {
         const baseDate = new Date(`${selectedMonth}-01`);
-        // trendOffsetを使用してスライド位置を調整（0なら現在月基準、-6なら前期間6ヶ月、+6なら次期間6ヶ月）
-        for (let i = 5; i >= 0; i--) {
+        // trendOffsetを使用してスライド位置を調整（0なら現在月基準）
+        for (let i = trendMonths - 1; i >= 0; i--) {
             const d = new Date(baseDate.getFullYear(), baseDate.getMonth() - i + trendOffset, 1);
             const yyyy = d.getFullYear();
             const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -531,7 +534,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
             });
         }
     }
-    const maxTrendSales = Math.max(...trendData.map(d => d.sales), 1);
+    const maxTrendSales = Math.max(...trendData.map(d => Math.max(d.sales, d.profit)), 1);
 
     // フェーズ5: お客様一覧の生成（デポジット利用者優先＋その他のソート）
     const customerMap = new Map<string, { totalPaid: number, registeredDate: string }>();
@@ -756,77 +759,119 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
 
                                 {/* 売上推移チャート */}
                                 <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col gap-4">
-                                    <div className="flex items-center justify-between border-b dark:border-gray-700 border-gray-100 pb-2">
-                                        <h2 className="font-bold text-gray-800 dark:text-gray-200">売上推移（直近6ヶ月）</h2>
-                                        <div className="flex items-center gap-2">
-                                            <button onClick={() => setTrendOffset(trendOffset - 6)} className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b dark:border-gray-700 border-gray-100 pb-2 gap-2">
+                                        <h2 className="font-bold text-gray-800 dark:text-gray-200">売上推移（直近{trendMonths}ヶ月）</h2>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            {/* 6ヶ月/12ヶ月トグル */}
+                                            <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
+                                                <button
+                                                    onClick={() => { setTrendMonths(6); setTrendOffset(0); }}
+                                                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${trendMonths === 6 ? 'bg-white dark:bg-gray-600 shadow-sm text-gray-900 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                                                >
+                                                    6ヶ月
+                                                </button>
+                                                <button
+                                                    onClick={() => { setTrendMonths(12); setTrendOffset(0); }}
+                                                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${trendMonths === 12 ? 'bg-white dark:bg-gray-600 shadow-sm text-gray-900 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                                                >
+                                                    12ヶ月
+                                                </button>
+                                            </div>
+                                            {/* 期間スライドボタン */}
+                                            <button onClick={() => setTrendOffset(trendOffset - trendMonths)} className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors">
                                                 &lt; 前期間
                                             </button>
                                             <button onClick={() => setTrendOffset(0)} disabled={trendOffset === 0} className={`px-3 py-1 text-sm ${trendOffset === 0 ? 'bg-gray-200 dark:bg-gray-700 opacity-50 cursor-not-allowed' : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'} rounded transition-colors`}>
                                                 今月
                                             </button>
-                                            <button onClick={() => setTrendOffset(trendOffset + 6)} disabled={trendOffset >= 0} className={`px-3 py-1 text-sm ${trendOffset >= 0 ? 'bg-gray-200 dark:bg-gray-700 opacity-50 cursor-not-allowed' : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'} rounded transition-colors`}>
+                                            <button onClick={() => setTrendOffset(trendOffset + trendMonths)} disabled={trendOffset >= 0} className={`px-3 py-1 text-sm ${trendOffset >= 0 ? 'bg-gray-200 dark:bg-gray-700 opacity-50 cursor-not-allowed' : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'} rounded transition-colors`}>
                                                 次期間 &gt;
                                             </button>
                                         </div>
                                     </div>
-                                    <div className="flex items-end justify-between gap-1 sm:gap-4 h-48 mt-4">
+                                    {/* 凡例 */}
+                                    <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="w-3 h-3 rounded-sm bg-[#4cd9c0]"></div>
+                                            <span>売上</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="w-3 h-3 rounded-sm bg-[#6366f1]"></div>
+                                            <span>オーナー取り分</span>
+                                        </div>
+                                    </div>
+                                    <div className={`flex items-end justify-between ${trendMonths === 12 ? 'gap-0.5' : 'gap-1 sm:gap-4'} h-48 mt-2`}>
                                         {trendData.map((data, idx) => (
-                                            <div key={idx} className="flex flex-col items-center flex-1 gap-2">
-                                                <div className="w-full flex justify-center items-end h-36 relative group">
+                                            <div key={idx} className="flex flex-col items-center flex-1 gap-1">
+                                                <div className={`w-full flex justify-center items-end h-36 relative group ${trendMonths === 12 ? 'gap-[1px]' : 'gap-1'}`}>
                                                     {/* ツールチップ */}
-                                                    <div className="absolute -top-8 bg-gray-900 text-white text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none font-medium">
-                                                        ¥{(data.sales / 10000).toFixed(1)}万
+                                                    <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none font-medium leading-relaxed">
+                                                        売上: ¥{(data.sales / 10000).toFixed(1)}万<br />
+                                                        取分: ¥{(data.profit / 10000).toFixed(1)}万
                                                     </div>
-                                                    {/* バー本体 */}
+                                                    {/* 売上バー */}
                                                     <div
-                                                        className="w-1/2 max-w-[40px] bg-[#4cd9c0] hover:bg-[#3dbfa8] rounded-t-sm transition-all duration-500 ease-out cursor-pointer"
+                                                        className={`${trendMonths === 12 ? 'max-w-[18px]' : 'max-w-[32px]'} w-1/2 bg-[#4cd9c0] hover:bg-[#3dbfa8] rounded-t-sm transition-all duration-500 ease-out cursor-pointer`}
                                                         style={{ height: `${Math.max((data.sales / maxTrendSales) * 100, 1)}%` }}
                                                     ></div>
+                                                    {/* オーナー取り分バー */}
+                                                    <div
+                                                        className={`${trendMonths === 12 ? 'max-w-[18px]' : 'max-w-[32px]'} w-1/2 bg-[#6366f1] hover:bg-[#4f46e5] rounded-t-sm transition-all duration-500 ease-out cursor-pointer`}
+                                                        style={{ height: `${Math.max((data.profit / maxTrendSales) * 100, 1)}%` }}
+                                                    ></div>
                                                 </div>
-                                                <div className="text-xs text-gray-500 dark:text-gray-400 font-bold whitespace-nowrap">{data.monthStr}</div>
+                                                <div className={`${trendMonths === 12 ? 'text-[10px]' : 'text-xs'} text-gray-500 dark:text-gray-400 font-bold whitespace-nowrap`}>{data.monthStr}</div>
                                             </div>
                                         ))}
                                     </div>
                                 </section>
 
-                                {/* 年間売上推移テーブル */}
+                                {/* 年間売上推移グラフ */}
                                 {yearlyStats.length > 0 && (
                                     <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col gap-4 mt-6">
-                                        <h2 className="font-bold text-gray-800 dark:text-gray-200 border-b dark:border-gray-700 border-gray-100 pb-2 flex items-center gap-2">
-                                            📊 年間売上推移
-                                        </h2>
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-sm text-left">
-                                                <thead>
-                                                    <tr className="text-gray-500 font-medium border-b border-gray-100 dark:border-gray-700">
-                                                        <th className="py-2 px-4">年度</th>
-                                                        <th className="py-2 px-4">売上合計</th>
-                                                        <th className="py-2 px-4">オーナー取り分</th>
-                                                        <th className="py-2 px-4">利益率</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                                    {yearlyStats.map(ys => (
-                                                        <tr key={ys.year} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${ys.year === currentYear ? 'bg-indigo-50/50 dark:bg-indigo-900/10 font-bold' : ''}`}>
-                                                            <td className="py-3 px-4 text-gray-800 dark:text-gray-200">{ys.year}年{ys.year === currentYear ? ' (今年)' : ''}</td>
-                                                            <td className="py-3 px-4 text-gray-900 dark:text-gray-100">¥{ys.sales.toLocaleString()}</td>
-                                                            <td className="py-3 px-4 text-gray-900 dark:text-gray-100">¥{ys.profit.toLocaleString()}</td>
-                                                            <td className="py-3 px-4 text-gray-600 dark:text-gray-400">{ys.sales > 0 ? Math.round(ys.profit / ys.sales * 100) : 0}%</td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                                <tfoot>
-                                                    <tr className="border-t-2 border-gray-200 dark:border-gray-600 font-bold">
-                                                        <td className="py-3 px-4 text-gray-800 dark:text-gray-200">累計</td>
-                                                        <td className="py-3 px-4 text-gray-900 dark:text-gray-100">¥{yearlyStats.reduce((s, ys) => s + ys.sales, 0).toLocaleString()}</td>
-                                                        <td className="py-3 px-4 text-gray-900 dark:text-gray-100">¥{yearlyStats.reduce((s, ys) => s + ys.profit, 0).toLocaleString()}</td>
-                                                        <td className="py-3 px-4 text-gray-600 dark:text-gray-400">
-                                                            {(() => { const ts = yearlyStats.reduce((s, ys) => s + ys.sales, 0); const tp = yearlyStats.reduce((s, ys) => s + ys.profit, 0); return ts > 0 ? Math.round(tp / ts * 100) : 0; })()}%
-                                                        </td>
-                                                    </tr>
-                                                </tfoot>
-                                            </table>
+                                        <div className="flex items-center justify-between border-b dark:border-gray-700 border-gray-100 pb-2">
+                                            <h2 className="font-bold text-gray-800 dark:text-gray-200">年間売上推移（直近{yearlyStats.length}年）</h2>
+                                            <div className="text-xs text-gray-400 dark:text-gray-500">
+                                                累計: ¥{yearlyStats.reduce((s, ys) => s + ys.sales, 0).toLocaleString()}
+                                            </div>
+                                        </div>
+                                        {/* 凡例 */}
+                                        <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                                            <div className="flex items-center gap-1.5">
+                                                <div className="w-3 h-3 rounded-sm bg-[#4cd9c0]"></div>
+                                                <span>売上</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <div className="w-3 h-3 rounded-sm bg-[#6366f1]"></div>
+                                                <span>オーナー取り分</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-end justify-between gap-2 sm:gap-6 h-48 mt-2">
+                                            {yearlyStats.map((ys, idx) => (
+                                                <div key={idx} className="flex flex-col items-center flex-1 gap-1">
+                                                    <div className="w-full flex justify-center items-end h-36 relative group gap-1">
+                                                        {/* ツールチップ */}
+                                                        <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none font-medium leading-relaxed">
+                                                            売上: ¥{(ys.sales / 10000).toFixed(1)}万<br />
+                                                            取分: ¥{(ys.profit / 10000).toFixed(1)}万<br />
+                                                            利益率: {ys.sales > 0 ? Math.round(ys.profit / ys.sales * 100) : 0}%
+                                                        </div>
+                                                        {/* 売上バー */}
+                                                        <div
+                                                            className="max-w-[40px] w-1/2 bg-[#4cd9c0] hover:bg-[#3dbfa8] rounded-t-sm transition-all duration-500 ease-out cursor-pointer"
+                                                            style={{ height: `${Math.max((ys.sales / maxYearlySales) * 100, 1)}%` }}
+                                                        ></div>
+                                                        {/* オーナー取り分バー */}
+                                                        <div
+                                                            className="max-w-[40px] w-1/2 bg-[#6366f1] hover:bg-[#4f46e5] rounded-t-sm transition-all duration-500 ease-out cursor-pointer"
+                                                            style={{ height: `${Math.max((ys.profit / maxYearlySales) * 100, 1)}%` }}
+                                                        ></div>
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 dark:text-gray-400 font-bold whitespace-nowrap">
+                                                        {ys.year === currentYear ? <span className="text-indigo-500">{ys.year}年</span> : `${ys.year}年`}
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     </section>
                                 )}
