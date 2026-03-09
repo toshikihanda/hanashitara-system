@@ -971,7 +971,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             </thead>
                                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                                 {(() => {
-                                                    const filteredReports = showUnpaidOnly ? monthReports.filter(r => !r.isPaid) : monthReports;
+                                                    const filteredReports = showUnpaidOnly ? reports.filter(r => !r.isPaid).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : monthReports;
                                                     return filteredReports.length === 0 && !isLoading && !errorText ? (
                                                         <tr>
                                                             <td colSpan={11} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">
@@ -980,7 +980,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         </tr>
                                                     ) : null;
                                                 })()}
-                                                {(showUnpaidOnly ? monthReports.filter(r => !r.isPaid) : monthReports).map((report) => {
+                                                {(showUnpaidOnly ? reports.filter(r => !r.isPaid).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : monthReports).map((report) => {
                                                     const isEditing = editingReportId === report.id;
                                                     const isUrgent = !report.isPaid && report.daysPending >= 3;
                                                     return (
