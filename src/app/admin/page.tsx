@@ -97,7 +97,7 @@ export default function AdminDashboard() {
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
 
     // オーナー判定（オーナーの売上は全額がシステム利益になる）
-    const isOwnerStaff = (staffName: string) => staffName === '吉川' || staffName.includes('オーナー');
+    const isOwnerStaff = (staffName: string) => staffName === '吉川（オーナー）';
 
     // レポートからオーナー取り分（システム利益）を計算
     const getProfit = (r: { staff: string, totalSales: number, staffShare: number }) => {

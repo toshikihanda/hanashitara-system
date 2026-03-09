@@ -122,7 +122,7 @@ export default function ReportForm() {
     };
 
     // オーナー判定（手数料なしで100%がオーナー売上になる）
-    const isOwner = staffName === '吉川' || staffName.includes('オーナー');
+    const isOwner = staffName === '吉川（オーナー）';
 
     // 料金と取り分の計算ロジック
     const calculateTotals = () => {
