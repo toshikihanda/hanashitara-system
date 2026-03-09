@@ -71,6 +71,12 @@ export default function ReportForm() {
     // ブラックリストチェック（ハイフンを削除して比較）
     const isBlacklisted = phoneNumber && blacklistedPhones.some(bl => normalizePhone(bl) === normalizePhone(phoneNumber));
 
+    // 新規顧客判定（十分な桁数があり、かつ既存顧客に一致しない場合）
+    const normalizedPhone = normalizePhone(phoneNumber);
+    const isNewCustomer = normalizedPhone.length >= 10 && !Object.keys(customersMap).some(
+        phone => normalizePhone(phone) === normalizedPhone
+    );
+
     // 電話番号変更時のハンドラ（顧客名自動補完）
     const handlePhoneNumberChange = (value: string) => {
         setPhoneNumber(value);
@@ -87,9 +93,12 @@ export default function ReportForm() {
             }
         }
 
-        // 見つかった顧客名を自動設定
+        // 見つかった顧客名を自動設定（既存顧客の場合のみ）
         if (foundName) {
             setCustomerName(foundName);
+        } else if (normalizePhone(value).length >= 10) {
+            // 新規顧客の場合は名前をクリア（手入力させる）
+            setCustomerName('');
         }
     };
 
@@ -147,11 +156,19 @@ export default function ReportForm() {
         setIsSubmitting(true);
 
         try {
+            // 新規顧客の場合、名前が未入力なら警告
+            if (isNewCustomer && !customerName.trim()) {
+                alert('新規のお客様を登録するには、お客様名の入力が必要です。');
+                setIsSubmitting(false);
+                return;
+            }
+
             // 送信データの整形（GASへ送る形式） - 日付は選択された値を使用
             const formattedDate = new Date(reportDate).toLocaleDateString('ja-JP');
             const reportData = {
                 action: 'addReport',
                 checkDuplicate: !forceSubmit, // 初回送信時は重複チェックをお願いする
+                isNewCustomer: isNewCustomer, // 新規顧客フラグ
                 date: formattedDate,
                 staff: staffName,
                 customerPhone: normalizePhone(phoneNumber), // ハイフンを削除して保存
@@ -273,6 +290,11 @@ export default function ReportForm() {
                         {isBlacklisted && (
                             <p className="mt-2 text-sm font-semibold text-red-600 bg-red-100/50 p-2 rounded border border-red-200">
                                 ⚠️ この電話番号のお客様はブラックリストに登録されています！<br />通話をお断りするなどの対応をご検討ください。
+                            </p>
+                        )}
+                        {isNewCustomer && !isBlacklisted && (
+                            <p className="mt-2 text-sm font-medium text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-200">
+                                ✅ 新規のお客様です。報告送信時にシステムへ自動登録されます。
                             </p>
                         )}
                     </div>

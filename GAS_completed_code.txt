@@ -29,6 +29,32 @@ function doPost(e) {
         }
       }
 
+      // 新規顧客の自動登録（業務報告の前に顧客リスト・前払い管理へ追加）
+      if (data.isNewCustomer) {
+        const custSheet = ss.getSheetByName('顧客リスト') || (function() {
+          const s = ss.insertSheet('顧客リスト');
+          s.appendRow(['お客様名', '電話番号', '登録日']);
+          return s;
+        })();
+        // 電話番号で既存チェック（二重登録防止）
+        const custValues = custSheet.getDataRange().getValues();
+        let custExists = false;
+        for (let i = 1; i < custValues.length; i++) {
+          if (String(custValues[i][1]).replace(/[-']/g, '') === String(data.customerPhone).replace(/-/g, '')) {
+            custExists = true;
+            break;
+          }
+        }
+        if (!custExists) {
+          custSheet.appendRow([data.customerName, "'" + data.customerPhone, new Date().toLocaleString('ja-JP')]);
+          // 前払い管理にも0円で枠を作成
+          const depSheet = ss.getSheetByName('前払い管理');
+          if (depSheet) {
+            depSheet.appendRow([data.customerName, "'" + data.customerPhone, 0]);
+          }
+        }
+      }
+
       const newId = Utilities.getUuid();
       let paidStatus = '未入金';
       let autoDeducted = false;
