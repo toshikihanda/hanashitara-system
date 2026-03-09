@@ -34,6 +34,8 @@ export default function AdminDashboard() {
     const [showDepositOnly, setShowDepositOnly] = useState(false);
     // 未入金フィルタ状態（ダッシュボードからの遷移用）
     const [showUnpaidOnly, setShowUnpaidOnly] = useState(false);
+    // 入金済みにしたばかりのID（未入金フィルタ中でも一時的に表示を維持するため）
+    const [recentlyPaidIds, setRecentlyPaidIds] = useState<Set<string>>(new Set());
     // ボーナス設定状態
     const [bonusThreshold, setBonusThreshold] = useState(5000);
     const [bonusRate, setBonusRate] = useState(14);
@@ -287,13 +289,25 @@ export default function AdminDashboard() {
         const newPaidStatus = !currentPaid;
         const paymentDate = newPaidStatus ? new Date().toISOString() : undefined;
 
-        // 画面上の見た目を即座に切り替える
-        setReports(reports.map(r => r.id === id ? { ...r, isPaid: newPaidStatus, paymentDate } : r));
+        // 画面上の見た目を即座に切り替える（関数型更新で最新stateを参照）
+        setReports(prev => prev.map(r => r.id === id ? { ...r, isPaid: newPaidStatus, paymentDate } : r));
+
+        // 未入金フィルタ中に入金済みにした場合、一時的にリストに残す
+        if (showUnpaidOnly && newPaidStatus) {
+            setRecentlyPaidIds(prev => new Set(prev).add(id));
+            setTimeout(() => {
+                setRecentlyPaidIds(prev => {
+                    const next = new Set(prev);
+                    next.delete(id);
+                    return next;
+                });
+            }, 1500);
+        }
 
         setIsSaving(true);
         try {
             // GASへ通信してスプレッドシートを更新
-            await fetch(GAS_URL, {
+            const res = await fetch(GAS_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify({
@@ -303,11 +317,15 @@ export default function AdminDashboard() {
                     paymentDate: paymentDate
                 }),
             });
+            const result = await res.json();
+            if (!result.success) {
+                throw new Error(result.message || '更新に失敗しました');
+            }
         } catch (error) {
             console.error('更新エラー:', error);
             alert('通信エラーが発生しました。元の状態に戻ります。');
-            // エラー時は画面を元に戻す
-            setReports(reports.map(r => r.id === id ? { ...r, isPaid: currentPaid, paymentDate: undefined } : r));
+            // エラー時は画面を元に戻す（関数型更新）
+            setReports(prev => prev.map(r => r.id === id ? { ...r, isPaid: currentPaid, paymentDate: undefined } : r));
         } finally {
             setIsSaving(false);
         }
@@ -971,7 +989,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             </thead>
                                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                                 {(() => {
-                                                    const filteredReports = showUnpaidOnly ? reports.filter(r => !r.isPaid).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : monthReports;
+                                                    const filteredReports = showUnpaidOnly ? reports.filter(r => !r.isPaid || recentlyPaidIds.has(r.id)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : monthReports;
                                                     return filteredReports.length === 0 && !isLoading && !errorText ? (
                                                         <tr>
                                                             <td colSpan={11} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">
@@ -980,7 +998,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         </tr>
                                                     ) : null;
                                                 })()}
-                                                {(showUnpaidOnly ? reports.filter(r => !r.isPaid).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : monthReports).map((report) => {
+                                                {(showUnpaidOnly ? reports.filter(r => !r.isPaid || recentlyPaidIds.has(r.id)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : monthReports).map((report) => {
                                                     const isEditing = editingReportId === report.id;
                                                     const isUrgent = !report.isPaid && report.daysPending >= 3;
                                                     return (
