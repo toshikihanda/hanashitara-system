@@ -121,6 +121,9 @@ export default function ReportForm() {
         setServices(newServices);
     };
 
+    // オーナー判定（手数料なしで100%がオーナー売上になる）
+    const isOwner = staffName === '吉川' || staffName.includes('オーナー');
+
     // 料金と取り分の計算ロジック
     const calculateTotals = () => {
         let totalSales = 0;
@@ -133,15 +136,15 @@ export default function ReportForm() {
             if (service.type === 'listen') { // 傾聴: 10分300円、スタッフ6割
                 const price = units * 300;
                 totalSales += price;
-                staffShare += price * 0.6;
+                staffShare += isOwner ? price : price * 0.6;
             } else if (service.type === 'fortune') { // 占い: 10分1000円、スタッフ7割
                 const price = units * 1000;
                 totalSales += price;
-                staffShare += price * 0.7;
+                staffShare += isOwner ? price : price * 0.7;
             } else if (service.type === 'sexual') { // 性的相談: 10分500円、スタッフ7割
                 const price = units * 500;
                 totalSales += price;
-                staffShare += price * 0.7;
+                staffShare += isOwner ? price : price * 0.7;
             }
         });
 
@@ -367,14 +370,14 @@ export default function ReportForm() {
 
                 {/* 自動計算結果 */}
                 <div className="bg-blue-50/50 rounded-xl p-4 border border-b dark:border-gray-700lue-100">
-                    <h3 className="text-sm font-medium text-blue-900 mb-3">今回のお給料計算（自動）</h3>
+                    <h3 className="text-sm font-medium text-blue-900 mb-3">{isOwner ? '今回の売上計算（自動）' : '今回のお給料計算（自動）'}</h3>
                     <div className="space-y-2 text-sm">
                         <div className="flex justify-between items-center text-gray-600 dark:text-gray-400">
                             <span>お客様への総請求予定額（売上）</span>
                             <span className="font-semibold">{Math.floor(totals.totalSales).toLocaleString()} 円</span>
                         </div>
                         <div className="flex justify-between items-center border-t border-b dark:border-gray-700lue-100/50 pt-2">
-                            <span className="text-blue-800 font-medium">スタッフ様 取り分</span>
+                            <span className="text-blue-800 font-medium">{isOwner ? 'オーナー売上（手数料なし）' : 'スタッフ様 取り分'}</span>
                             <span className="text-lg font-bold text-blue-600">{Math.floor(totals.staffShare).toLocaleString()} 円</span>
                         </div>
                     </div>

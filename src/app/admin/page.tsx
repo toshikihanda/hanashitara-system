@@ -96,6 +96,14 @@ export default function AdminDashboard() {
 
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
 
+    // オーナー判定（オーナーの売上は全額がシステム利益になる）
+    const isOwnerStaff = (staffName: string) => staffName === '吉川' || staffName.includes('オーナー');
+
+    // レポートからオーナー取り分（システム利益）を計算
+    const getProfit = (r: { staff: string, totalSales: number, staffShare: number }) => {
+        return isOwnerStaff(r.staff) ? r.totalSales : (r.totalSales - r.staffShare);
+    };
+
     // 電話番号を正規化（ハイフンと先頭のシングルクォートを削除）
     const normalizePhone = (phone: string) => {
         return phone.replace(/^'/, '').replace(/-/g, '');
@@ -439,7 +447,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
     // 1. 年間合計（当年）
     const yearReports = reports.filter(r => new Date(r.date).getFullYear() === currentYear);
     const totalYearSales = yearReports.reduce((sum, r) => sum + r.totalSales, 0);
-    const totalYearProfit = yearReports.reduce((sum, r) => sum + (r.totalSales - r.staffShare), 0);
+    const totalYearProfit = yearReports.reduce((sum, r) => sum + getProfit(r), 0);
 
     // 1.1. 年単位の売上推移データ（全年度）
     const yearlyStatsMap = new Map<number, { sales: number, profit: number }>();
@@ -447,7 +455,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         const y = new Date(r.date).getFullYear();
         const current = yearlyStatsMap.get(y) || { sales: 0, profit: 0 };
         current.sales += r.totalSales;
-        current.profit += (r.totalSales - r.staffShare);
+        current.profit += getProfit(r);
         yearlyStatsMap.set(y, current);
     });
     const yearlyStats = Array.from(yearlyStatsMap.entries())
@@ -477,7 +485,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         return new Date(b.date).getTime() - new Date(a.date).getTime();
     });
     const totalMonthSales = monthReports.reduce((sum, r) => sum + r.totalSales, 0);
-    const totalMonthProfit = monthReports.reduce((sum, r) => sum + (r.totalSales - r.staffShare), 0);
+    const totalMonthProfit = monthReports.reduce((sum, r) => sum + getProfit(r), 0);
 
     // 3. 全ての未入金額・件数
     const unpaidReports = reports.filter(r => !r.isPaid);
@@ -542,7 +550,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
             });
 
             const mSales = mReports.reduce((sum, r) => sum + r.totalSales, 0);
-            const mProfit = mReports.reduce((sum, r) => sum + (r.totalSales - r.staffShare), 0);
+            const mProfit = mReports.reduce((sum, r) => sum + getProfit(r), 0);
 
             trendData.push({
                 monthStr: `${d.getMonth() + 1}月`,
@@ -918,7 +926,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                             <td className="py-3 px-4 font-bold text-gray-800 dark:text-gray-200">{s.name}</td>
                                                             <td className="py-3 px-4">¥{s.sales.toLocaleString()}</td>
                                                             <td className="py-3 px-4">¥{s.share.toLocaleString()}</td>
-                                                            <td className="py-3 px-4">¥{(s.sales - s.share).toLocaleString()}</td>
+                                                            <td className="py-3 px-4">¥{(isOwnerStaff(s.name) ? s.sales : (s.sales - s.share)).toLocaleString()}</td>
                                                         </tr>
                                                     ))
                                                 )}
