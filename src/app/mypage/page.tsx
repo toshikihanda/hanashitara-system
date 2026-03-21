@@ -23,8 +23,39 @@ export default function StaffMyPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [errorText, setErrorText] = useState('');
 
+    // 月選択ステート（デフォルト: 当月）
+    const [selectedMonth, setSelectedMonth] = useState(() => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    });
+
     const printRef = useRef<HTMLDivElement>(null);
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
+
+    // 月選択肢の生成（過去12ヶ月 + 当月）
+    const generateMonthOptions = () => {
+        const options: { value: string; label: string }[] = [];
+        const now = new Date();
+        for (let i = 12; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const label = `${d.getFullYear()}年${d.getMonth() + 1}月`;
+            options.push({ value: val, label });
+        }
+        return options;
+    };
+
+    // 前月・次月の移動
+    const goToPrevMonth = () => {
+        const [y, m] = selectedMonth.split('-').map(Number);
+        const d = new Date(y, m - 2, 1);
+        setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    };
+    const goToNextMonth = () => {
+        const [y, m] = selectedMonth.split('-').map(Number);
+        const d = new Date(y, m, 1);
+        setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    };
 
     // ログイン処理（パスワード認証後、データを取得）
     const handleLogin = async (e: React.FormEvent) => {
@@ -90,8 +121,19 @@ export default function StaffMyPage() {
         window.print();
     };
 
-    // 今月の計算（※本来は月で絞り込みますが、今回は全件の合計として表示）
-    const totalMyShare = reports.reduce((sum, r) => sum + r.staffShare, 0);
+    // 選択月のデータのみフィルタリング
+    const monthReports = reports.filter(r => {
+        const d = new Date(r.date);
+        const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        return monthStr === selectedMonth;
+    });
+
+    // 選択月の合計
+    const totalMyShare = monthReports.reduce((sum, r) => sum + r.staffShare, 0);
+
+    // 選択月の表示ラベル
+    const [selectedYear, selectedMonthNum] = selectedMonth.split('-').map(Number);
+    const monthLabel = `${selectedYear}年${selectedMonthNum}月`;
 
     // --- ログイン前画面 ---
     if (!isLoggedIn) {
@@ -154,7 +196,32 @@ export default function StaffMyPage() {
                         onClick={handlePrint}
                         className="bg-gray-900 text-white px-5 py-2 rounded-full text-sm font-medium shadow-sm hover:bg-gray-800 transition-colors"
                     >
-                        🖨️ 明細をPDFで保存・印刷
+                        明細をPDFで保存・印刷
+                    </button>
+                </div>
+
+                {/* 月選択UI（印刷時は非表示） */}
+                <div className="flex items-center justify-center gap-3 print:hidden">
+                    <button
+                        onClick={goToPrevMonth}
+                        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors"
+                    >
+                        ◀
+                    </button>
+                    <select
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-medium focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                    >
+                        {generateMonthOptions().map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                    </select>
+                    <button
+                        onClick={goToNextMonth}
+                        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors"
+                    >
+                        ▶
                     </button>
                 </div>
 
@@ -173,11 +240,11 @@ export default function StaffMyPage() {
                     </div>
 
                     <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-6 mb-8 flex justify-between items-center print:border print:border-gray-200 dark:border-gray-700 print:bg-transparent">
-                        <span className="text-lg font-medium text-gray-700 dark:text-gray-300">合計支給額（スタッフ報酬）</span>
+                        <span className="text-lg font-medium text-gray-700 dark:text-gray-300">{monthLabel}分 合計支給額</span>
                         <span className="text-3xl font-bold text-gray-900 dark:text-gray-100">¥{totalMyShare.toLocaleString()}</span>
                     </div>
 
-                    <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 mb-4 px-1">今月の業務履歴・明細</h2>
+                    <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 mb-4 px-1">{monthLabel}の業務履歴・明細</h2>
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left border-collapse">
                             <thead>
@@ -189,12 +256,12 @@ export default function StaffMyPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {reports.length === 0 ? (
+                                {monthReports.length === 0 ? (
                                     <tr>
-                                        <td colSpan={4} className="py-8 text-center text-gray-400 dark:text-gray-500">履歴がありません</td>
+                                        <td colSpan={4} className="py-8 text-center text-gray-400 dark:text-gray-500">{monthLabel}の履歴がありません</td>
                                     </tr>
                                 ) : (
-                                    reports.map((r, i) => (
+                                    monthReports.map((r, i) => (
                                         <tr key={i} className="text-gray-700 dark:text-gray-300 print:text-black">
                                             <td className="py-4 px-2">{new Date(r.date).toLocaleDateString('ja-JP')}</td>
                                             <td className="py-4 px-2">{r.customerName}</td>

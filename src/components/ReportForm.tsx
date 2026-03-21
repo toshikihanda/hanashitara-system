@@ -18,6 +18,7 @@ export default function ReportForm() {
     const [phoneNumber, setPhoneNumber] = useState('');
     const [customerName, setCustomerName] = useState('');
     const [services, setServices] = useState<ServiceDetail[]>([{ type: 'listen', minutes: 0 }]);
+    const [memo, setMemo] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // スタッフリストをGASから取得する（デフォルトは空、ローディング中は「読み込み中...」を表示）
@@ -182,7 +183,8 @@ export default function ReportForm() {
                     return `${typeName}(${s.minutes}分 -> 計算${rounded}分)`;
                 }).join(', '),
                 totalSales: totals.totalSales,
-                staffShare: totals.staffShare
+                staffShare: totals.staffShare,
+                memo: memo.trim()
             };
 
             // スプレッドシート（GAS）へ通信
@@ -218,12 +220,13 @@ export default function ReportForm() {
             } else if (data && data.insufficientBalance) {
                 alert(`業務報告を送信しました！\n売上: ${totals.totalSales}円\n\n⚠️ お客様は前払い顧客ですが、残高（¥${data.currentDeposit}）が不足しているため自動引き落としできませんでした。「未入金」となっていますのでご請求をお願いします。`);
             } else {
-                alert(`業務報告を送信しました！\n明細がスプレッドシートに追記されます。\n売上: ${totals.totalSales}円`);
+                alert(`業務報告を送信しました！\n明細がスプレッドシートに追記されます。\n売上: ${totals.totalSales}円${data && data.emailSent ? '\n\n📧 確認メールをお送りしました。' : ''}`);
             }
 
             // 送信成功後、次の入力用にフォームをリセットする
             setPhoneNumber('');
             setCustomerName('');
+            setMemo('');
             setServices([{ type: 'listen', minutes: 0 }]);
         } catch (error) {
             console.error('送信エラー:', error);
@@ -366,6 +369,24 @@ export default function ReportForm() {
                     >
                         <span>＋</span> 別のサービスを追加する（合算用）
                     </button>
+                </div>
+
+                {/* メモ・備考欄 */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        メモ・備考（任意）
+                    </label>
+                    <textarea
+                        className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow bg-white dark:bg-gray-800 resize-none"
+                        rows={3}
+                        maxLength={500}
+                        placeholder="お客様の様子、NGトピック、次回への申し送りなど"
+                        value={memo}
+                        onChange={(e) => setMemo(e.target.value)}
+                    />
+                    {memo.length > 0 && (
+                        <p className="text-xs text-gray-400 mt-1 text-right">{memo.length}/500</p>
+                    )}
                 </div>
 
                 {/* 自動計算結果 */}

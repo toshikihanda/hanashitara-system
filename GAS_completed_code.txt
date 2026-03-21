@@ -110,15 +110,38 @@ function doPost(e) {
         paidStatus,  // デポジット全額カバーの場合「入金済」、それ以外「未入金」
         '', // 入金日は空（オーナーが手動でチェックした際に記録）
         depositUsed, // デポジット使用額
-        billingAmount // 請求額
+        billingAmount, // 請求額
+        data.memo || '' // メモ・備考（M列）
       ]);
       
-      return output.setContent(JSON.stringify({ 
-        success: true, 
-        id: newId, 
-        autoDeducted: autoDeducted, 
+      // スタッフへの業務報告確認メール自動送信
+      let emailSent = false;
+      const staffSheet = ss.getSheetByName('スタッフマスタ');
+      if (staffSheet) {
+        const staffData = staffSheet.getDataRange().getValues();
+        let staffEmail = '';
+        for (let j = 1; j < staffData.length; j++) {
+          if (staffData[j][0] === data.staff) {
+            staffEmail = String(staffData[j][2]).trim();
+            break;
+          }
+        }
+        if (staffEmail && staffEmail !== 'demo@example.com') {
+          try {
+            const emailBody = `${data.staff} 様\n\nお疲れ様です。ハナシタラ.comです。\n業務報告を受け付けました。以下が報告内容です。\n\n【対応日】${data.date}\n【お客様名】${data.customerName}\n【サービス内容】${data.services}\n【総売上】¥${sales.toLocaleString()}\n【スタッフ報酬】¥${Number(data.staffShare).toLocaleString()}${data.memo ? '\n【メモ】' + data.memo : ''}\n\nこの内容は控えとしてお手元に保管ください。\n引き続きよろしくお願いいたします。`;
+            MailApp.sendEmail(staffEmail, '【ハナシタラ.com】業務報告の受付確認', emailBody);
+            emailSent = true;
+          } catch(e) { /* メール失敗でも報告自体は成功扱い */ }
+        }
+      }
+
+      return output.setContent(JSON.stringify({
+        success: true,
+        id: newId,
+        autoDeducted: autoDeducted,
         insufficientBalance: insufficientBalance,
-        currentDeposit: currentDeposit
+        currentDeposit: currentDeposit,
+        emailSent: emailSent
       }));
     }
     
@@ -155,7 +178,36 @@ function doPost(e) {
           } else {
             sheet.getRange(i + 1, 10).setValue(''); // 未入金の場合は空にする
           }
-          return output.setContent(JSON.stringify({ success: true }));
+
+          // 入金済に変更した場合、スタッフにメール通知
+          let emailSent = false;
+          if (data.isPaid) {
+            const staffName = values[i][2]; // C列: スタッフ名
+            const customerName = values[i][4]; // E列: 顧客名
+            const totalSales = values[i][6]; // G列: 総売上
+            const reportDate = values[i][1]; // B列: 日付
+
+            const staffSheet = ss.getSheetByName('スタッフマスタ');
+            if (staffSheet) {
+              const staffData = staffSheet.getDataRange().getValues();
+              let staffEmail = '';
+              for (let j = 1; j < staffData.length; j++) {
+                if (staffData[j][0] === staffName) {
+                  staffEmail = String(staffData[j][2]).trim();
+                  break;
+                }
+              }
+              if (staffEmail && staffEmail !== 'demo@example.com') {
+                try {
+                  const emailBody = `${staffName} 様\n\nお疲れ様です。ハナシタラ.comです。\n以下の対応分の入金が確認されました。\n\n【対応日】${reportDate}\n【お客様名】${customerName}\n【売上金額】¥${Number(totalSales).toLocaleString()}\n\nお客様へのお礼メッセージの送信をお願いいたします。\n引き続きよろしくお願いいたします。`;
+                  MailApp.sendEmail(staffEmail, '【ハナシタラ.com】入金確認のお知らせ', emailBody);
+                  emailSent = true;
+                } catch(e) { /* メール失敗でも入金更新は成功扱い */ }
+              }
+            }
+          }
+
+          return output.setContent(JSON.stringify({ success: true, emailSent: emailSent }));
         }
       }
       return output.setContent(JSON.stringify({ success: false, message: 'IDが見つかりません' }));
@@ -170,7 +222,25 @@ function doPost(e) {
         data.reason,
         new Date().toLocaleString('ja-JP')
       ]);
-      return output.setContent(JSON.stringify({ success: true }));
+
+      // 全スタッフへブラックリスト登録の一斉通知メール
+      let emailsSent = 0;
+      const staffSheet = ss.getSheetByName('スタッフマスタ');
+      if (staffSheet) {
+        const staffData = staffSheet.getDataRange().getValues();
+        const emailBody = `スタッフ各位\n\nお疲れ様です。ハナシタラ.comです。\n以下のお客様がブラックリストに登録されました。\n\n【電話番号】${data.phone}\n【お客様名】${data.name}\n【理由】${data.reason}\n\nこの番号からのお電話はお断りしてください。\nよろしくお願いいたします。`;
+        for (let j = 1; j < staffData.length; j++) {
+          const email = String(staffData[j][2]).trim();
+          if (email && email !== 'demo@example.com') {
+            try {
+              MailApp.sendEmail(email, '【ハナシタラ.com】ブラックリスト登録のお知らせ', emailBody);
+              emailsSent++;
+            } catch(e) { /* 個別のメール失敗はスキップ */ }
+          }
+        }
+      }
+
+      return output.setContent(JSON.stringify({ success: true, emailsSent: emailsSent }));
     }
 
     // ⑤ お客様の新規追加（電話番号対応・顧客リストへ）

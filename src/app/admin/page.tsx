@@ -17,6 +17,7 @@ interface ReportData {
     paymentDate?: string; // 入金日（入金チェックを押した日付）
     depositUsed: number; // デポジット使用額
     billingAmount: number; // 請求額
+    memo?: string; // メモ・備考
 }
 
 export default function AdminDashboard() {
@@ -261,7 +262,8 @@ export default function AdminDashboard() {
                         daysPending: days,
                         paymentDate: row[9] ? String(row[9]) : undefined,
                         depositUsed: Number(row[10]) || 0,
-                        billingAmount: Number(row[11]) || 0
+                        billingAmount: Number(row[11]) || 0,
+                        memo: String(row[12] || '')
                     };
                 });
 
@@ -329,6 +331,11 @@ export default function AdminDashboard() {
             if (!result.success) {
                 throw new Error(result.message || '更新に失敗しました');
             }
+            // 入金確認時にスタッフへメール通知済みの場合トースト表示
+            if (newPaidStatus && result.emailSent) {
+                setToastMessage('入金確認しました（スタッフにメール通知済み）');
+                setTimeout(() => setToastMessage(null), 3000);
+            }
         } catch (error) {
             console.error('更新エラー:', error);
             alert('通信エラーが発生しました。元の状態に戻ります。');
@@ -349,12 +356,14 @@ export default function AdminDashboard() {
 
         setIsSaving(true);
         try {
-            await fetch(GAS_URL, {
+            const res = await fetch(GAS_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify({ action: 'addBlacklist', phone: normalizedPhone, name, reason }),
             });
-            alert('ブラックリストに登録しました。');
+            const result = await res.json();
+            const emailCount = result.emailsSent || 0;
+            alert(`ブラックリストに登録しました。${emailCount > 0 ? `\n全スタッフ（${emailCount}名）にメール通知しました。` : ''}`);
         } catch (err) {
             console.error('ブラックリスト登録エラー:', err);
             alert('通信エラーが発生しました。時間を置いて再度お試しください。');
@@ -2075,6 +2084,32 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 </tbody>
                                             </table>
                                         </div>
+                                    </div>
+
+                                    {/* メモ履歴 */}
+                                    <div>
+                                        <h4 className="font-bold text-gray-700 dark:text-gray-300 mb-3 border-b-2 border-gray-200 dark:border-gray-700 pb-1 inline-block">📝 スタッフメモ履歴</h4>
+                                        {(() => {
+                                            const memoReports = reports
+                                                .filter(r => r.customerName === showHistoryForCustomer && r.memo && r.memo.trim())
+                                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                                            if (memoReports.length === 0) {
+                                                return <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center bg-white dark:bg-gray-800 rounded border">メモの記録がありません</p>;
+                                            }
+                                            return (
+                                                <div className="space-y-2">
+                                                    {memoReports.map(r => (
+                                                        <div key={r.id} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 shadow-sm">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <span className="text-xs text-gray-500 dark:text-gray-400">{new Date(r.date).toLocaleDateString('ja-JP')}</span>
+                                                                <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded">{r.staff}</span>
+                                                            </div>
+                                                            <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{r.memo}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
 
                                 </div>
