@@ -128,8 +128,14 @@ function doPost(e) {
         }
         if (staffEmail && staffEmail !== 'demo@example.com') {
           try {
-            const emailBody = `${data.staff} 様\n\nお疲れ様です。ハナシタラ.comです。\n業務報告を受け付けました。以下が報告内容です。\n\n【対応日】${data.date}\n【お客様名】${data.customerName}\n【サービス内容】${data.services}\n【総売上】¥${sales.toLocaleString()}\n【スタッフ報酬】¥${Number(data.staffShare).toLocaleString()}${data.memo ? '\n【メモ】' + data.memo : ''}\n\nこの内容は控えとしてお手元に保管ください。\n引き続きよろしくお願いいたします。`;
-            MailApp.sendEmail(staffEmail, '【ハナシタラ.com】業務報告の受付確認', emailBody);
+            let formattedDate = data.date;
+            if (Object.prototype.toString.call(formattedDate) === '[object Date]') {
+              formattedDate = Utilities.formatDate(formattedDate, "JST", "yyyy年MM月dd日");
+            }
+            const emailBody = `${data.staff} 様\n\nお疲れ様です。ハナシタラ.comです。\n業務報告を受け付けました。以下が報告内容です。\n\n【対応日】${formattedDate}\n【お客様名】${data.customerName}\n【サービス内容】${data.services}\n【総売上】¥${sales.toLocaleString()}\n【スタッフ報酬】¥${Number(data.staffShare).toLocaleString()}${data.memo ? '\n【メモ】' + data.memo : ''}\n\nこの内容は控えとしてお手元に保管ください。\n引き続きよろしくお願いいたします。`;
+            MailApp.sendEmail(staffEmail, '【ハナシタラ.com】業務報告の受付確認', emailBody, {
+              name: 'ハナシタラ.com 業務システム'
+            });
             emailSent = true;
           } catch(e) { /* メール失敗でも報告自体は成功扱い */ }
         }
@@ -199,8 +205,16 @@ function doPost(e) {
               }
               if (staffEmail && staffEmail !== 'demo@example.com') {
                 try {
-                  const emailBody = `${staffName} 様\n\nお疲れ様です。ハナシタラ.comです。\n以下の対応分の入金が確認されました。\n\n【対応日】${reportDate}\n【お客様名】${customerName}\n【売上金額】¥${Number(totalSales).toLocaleString()}\n\nお客様へのお礼メッセージの送信をお願いいたします。\n引き続きよろしくお願いいたします。`;
-                  MailApp.sendEmail(staffEmail, '【ハナシタラ.com】入金確認のお知らせ', emailBody);
+                  // 日付が英語表記になるのを防ぐため、Date型の場合は日本時間にフォーマットする
+                  let formattedDate = reportDate;
+                  if (Object.prototype.toString.call(reportDate) === '[object Date]') {
+                    formattedDate = Utilities.formatDate(reportDate, "JST", "yyyy年MM月dd日");
+                  }
+
+                  const emailBody = `${staffName} 様\n\nお疲れ様です。ハナシタラ.comです。\n入金が確認されました。\n\n対応日: ${formattedDate}\nお客様名: ${customerName}\n売上金額: ¥${Number(totalSales).toLocaleString()}\n\nよろしくお願いします。`;
+                  MailApp.sendEmail(staffEmail, '【ハナシタラ.com】入金確認のお知らせ', emailBody, {
+                    name: 'ハナシタラ.com 業務システム'
+                  });
                   emailSent = true;
                 } catch(e) { /* メール失敗でも入金更新は成功扱い */ }
               }
@@ -233,7 +247,9 @@ function doPost(e) {
           const email = String(staffData[j][2]).trim();
           if (email && email !== 'demo@example.com') {
             try {
-              MailApp.sendEmail(email, '【ハナシタラ.com】ブラックリスト登録のお知らせ', emailBody);
+              MailApp.sendEmail(email, '【ハナシタラ.com】ブラックリスト登録のお知らせ', emailBody, {
+                name: 'ハナシタラ.com 業務システム'
+              });
               emailsSent++;
             } catch(e) { /* 個別のメール失敗はスキップ */ }
           }

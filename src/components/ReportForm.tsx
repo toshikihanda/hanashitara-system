@@ -29,7 +29,7 @@ export default function ReportForm() {
     const [customersMap, setCustomersMap] = useState<Record<string, string>>({});
     const [blacklistedPhones, setBlacklistedPhones] = useState<string[]>([]);
 
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzhzZLoVQRSYYykqnu88ebBtx79htz-3A7YDa3RgBKbjYJ-ie308nsQXhJflpEnNfuz0g/exec';
 
     // 電話番号を正規化（ハイフンを削除）
     const normalizePhone = (phone: string) => {

@@ -95,7 +95,7 @@ export default function AdminDashboard() {
     // トースト通知用ステート
     const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzhzZLoVQRSYYykqnu88ebBtx79htz-3A7YDa3RgBKbjYJ-ie308nsQXhJflpEnNfuz0g/exec';
 
     // オーナー判定（オーナーの売上は全額がシステム利益になる）
     const isOwnerStaff = (staffName: string) => staffName === '吉川（オーナー）';

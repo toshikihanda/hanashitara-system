@@ -30,7 +30,7 @@ export default function StaffMyPage() {
     });
 
     const printRef = useRef<HTMLDivElement>(null);
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzopMne7Ga8ZruWAf3xvAP7WQFvQ-Uau09qsmG2K6-Mcs7xfrXXl1Ev4GmLHpOcgTwj/exec';
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzhzZLoVQRSYYykqnu88ebBtx79htz-3A7YDa3RgBKbjYJ-ie308nsQXhJflpEnNfuz0g/exec';
 
     // 月選択肢の生成（過去12ヶ月 + 当月）
     const generateMonthOptions = () => {
