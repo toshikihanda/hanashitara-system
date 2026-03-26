@@ -1377,7 +1377,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 <div>
                                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">パスワード</label>
                                                     <input
-                                                        type="password"
+                                                        type="text"
                                                         value={editStaffData.password}
                                                         onChange={(e) => setEditStaffData({ ...editStaffData, password: e.target.value })}
                                                         className="w-full border border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
@@ -1506,7 +1506,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 <div>
                                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">パスワード</label>
                                                     <input
-                                                        type="password"
+                                                        type="text"
                                                         value={newStaffData.password}
                                                         onChange={(e) => setNewStaffData({ ...newStaffData, password: e.target.value })}
                                                         className="w-full border border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
