@@ -1,4 +1,4 @@
-const SHEET_ID = '1Uzvrp-GVYFlJZht9uOawiHJS3vV3Ub6MGmsVfS0P-so';
+const SHEET_ID = '12yZfMnBIqW5Q7WOtHnnZLIDz9NAgkTem8RFoTMINUfU';
 
 function doPost(e) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
@@ -190,8 +190,10 @@ function doPost(e) {
           if (data.isPaid) {
             const staffName = values[i][2]; // C列: スタッフ名
             const customerName = values[i][4]; // E列: 顧客名
+            const services = values[i][5]; // F列: サービス内容
             const totalSales = values[i][6]; // G列: 総売上
             const reportDate = values[i][1]; // B列: 日付
+            const memo = values[i][12]; // M列: 備考
 
             const staffSheet = ss.getSheetByName('スタッフマスタ');
             if (staffSheet) {
@@ -211,7 +213,7 @@ function doPost(e) {
                     formattedDate = Utilities.formatDate(reportDate, "JST", "yyyy年MM月dd日");
                   }
 
-                  const emailBody = `${staffName} 様\n\nお疲れ様です。ハナシタラ.comです。\n入金が確認されました。\n\n対応日: ${formattedDate}\nお客様名: ${customerName}\n売上金額: ¥${Number(totalSales).toLocaleString()}\n\nよろしくお願いします。`;
+                  const emailBody = `${staffName} 様\n\nお疲れ様です。ハナシタラ.comです。\n入金が確認されました。\n\n対応日: ${formattedDate}\nお客様名: ${customerName}\nサービス内容: ${services}\n売上金額: ¥${Number(totalSales).toLocaleString()}\n備考: ${memo || 'なし'}\n\nお客様へ入金確認の旨をお伝えください。\nよろしくお願いいたします。`;
                   MailApp.sendEmail(staffEmail, '【ハナシタラ.com】入金確認のお知らせ', emailBody, {
                     name: 'ハナシタラ.com 業務システム'
                   });
@@ -562,7 +564,7 @@ function doGet(e) {
       if (sheet) {
         const data = sheet.getDataRange().getValues();
         for(let i=1; i<data.length; i++) {
-           if(data[i][0]) list.push({ name: data[i][0], email: data[i][2], services: data[i][3] || '' });
+           if(data[i][0]) list.push({ name: data[i][0], password: data[i][1] || '', email: data[i][2], services: data[i][3] || '' });
         }
       }
       return output.setContent(JSON.stringify({ success: true, staff: list }));

@@ -45,9 +45,10 @@ export default function AdminDashboard() {
     // 前払いデポジット状態と顧客電話番号
     const [deposits, setDeposits] = useState<Record<string, number>>({});
     const [customerPhones, setCustomerPhones] = useState<Record<string, string>>({});
-    // スタッフのメアド保持用・対応サービス保持用
+    // スタッフのメアド保持用・対応サービス保持用・パスワード保持用
     const [staffEmails, setStaffEmails] = useState<Record<string, string>>({});
     const [staffServices, setStaffServices] = useState<Record<string, string>>({});
+    const [staffPasswords, setStaffPasswords] = useState<Record<string, string>>({});
 
     type CustomerSortOption = 'deposit' | 'paid_desc' | 'registered_asc' | 'registered_desc' | 'name_asc' | 'number_asc' | 'balance_desc' | 'monthly_amount_desc' | 'call_count_desc';
     const [customerSortBy, setCustomerSortBy] = useState<CustomerSortOption>('registered_desc');
@@ -171,12 +172,15 @@ export default function AdminDashboard() {
             if (json.success && json.staff) {
                 const emails: Record<string, string> = {};
                 const servicesMap: Record<string, string> = {};
+                const passwords: Record<string, string> = {};
                 json.staff.forEach((s: any) => {
                     emails[s.name] = s.email;
                     servicesMap[s.name] = s.services || '';
+                    passwords[s.name] = s.password || '';
                 });
                 setStaffEmails(emails);
                 setStaffServices(servicesMap);
+                setStaffPasswords(passwords);
             }
         } catch (err) {
             console.error('スタッフ取得エラー:', err);
@@ -702,9 +706,6 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                         </a>
                     </div>
                 </nav>
-                <div className="p-4 text-center pb-6">
-                    <span className="bg-red-400 text-white font-bold text-[10px] py-1 rounded-full px-6">DEMO</span>
-                </div>
             </aside>
 
             {/* Main Content */}
@@ -1340,7 +1341,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                         setEditingStaffName(s.name);
                                                                         setEditStaffData({
                                                                             name: s.name,
-                                                                            password: '',
+                                                                            password: staffPasswords[s.name] || '',
                                                                             email: staffEmails[s.name] || '',
                                                                             services: (staffServices[s.name] || '').split(',').map(ss => ss.trim()).filter(Boolean)
                                                                         });
