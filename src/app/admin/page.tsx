@@ -125,13 +125,10 @@ export default function AdminDashboard() {
 
     // ②初回読み込み時に全データを取得する
     useEffect(() => {
-        const initializeData = async () => {
-            const masterSet = await fetchStaffList();
-            fetchReports(true, masterSet);
-            fetchBlacklist();
-            fetchDeposits();
-        };
-        initializeData();
+        fetchReports(true);
+        fetchBlacklist();
+        fetchDeposits();
+        fetchStaffList();
 
         // ボーナス設定の読み込み
         const savedThreshold = localStorage.getItem('depositBonusThreshold');
@@ -190,12 +187,10 @@ export default function AdminDashboard() {
                 setStaffServices(servicesMap);
                 setStaffPasswords(passwords);
                 setStaffMasterSet(masterNames);
-                return masterNames;
             }
         } catch (err) {
             console.error('スタッフ取得エラー:', err);
         }
-        return new Set<string>();
     };
 
     const fetchDeposits = async () => {
@@ -240,7 +235,7 @@ export default function AdminDashboard() {
         }
     };
 
-    const fetchReports = async (showLoader = true, masterSet?: Set<string>) => {
+    const fetchReports = async (showLoader = true) => {
         if (showLoader) setIsLoading(true);
         try {
             // GASの doGet 側を叩く (action=getReports)
@@ -250,16 +245,10 @@ export default function AdminDashboard() {
             if (json.success) {
                 // 取得した二次元配列をオブジェクト形式に整形＋日数の計算
                 const today = new Date();
-                const activeMasterSet = masterSet ?? staffMasterSet;
-                const shouldFilterByMaster = activeMasterSet.size > 0;
                 const formattedData: ReportData[] = json.data.map((row: any[]) => {
                     // A:ID(0), B:日付(1), C:スタッフ(2), D:顧客電話(3), E:顧客名(4),
                     // F:提供サービス(5), G:総売上(6), H:スタッフ報酬(7), I:入金済(8), J:入金日(9),
                     // K:デポジット使用額(10), L:請求額(11)
-                    const staffName = String(row[2] || '').trim();
-                    if (shouldFilterByMaster && !activeMasterSet.has(staffName)) {
-                        return null;
-                    }
 
                     // 未入金日数の計算
                     let days = 0;
@@ -273,7 +262,7 @@ export default function AdminDashboard() {
                     return {
                         id: row[0],
                         date: row[1],
-                        staff: staffName,
+                        staff: String(row[2] || '').trim(),
                         customerPhone: String(row[3] || '').trim().replace(/^'/, ''),
                         customerName: String(row[4] || ''),
                         services: String(row[5] || ''),
@@ -286,7 +275,7 @@ export default function AdminDashboard() {
                         billingAmount: Number(row[11]) || 0,
                         memo: String(row[12] || '')
                     };
-                }).filter((row: ReportData | null): row is ReportData => row !== null);
+                });
 
                 // 日付の新しい順に並び替え（降順）
                 formattedData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -522,16 +511,18 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
     const totalUnpaid = unpaidReports.reduce((sum, r) => sum + r.totalSales, 0);
     const unpaidCount = unpaidReports.length;
 
-    // 4. スタッフ別集計（今月 ＋ 累計）
+    // 4. スタッフ別集計（今月 ＋ 累計）- スタッフマスターに存在する人のみ
     const staffStatsMap = new Map<string, { sales: number, share: number, totalSales: number, totalShare: number }>();
 
-    // すべての登録済みスタッフを初期化（売上0でも表示させるため）
-    Object.keys(staffEmails).forEach(name => {
+    // スタッフマスターに登録されているスタッフのみ初期化（売上0でも表示させるため）
+    const activeStaffNames = staffMasterSet.size > 0 ? staffMasterSet : new Set(Object.keys(staffEmails));
+    activeStaffNames.forEach(name => {
         staffStatsMap.set(name, { sales: 0, share: 0, totalSales: 0, totalShare: 0 });
     });
 
-    // まず全期間で累計を計算
+    // まず全期間で累計を計算（マスターに存在するスタッフのみ）
     reports.forEach(r => {
+        if (staffMasterSet.size > 0 && !staffMasterSet.has(r.staff)) return;
         const current = staffStatsMap.get(r.staff) || { sales: 0, share: 0, totalSales: 0, totalShare: 0 };
         staffStatsMap.set(r.staff, {
             ...current,
@@ -540,8 +531,9 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         });
     });
 
-    // 次に今月分を計算
+    // 次に今月分を計算（マスターに存在するスタッフのみ）
     monthReports.forEach(r => {
+        if (staffMasterSet.size > 0 && !staffMasterSet.has(r.staff)) return;
         const current = staffStatsMap.get(r.staff) || { sales: 0, share: 0, totalSales: 0, totalShare: 0 };
         staffStatsMap.set(r.staff, {
             ...current,
