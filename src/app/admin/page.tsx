@@ -286,7 +286,7 @@ export default function AdminDashboard() {
                         billingAmount: Number(row[11]) || 0,
                         memo: String(row[12] || '')
                     };
-                }).filter((row): row is ReportData => row !== null);
+                }).filter((row: ReportData | null): row is ReportData => row !== null);
 
                 // 日付の新しい順に並び替え（降順）
                 formattedData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
