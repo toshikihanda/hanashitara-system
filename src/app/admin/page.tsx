@@ -25,6 +25,7 @@ export default function AdminDashboard() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [errorText, setErrorText] = useState('');
+    const [staffMasterSet, setStaffMasterSet] = useState<Set<string>>(new Set());
 
     // タブ状態管理
     const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'staff' | 'customers' | 'deposit'>('dashboard');
