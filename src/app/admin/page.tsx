@@ -124,10 +124,13 @@ export default function AdminDashboard() {
 
     // ②初回読み込み時に全データを取得する
     useEffect(() => {
-        fetchReports(true);
-        fetchBlacklist();
-        fetchDeposits();
-        fetchStaffList();
+        const initializeData = async () => {
+            const masterSet = await fetchStaffList();
+            fetchReports(true, masterSet);
+            fetchBlacklist();
+            fetchDeposits();
+        };
+        initializeData();
 
         // ボーナス設定の読み込み
         const savedThreshold = localStorage.getItem('depositBonusThreshold');
@@ -173,18 +176,25 @@ export default function AdminDashboard() {
                 const emails: Record<string, string> = {};
                 const servicesMap: Record<string, string> = {};
                 const passwords: Record<string, string> = {};
+                const masterNames = new Set<string>();
                 json.staff.forEach((s: any) => {
-                    emails[s.name] = s.email;
-                    servicesMap[s.name] = s.services || '';
-                    passwords[s.name] = s.password || '';
+                    const name = String(s.name || '').trim();
+                    if (!name) return;
+                    masterNames.add(name);
+                    emails[name] = s.email;
+                    servicesMap[name] = s.services || '';
+                    passwords[name] = s.password || '';
                 });
                 setStaffEmails(emails);
                 setStaffServices(servicesMap);
                 setStaffPasswords(passwords);
+                setStaffMasterSet(masterNames);
+                return masterNames;
             }
         } catch (err) {
             console.error('スタッフ取得エラー:', err);
         }
+        return new Set<string>();
     };
 
     const fetchDeposits = async () => {
@@ -229,7 +239,7 @@ export default function AdminDashboard() {
         }
     };
 
-    const fetchReports = async (showLoader = true) => {
+    const fetchReports = async (showLoader = true, masterSet?: Set<string>) => {
         if (showLoader) setIsLoading(true);
         try {
             // GASの doGet 側を叩く (action=getReports)
@@ -239,10 +249,16 @@ export default function AdminDashboard() {
             if (json.success) {
                 // 取得した二次元配列をオブジェクト形式に整形＋日数の計算
                 const today = new Date();
+                const activeMasterSet = masterSet ?? staffMasterSet;
+                const shouldFilterByMaster = activeMasterSet.size > 0;
                 const formattedData: ReportData[] = json.data.map((row: any[]) => {
                     // A:ID(0), B:日付(1), C:スタッフ(2), D:顧客電話(3), E:顧客名(4),
                     // F:提供サービス(5), G:総売上(6), H:スタッフ報酬(7), I:入金済(8), J:入金日(9),
                     // K:デポジット使用額(10), L:請求額(11)
+                    const staffName = String(row[2] || '').trim();
+                    if (shouldFilterByMaster && !activeMasterSet.has(staffName)) {
+                        return null;
+                    }
 
                     // 未入金日数の計算
                     let days = 0;
@@ -256,7 +272,7 @@ export default function AdminDashboard() {
                     return {
                         id: row[0],
                         date: row[1],
-                        staff: String(row[2] || ''),
+                        staff: staffName,
                         customerPhone: String(row[3] || '').trim().replace(/^'/, ''),
                         customerName: String(row[4] || ''),
                         services: String(row[5] || ''),
@@ -269,7 +285,7 @@ export default function AdminDashboard() {
                         billingAmount: Number(row[11]) || 0,
                         memo: String(row[12] || '')
                     };
-                });
+                }).filter((row): row is ReportData => row !== null);
 
                 // 日付の新しい順に並び替え（降順）
                 formattedData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
