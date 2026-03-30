@@ -50,6 +50,8 @@ export default function AdminDashboard() {
     const [staffEmails, setStaffEmails] = useState<Record<string, string>>({});
     const [staffServices, setStaffServices] = useState<Record<string, string>>({});
     const [staffPasswords, setStaffPasswords] = useState<Record<string, string>>({});
+    // 顧客パスワード保持用（マイページログイン用）
+    const [customerPasswords, setCustomerPasswords] = useState<Record<string, string>>({});
 
     type CustomerSortOption = 'deposit' | 'paid_desc' | 'registered_asc' | 'registered_desc' | 'name_asc' | 'number_asc' | 'balance_desc' | 'monthly_amount_desc' | 'call_count_desc';
     const [customerSortBy, setCustomerSortBy] = useState<CustomerSortOption>('registered_desc');
@@ -80,14 +82,14 @@ export default function AdminDashboard() {
     const [editStaffData, setEditStaffData] = useState<{ name: string, password: string, email: string, services: string[] }>({ name: '', password: '', email: '', services: [] });
 
     const [editingCustomerName, setEditingCustomerName] = useState<string | null>(null);
-    const [editCustomerData, setEditCustomerData] = useState<{ customerName: string, customerPhone: string }>({ customerName: '', customerPhone: '' });
+    const [editCustomerData, setEditCustomerData] = useState<{ customerName: string, customerPhone: string, customerPassword: string }>({ customerName: '', customerPhone: '', customerPassword: '' });
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     // 顧客追加・チャージ用モーダルステート
     const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
     const [showChargeModal, setShowChargeModal] = useState(false);
     const [chargeTarget, setChargeTarget] = useState<string | null>(null);
-    const [newCustomerData, setNewCustomerData] = useState({ name: '', phone: '' });
+    const [newCustomerData, setNewCustomerData] = useState({ name: '', phone: '', password: '' });
     const [chargeData, setChargeData] = useState({ amount: '', bonusRate: bonusRate.toString() });
 
     // スタッフ追加モーダル用ステート
@@ -204,6 +206,7 @@ export default function AdminDashboard() {
                     safePhones[k] = String(v).trim().replace(/^'/, '');
                 }
                 setCustomerPhones(safePhones);
+                setCustomerPasswords(json.passwords || {});
             }
         } catch (err) {
             console.error('デポジット取得エラー:', err);
@@ -1748,7 +1751,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                 <button
                                                                     onClick={() => {
                                                                         setEditingCustomerName(customerName);
-                                                                        setEditCustomerData({ customerName: customerName, customerPhone: phone === '登録なし' ? '' : phone });
+                                                                        setEditCustomerData({ customerName: customerName, customerPhone: phone === '登録なし' ? '' : phone, customerPassword: customerPasswords[customerName] || '' });
                                                                     }}
                                                                     className="px-2.5 py-1 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded text-xs font-bold hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors whitespace-nowrap">
                                                                     ⚙️ 設定
@@ -1786,6 +1789,16 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         className="w-full border border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
                                                     />
                                                 </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">マイページパスワード</label>
+                                                    <input
+                                                        type="text"
+                                                        value={editCustomerData.customerPassword}
+                                                        onChange={(e) => setEditCustomerData({ ...editCustomerData, customerPassword: e.target.value })}
+                                                        className="w-full border border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
+                                                        placeholder="顧客マイページ用のパスワード"
+                                                    />
+                                                </div>
                                             </div>
                                             <div className="space-y-3 mt-6">
                                                 {/* ブラックリスト登録ボタン */}
@@ -1820,7 +1833,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                         action: 'editCustomer',
                                                                         oldName: editingCustomerName,
                                                                         newName: editCustomerData.customerName,
-                                                                        phone: normalizedPhone
+                                                                        phone: normalizedPhone,
+                                                                        password: editCustomerData.customerPassword
                                                                     })
                                                                 });
                                                                 fetchDeposits();
@@ -2155,6 +2169,16 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     placeholder="090-1234-5678"
                                 />
                             </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">マイページパスワード</label>
+                                <input
+                                    type="text"
+                                    value={newCustomerData.password}
+                                    onChange={(e) => setNewCustomerData({ ...newCustomerData, password: e.target.value })}
+                                    className="w-full border border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
+                                    placeholder="任意（後から設定も可能）"
+                                />
+                            </div>
                         </div>
                         <div className="flex gap-3 mt-6">
                             <button
@@ -2178,11 +2202,12 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             body: JSON.stringify({
                                                 action: 'addCustomer',
                                                 customerName: newCustomerData.name,
-                                                customerPhone: normalizedPhone
+                                                customerPhone: normalizedPhone,
+                                                password: newCustomerData.password
                                             })
                                         });
                                         fetchDeposits();
-                                        setNewCustomerData({ name: '', phone: '' });
+                                        setNewCustomerData({ name: '', phone: '', password: '' });
                                         setShowAddCustomerModal(false);
                                     } catch (err) {
                                         console.error(err);
@@ -2228,7 +2253,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                             </div>
                             <div className="bg-green-50 dark:bg-green-900/30 p-3 rounded-lg">
                                 <p className="text-sm text-green-700 dark:text-green-400">
-                                    還元後の合計: <span className="font-bold">¥{(Number(chargeData.amount) * (1 + Number(chargeData.bonusRate) / 100)).toLocaleString()}</span>
+                                    還元後の合計: <span className="font-bold">¥{Math.floor(Number(chargeData.amount) * (1 + Number(chargeData.bonusRate) / 100)).toLocaleString()}</span>
                                 </p>
                             </div>
                         </div>
@@ -2247,7 +2272,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     setIsSaving(true);
                                     try {
                                         const bonusAmount = Number(chargeData.amount) * (Number(chargeData.bonusRate) / 100);
-                                        const totalAmount = Number(chargeData.amount) + bonusAmount;
+                                        const totalAmount = Math.floor(Number(chargeData.amount) + bonusAmount);
 
                                         setDeposits(prev => ({ ...prev, [chargeTarget]: (prev[chargeTarget] || 0) + totalAmount }));
 

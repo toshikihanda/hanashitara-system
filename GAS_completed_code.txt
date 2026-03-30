@@ -266,7 +266,7 @@ function doPost(e) {
       let sheet = ss.getSheetByName("顧客リスト");
       if (!sheet) {
         sheet = ss.insertSheet("顧客リスト");
-        sheet.appendRow(["お客様名", "電話番号", "登録日"]); 
+        sheet.appendRow(["お客様名", "電話番号", "登録日", "パスワード"]);
       }
       
       const customerName = data.customerName;
@@ -282,7 +282,7 @@ function doPost(e) {
       }
       
       if (!exists) {
-        sheet.appendRow([customerName, `'${phone}`, new Date().toLocaleString('ja-JP')]);
+        sheet.appendRow([customerName, `'${phone}`, new Date().toLocaleString('ja-JP'), data.password || '']);
       }
       
       // デポジット用にも0円で枠を作っておく
@@ -313,6 +313,7 @@ function doPost(e) {
           if (values[i][0] === oldName) {
              custSheet.getRange(i + 1, 1).setValue(newName);
              custSheet.getRange(i + 1, 2).setValue(`'${phone}`);
+             if (data.password !== undefined) custSheet.getRange(i + 1, 4).setValue(data.password);
           }
         }
       }
@@ -457,6 +458,29 @@ function doPost(e) {
         }
       }
       return output.setContent(JSON.stringify({ success: false, message: 'メールアドレスまたはパスワードが違います' }));
+    }
+
+    // ⑧-2 顧客マイページログイン認証（電話番号 + パスワード）
+    if (action === 'customerLogin') {
+      const custSheet = ss.getSheetByName('顧客リスト');
+      if (!custSheet) return output.setContent(JSON.stringify({ success: false, message: '顧客リストが見つかりません' }));
+
+      const phone = String(data.phone).replace(/[-\s']/g, '');
+      const password = String(data.password);
+      const values = custSheet.getDataRange().getValues();
+
+      for (let i = 1; i < values.length; i++) {
+        const rowPhone = String(values[i][1]).replace(/[-\s']/g, '');
+        const rowPassword = String(values[i][3] || '').trim(); // D列: パスワード
+        if (rowPhone === phone && rowPassword === password && rowPassword !== '') {
+          return output.setContent(JSON.stringify({
+            success: true,
+            phone: rowPhone,
+            customerName: values[i][0]
+          }));
+        }
+      }
+      return output.setContent(JSON.stringify({ success: false, message: '電話番号またはパスワードが正しくありません' }));
     }
 
     // ⑨ 給与明細メール送信
@@ -624,15 +648,15 @@ function doGet(e) {
       return output.setContent(JSON.stringify(result));
     }
 
-    // 残高データの取得（電話番号対応）
+    // 残高データの取得（電話番号・パスワード対応）
     if (action === 'getDeposits') {
       const sheet = ss.getSheetByName("前払い管理");
       if (!sheet) return output.setContent(JSON.stringify({ success: false, message: '前払い管理シートがありません' }));
-      
+
       const data = sheet.getDataRange().getValues();
       const deposits = {};
       const phones = {};
-      if (data.length > 1) { 
+      if (data.length > 1) {
         for (let i = 1; i < data.length; i++) {
           const name = data[i][0];
           const phone = data[i][1];
@@ -643,8 +667,102 @@ function doGet(e) {
           }
         }
       }
-      return output.setContent(JSON.stringify({ success: true, deposits: deposits, phones: phones }));
+
+      // 顧客リストからパスワードを取得（D列）
+      const passwords = {};
+      const custSheet = ss.getSheetByName("顧客リスト");
+      if (custSheet) {
+        const custData = custSheet.getDataRange().getValues();
+        for (let i = 1; i < custData.length; i++) {
+          const name = custData[i][0];
+          const pw = custData[i][3]; // D列: パスワード
+          if (name) passwords[name] = String(pw || '');
+        }
+      }
+
+      return output.setContent(JSON.stringify({ success: true, deposits: deposits, phones: phones, passwords: passwords }));
     }
+    // 顧客マイページ用データ取得（残高 + 利用/チャージ履歴）
+    if (action === 'getCustomerMyPage') {
+      const phone = String(e.parameter.phone || '').replace(/[-\s']/g, '');
+      if (!phone) return output.setContent(JSON.stringify({ success: false, message: '電話番号が必要です' }));
+
+      // 顧客名を特定
+      let customerName = '';
+      const custSheet = ss.getSheetByName('顧客リスト');
+      if (custSheet) {
+        const custData = custSheet.getDataRange().getValues();
+        for (let i = 1; i < custData.length; i++) {
+          if (String(custData[i][1]).replace(/[-\s']/g, '') === phone) {
+            customerName = custData[i][0];
+            break;
+          }
+        }
+      }
+      if (!customerName) return output.setContent(JSON.stringify({ success: false, message: '顧客が見つかりません' }));
+
+      // 残高を取得
+      let balance = 0;
+      const depSheet = ss.getSheetByName('前払い管理');
+      if (depSheet) {
+        const depData = depSheet.getDataRange().getValues();
+        for (let i = 1; i < depData.length; i++) {
+          if (depData[i][0] === customerName) {
+            balance = Number(depData[i][2]) || 0;
+            break;
+          }
+        }
+      }
+
+      // 履歴を構築（デポジット履歴 + 業務報告から利用分）
+      const history = [];
+
+      // チャージ履歴（デポジット履歴シートから）
+      const histSheet = ss.getSheetByName('デポジット履歴');
+      if (histSheet) {
+        const histData = histSheet.getDataRange().getValues();
+        for (let i = 1; i < histData.length; i++) {
+          if (histData[i][1] === customerName && histData[i][3] === 'チャージ') {
+            history.push({
+              date: histData[i][0],
+              type: 'charge',
+              chargeAmount: Number(histData[i][2]) || 0,
+              totalCharged: Number(histData[i][2]) || 0
+            });
+          }
+        }
+      }
+
+      // 利用履歴（業務報告シートから）
+      const reportSheet = ss.getSheetByName('業務報告');
+      if (reportSheet) {
+        const repData = reportSheet.getDataRange().getValues();
+        for (let i = 1; i < repData.length; i++) {
+          if (repData[i][4] === customerName) {
+            history.push({
+              date: repData[i][1],
+              type: 'usage',
+              staffName: repData[i][2],
+              amount: Number(repData[i][6]) || 0,
+              serviceSummary: repData[i][5]
+            });
+          }
+        }
+      }
+
+      // 日付の降順でソート
+      history.sort(function(a, b) {
+        return new Date(b.date) - new Date(a.date);
+      });
+
+      return output.setContent(JSON.stringify({
+        success: true,
+        balance: balance,
+        customerName: customerName,
+        history: history
+      }));
+    }
+
     // デポジット履歴取得
     if (action === 'getDepositHistory') {
       const sheet = ss.getSheetByName("デポジット履歴");

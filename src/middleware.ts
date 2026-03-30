@@ -5,6 +5,11 @@ export const config = {
 };
 
 export function middleware(req: NextRequest) {
+  // 顧客マイページは独自認証を使うためBasic認証をスキップ
+  if (req.nextUrl.pathname.startsWith('/customer')) {
+    return NextResponse.next();
+  }
+
   const basicAuth = req.headers.get('authorization');
   const url = req.nextUrl;
 
