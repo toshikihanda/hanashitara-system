@@ -2276,8 +2276,9 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
 
                                         setDeposits(prev => ({ ...prev, [chargeTarget]: (prev[chargeTarget] || 0) + totalAmount }));
 
-                                        await fetch(GAS_URL, {
+                                        const chargeRes = await fetch(GAS_URL, {
                                             method: 'POST',
+                                            redirect: 'follow',
                                             body: JSON.stringify({
                                                 action: 'updateDeposit',
                                                 type: 'charge',
@@ -2287,8 +2288,11 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 bonusRate: Number(chargeData.bonusRate)
                                             })
                                         });
+                                        await chargeRes.text();
 
-                                        fetchDeposits();
+                                        // GASのスプレッドシート書き込み完了を待ってから再取得
+                                        await new Promise(r => setTimeout(r, 1500));
+                                        await fetchDeposits();
                                         setChargeData({ amount: '', bonusRate: bonusRate.toString() });
                                         setShowChargeModal(false);
                                         setChargeTarget(null);
