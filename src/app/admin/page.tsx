@@ -711,10 +711,14 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                         <span className="text-lg">📱</span>
                         <span>顧客管理</span>
                     </button>
-                    <div className="pt-4 mt-2 border-t border-[#242436]">
+                    <div className="pt-4 mt-2 border-t border-[#242036]">
                         <a href="/mypage" target="_blank" className="w-full text-left px-5 py-3 flex items-center gap-3 transition-colors text-gray-400 hover:bg-[#1a1a28] hover:text-gray-200 border-l-4 border-transparent text-sm">
                             <span className="text-lg">✏️</span>
                             <span>業務報告入力</span>
+                        </a>
+                        <a href="/customer/login" target="_blank" className="w-full text-left px-5 py-3 flex items-center gap-3 transition-colors text-gray-400 hover:bg-[#1a1a28] hover:text-gray-200 border-l-4 border-transparent text-sm">
+                            <span className="text-lg">👤</span>
+                            <span>顧客マイページ</span>
                         </a>
                     </div>
                 </nav>
