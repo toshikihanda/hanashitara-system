@@ -24,6 +24,7 @@ export default function AdminDashboard() {
     const [reports, setReports] = useState<ReportData[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [savingMessage, setSavingMessage] = useState<string | null>(null);
     const [errorText, setErrorText] = useState('');
     const [staffMasterSet, setStaffMasterSet] = useState<Set<string>>(new Set());
 
@@ -1804,7 +1805,60 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     />
                                                 </div>
                                             </div>
-                                            <div className="space-y-3 mt-6">
+                                            {/* デポジット残高の調整セクション */}
+                                            <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                                                <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">デポジット残高の調整</h4>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">現在の残高: ¥{(deposits[editingCustomerName] || 0).toLocaleString()}</p>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="number"
+                                                        id="fixBalanceInput"
+                                                        placeholder="新しい残高を入力"
+                                                        className="flex-1 border border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 dark:bg-gray-700 dark:text-gray-100"
+                                                    />
+                                                    <button
+                                                        disabled={isSaving}
+                                                        onClick={async () => {
+                                                            const input = document.getElementById('fixBalanceInput') as HTMLInputElement;
+                                                            const newBalance = Number(input?.value);
+                                                            if (isNaN(newBalance) || input?.value === '') {
+                                                                return alert('有効な金額を入力してください');
+                                                            }
+                                                            if (!confirm(`${editingCustomerName} さんの残高を ¥${newBalance.toLocaleString()} に上書きしますか？`)) return;
+                                                            setIsSaving(true);
+                                                            setSavingMessage('残高を調整中...');
+                                                            try {
+                                                                const res = await fetch(GAS_URL, {
+                                                                    method: 'POST',
+                                                                    body: JSON.stringify({
+                                                                        action: 'fixDepositBalance',
+                                                                        customerName: editingCustomerName,
+                                                                        newBalance: newBalance
+                                                                    })
+                                                                });
+                                                                const resJson = await res.json();
+                                                                if (resJson.success) {
+                                                                    setDeposits(prev => ({ ...prev, [editingCustomerName!]: resJson.newBalance }));
+                                                                    alert('残高を更新しました');
+                                                                    input.value = '';
+                                                                } else {
+                                                                    alert('エラー: ' + (resJson.message || '残高の更新に失敗しました'));
+                                                                }
+                                                            } catch (e) {
+                                                                alert('エラーが発生しました');
+                                                            } finally {
+                                                                setIsSaving(false);
+                                                                setSavingMessage(null);
+                                                            }
+                                                        }}
+                                                        className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-bold hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
+                                                        残高を上書き
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-3 mt-4">
                                                 {/* ブラックリスト登録ボタン */}
                                                 {editCustomerData.customerPhone && editCustomerData.customerPhone !== '登録なし' && !blacklistedPhones.some(bl => normalizePhone(bl) === normalizePhone(editCustomerData.customerPhone)) && (
                                                     <button
@@ -2087,6 +2141,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         <th className="px-4 py-2 text-center">操作</th>
                                                         <th className="px-4 py-2 text-right">増減額</th>
                                                         <th className="px-4 py-2 text-right">残高</th>
+                                                        <th className="px-4 py-2 text-center">削除</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -2102,11 +2157,51 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                 {log.type === 'チャージ' ? '+' : '-'}¥{Math.abs(log.amount).toLocaleString()}
                                                             </td>
                                                             <td className="px-4 py-3 text-right font-bold text-gray-800 dark:text-gray-200">¥{log.balance.toLocaleString()}</td>
+                                                            <td className="px-4 py-3 text-center">
+                                                                <button
+                                                                    disabled={isSaving}
+                                                                    onClick={async () => {
+                                                                        if (!confirm('この履歴を削除しますか？\n※残高の調整は手動で行ってください')) return;
+                                                                        setIsSaving(true);
+                                                                        setSavingMessage('履歴を削除中...');
+                                                                        try {
+                                                                            const res = await fetch(GAS_URL, {
+                                                                                method: 'POST',
+                                                                                body: JSON.stringify({
+                                                                                    action: 'deleteDepositHistory',
+                                                                                    date: log.date,
+                                                                                    customerName: log.customerName,
+                                                                                    amount: log.amount,
+                                                                                    type: log.type
+                                                                                })
+                                                                            });
+                                                                            const resJson = await res.json();
+                                                                            if (resJson.success) {
+                                                                                setDepositLogs(prev => prev.filter((_, idx) => {
+                                                                                    const filtered = prev.filter(l => l.customerName === showHistoryForCustomer);
+                                                                                    const originalIdx = prev.indexOf(filtered[i]);
+                                                                                    return idx !== originalIdx;
+                                                                                }));
+                                                                            } else {
+                                                                                alert('削除に失敗しました: ' + (resJson.message || ''));
+                                                                            }
+                                                                        } catch (e) {
+                                                                            alert('エラーが発生しました');
+                                                                        } finally {
+                                                                            setIsSaving(false);
+                                                                            setSavingMessage(null);
+                                                                        }
+                                                                    }}
+                                                                    className="text-red-500 hover:text-red-700 text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                >
+                                                                    🗑️ 削除
+                                                                </button>
+                                                            </td>
                                                         </tr>
                                                     ))}
                                                     {depositLogs.filter(log => log.customerName === showHistoryForCustomer).length === 0 && (
                                                         <tr>
-                                                            <td colSpan={4} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500">デポジットの履歴がありません</td>
+                                                            <td colSpan={5} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500">デポジットの履歴がありません</td>
                                                         </tr>
                                                     )}
                                                 </tbody>
@@ -2274,11 +2369,10 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         return alert('有効な金額を入力してください');
                                     }
                                     setIsSaving(true);
+                                    setSavingMessage('チャージ処理中...画面を閉じないでお待ちください');
                                     try {
                                         const bonusAmount = Number(chargeData.amount) * (Number(chargeData.bonusRate) / 100);
                                         const totalAmount = Math.floor(Number(chargeData.amount) + bonusAmount);
-
-                                        setDeposits(prev => ({ ...prev, [chargeTarget]: (prev[chargeTarget] || 0) + totalAmount }));
 
                                         const chargeRes = await fetch(GAS_URL, {
                                             method: 'POST',
@@ -2292,11 +2386,13 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 bonusRate: Number(chargeData.bonusRate)
                                             })
                                         });
-                                        await chargeRes.text();
+                                        const resJson = await chargeRes.json();
 
-                                        // GASのスプレッドシート書き込み完了を待ってから再取得
-                                        await new Promise(r => setTimeout(r, 1500));
-                                        await fetchDeposits();
+                                        if (resJson.success && resJson.newBalance !== undefined) {
+                                            setDeposits(prev => ({ ...prev, [chargeTarget]: resJson.newBalance }));
+                                        } else {
+                                            setDeposits(prev => ({ ...prev, [chargeTarget]: (prev[chargeTarget] || 0) + totalAmount }));
+                                        }
                                         setChargeData({ amount: '', bonusRate: bonusRate.toString() });
                                         setShowChargeModal(false);
                                         setChargeTarget(null);
@@ -2305,11 +2401,13 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         alert('エラーが発生しました');
                                     } finally {
                                         setIsSaving(false);
+                                        setSavingMessage(null);
                                     }
                                 }}
-                                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition-colors"
+                                disabled={isSaving}
+                                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                チャージする
+                                {isSaving ? '処理中...' : 'チャージする'}
                             </button>
                         </div>
                     </div>
@@ -2320,7 +2418,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
             {isSaving && (
                 <div className="fixed inset-0 bg-black/50 flex flex-col items-center justify-center z-[100]">
                     <div className="animate-spin rounded-full h-12 w-12 border-4 border-white/20 border-t-white mb-4"></div>
-                    <p className="text-white font-bold tracking-wider">保存中...</p>
+                    <p className="text-white font-bold tracking-wider">{savingMessage || '保存中...'}</p>
                 </div>
             )}
 

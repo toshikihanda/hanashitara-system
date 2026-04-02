@@ -399,9 +399,70 @@ function doPost(e) {
       const typeLabel = data.type === 'charge' ? 'チャージ' : '利用';
       historySheet.appendRow([new Date().toLocaleString('ja-JP'), customerName, amount, typeLabel, newBalance]);
       
-      return output.setContent(JSON.stringify({ success: true }));
+      return output.setContent(JSON.stringify({ success: true, newBalance: newBalance }));
     }
-    
+
+    // ⑥-2 残高強制上書き
+    if (action === 'fixDepositBalance') {
+      const sheet = ss.getSheetByName("前払い管理");
+      let historySheet = ss.getSheetByName("デポジット履歴");
+      if (!historySheet) {
+        historySheet = ss.insertSheet("デポジット履歴");
+        historySheet.appendRow(["日時", "お客様名", "増減額", "種別", "残高"]);
+      }
+      if (!sheet) {
+        return output.setContent(JSON.stringify({ success: false, message: '前払い管理シートがありません' }));
+      }
+
+      const customerName = data.customerName;
+      const newBalance = Number(data.newBalance) || 0;
+      const values = sheet.getDataRange().getValues();
+      let found = false;
+      let oldBalance = 0;
+
+      for (let i = 1; i < values.length; i++) {
+        if (values[i][0] === customerName) {
+          oldBalance = Number(values[i][2]) || 0;
+          sheet.getRange(i + 1, 3).setValue(newBalance);
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        return output.setContent(JSON.stringify({ success: false, message: '顧客が見つかりません' }));
+      }
+
+      // 履歴に残高調整ログを追加
+      const diff = newBalance - oldBalance;
+      historySheet.appendRow([new Date().toLocaleString('ja-JP'), customerName, diff, '残高調整', newBalance]);
+
+      return output.setContent(JSON.stringify({ success: true, newBalance: newBalance }));
+    }
+
+    // ⑥-3 デポジット履歴の個別削除
+    if (action === 'deleteDepositHistory') {
+      const historySheet = ss.getSheetByName("デポジット履歴");
+      if (!historySheet) {
+        return output.setContent(JSON.stringify({ success: false, message: 'デポジット履歴シートがありません' }));
+      }
+
+      const values = historySheet.getDataRange().getValues();
+      for (let i = 1; i < values.length; i++) {
+        const rowDate = String(values[i][0]);
+        const rowName = String(values[i][1]);
+        const rowAmount = Number(values[i][2]);
+        const rowType = String(values[i][3]);
+
+        if (rowDate === data.date && rowName === data.customerName && rowAmount === Number(data.amount) && rowType === data.type) {
+          historySheet.deleteRow(i + 1);
+          return output.setContent(JSON.stringify({ success: true }));
+        }
+      }
+
+      return output.setContent(JSON.stringify({ success: false, message: '該当する履歴が見つかりません' }));
+    }
+
     // ⑦ スタッフの追加・マスタ管理
     if (action === 'addStaff') {
       let sheet = ss.getSheetByName("スタッフマスタ");
@@ -662,8 +723,11 @@ function doGet(e) {
           const phone = data[i][1];
           const balance = data[i][2];
           if (name) {
-            deposits[name] = Number(balance) || 0;
-            if(phone) phones[name] = phone;
+            // 重複行がある場合は最初に見つかった行（updateDepositと同じ行）を優先
+            if (deposits[name] === undefined) {
+              deposits[name] = Number(balance) || 0;
+            }
+            if(phone && !phones[name]) phones[name] = phone;
           }
         }
       }
