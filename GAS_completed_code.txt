@@ -449,12 +449,21 @@ function doPost(e) {
 
       const values = historySheet.getDataRange().getValues();
       for (let i = 1; i < values.length; i++) {
-        const rowDate = String(values[i][0]);
+        const rowDate = values[i][0];
         const rowName = String(values[i][1]);
         const rowAmount = Number(values[i][2]);
         const rowType = String(values[i][3]);
 
-        if (rowDate === data.date && rowName === data.customerName && rowAmount === Number(data.amount) && rowType === data.type) {
+        // 日付比較: スプレッドシートがDate型で保持している場合はgetTime()で比較
+        let dateMatch = false;
+        if (rowDate instanceof Date && data.date) {
+          const inputDate = new Date(data.date);
+          dateMatch = !isNaN(inputDate.getTime()) && rowDate.getTime() === inputDate.getTime();
+        } else {
+          dateMatch = String(rowDate) === String(data.date);
+        }
+
+        if (dateMatch && rowName === data.customerName && rowAmount === Number(data.amount) && rowType === data.type) {
           historySheet.deleteRow(i + 1);
           return output.setContent(JSON.stringify({ success: true }));
         }
