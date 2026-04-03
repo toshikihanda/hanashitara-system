@@ -2119,13 +2119,13 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             個別履歴
                                         </button>
                                         <button onClick={() => setHistoryTabMode('ledger')} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${historyTabMode === 'ledger' ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
-                                            📒 綜合帳簿
+                                            📒 通帳
                                         </button>
                                     </div>
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8 bg-gray-50/30">
 
-                                    {/* 📒 綜合帳簿タブ */}
+                                    {/* 📒 通帳タブ */}
                                     {historyTabMode === 'ledger' && (() => {
                                         const customer = showHistoryForCustomer!;
                                         // 通話履歴（マイナス）
