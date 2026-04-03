@@ -2259,10 +2259,41 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                             </div>
                                                                         )}
                                                                         {entry.type === 'deposit' && (
+                                                                            <div className="flex items-center justify-center gap-1">
+                                                                            <button
+                                                                                disabled={isSaving}
+                                                                                onClick={() => {
+                                                                                    const newAmount = prompt(`金額を変更（現在: ¥${entry.amount.toLocaleString()}）`, String(entry.amount));
+                                                                                    if (newAmount === null) return;
+                                                                                    const val = Number(newAmount);
+                                                                                    if (isNaN(val)) { alert('有効な金額を入力してください'); return; }
+                                                                                    (async () => {
+                                                                                        setIsSaving(true);
+                                                                                        setSavingMessage('編集中...');
+                                                                                        try {
+                                                                                            const log = depositLogs.filter(l => l.customerName === customer)[depositEntries.findIndex(d => d.id === entry.id)];
+                                                                                            if (!log) { alert('該当する履歴が見つかりません'); return; }
+                                                                                            const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'editDepositHistory', date: log.date, customerName: log.customerName, oldAmount: log.amount, newAmount: val, type: log.type }) });
+                                                                                            const resJson = await res.json();
+                                                                                            if (resJson.success) {
+                                                                                                const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`);
+                                                                                                const histJson = await histRes.json();
+                                                                                                if (histJson.success) setDepositLogs(histJson.history);
+                                                                                                if (resJson.newBalance !== undefined) {
+                                                                                                    setDeposits(prev => ({ ...prev, [customer]: resJson.newBalance }));
+                                                                                                }
+                                                                                                showToast(`金額を ¥${val.toLocaleString()} に変更しました`);
+                                                                                            } else { alert('エラー: ' + (resJson.message || '')); }
+                                                                                        } catch (e) { alert('エラーが発生しました'); }
+                                                                                        finally { setIsSaving(false); setSavingMessage(null); }
+                                                                                    })();
+                                                                                }}
+                                                                                className="text-blue-500 hover:text-blue-700 text-xs font-bold disabled:opacity-50"
+                                                                            >✏️</button>
                                                                             <button
                                                                                 disabled={isSaving}
                                                                                 onClick={async () => {
-                                                                                    if (!confirm(`このデポジット履歴を削除しますか？\n\n${entry.label}: ¥${entry.amount.toLocaleString()}\n\n※前払い管理の残高は変更されません。必要に応じて手動で調整してください。`)) return;
+                                                                                    if (!confirm(`このデポジット履歴を削除しますか？\n\n${entry.label}: ¥${entry.amount.toLocaleString()}\n\n※残高は自動で調整されます。`)) return;
                                                                                     setIsSaving(true);
                                                                                     setSavingMessage('削除中...');
                                                                                     try {
@@ -2284,6 +2315,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                                 }}
                                                                                 className="text-red-500 hover:text-red-700 text-xs font-bold disabled:opacity-50"
                                                                             >🗑️</button>
+                                                                            </div>
                                                                         )}
                                                                     </td>
                                                                 </tr>
