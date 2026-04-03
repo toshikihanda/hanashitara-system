@@ -91,8 +91,10 @@ function doPost(e) {
       // 前払い残高から自動引き落とし
       if (depositSheet && customerName && sales > 0) {
         const dValues = depositSheet.getDataRange().getValues();
+        let customerFound = false;
         for (let i = 1; i < dValues.length; i++) {
           if (dValues[i][0] === customerName) {
+            customerFound = true;
             currentDeposit = Number(dValues[i][2]) || 0; // 残高は3列目(C列)に変更
             if (currentDeposit >= sales) {
               // デポジットで全額カバーできる場合
@@ -114,6 +116,11 @@ function doPost(e) {
             }
             break;
           }
+        }
+        // 前払い管理シートに顧客が見つからなかった場合のフォールバック
+        if (!customerFound) {
+          depositUsed = 0;
+          billingAmount = sales;
         }
       } else {
         // デポジット管理されていない顧客の場合
@@ -504,7 +511,7 @@ function doPost(e) {
             if (repValues[i][4] === customerName && repValues[i][8] === '未入金') {
               const billing = Number(repValues[i][11]) || 0;
               if (billing > 0) {
-                unpaidRows.push({ rowIndex: i + 1, billing: billing, date: repValues[i][1] });
+                unpaidRows.push({ rowIndex: i + 1, originalIndex: i, billing: billing, date: repValues[i][1] });
               }
             }
           }
@@ -519,12 +526,17 @@ function doPost(e) {
               totalSettled += unpaid.billing;
               reportSheet.getRange(unpaid.rowIndex, 9).setValue('入金済');
               reportSheet.getRange(unpaid.rowIndex, 10).setValue(nowJST());
+              // K列: 元のデポジット使用額に充当額を加算
+              const oldDepUsed = Number(repValues[unpaid.originalIndex][10]) || 0;
+              reportSheet.getRange(unpaid.rowIndex, 11).setValue(oldDepUsed + unpaid.billing);
               reportSheet.getRange(unpaid.rowIndex, 12).setValue(0); // 請求額を0に
               settledReports.push({ date: unpaid.date, amount: unpaid.billing });
             } else {
               // 一部充当（残りのチャージ額で部分的に支払い）
               const partialPay = remainingCharge;
               totalSettled += partialPay;
+              const oldDepUsed2 = Number(repValues[unpaid.originalIndex][10]) || 0;
+              reportSheet.getRange(unpaid.rowIndex, 11).setValue(oldDepUsed2 + partialPay);
               reportSheet.getRange(unpaid.rowIndex, 12).setValue(unpaid.billing - partialPay);
               remainingCharge = 0;
               settledReports.push({ date: unpaid.date, amount: partialPay, partial: true });
