@@ -427,6 +427,55 @@ function doPost(e) {
       return output.setContent(JSON.stringify({ success: true }));
     }
 
+    // ⑤-1.6 お客様の削除（顧客リスト・前払い管理・デポジット履歴から削除）
+    if (action === 'deleteCustomer') {
+      const customerName = data.customerName;
+      let deletedFrom = [];
+
+      // 1. 顧客リストから削除
+      const custSheet = ss.getSheetByName("顧客リスト");
+      if (custSheet) {
+        const values = custSheet.getDataRange().getValues();
+        for (let i = values.length - 1; i >= 1; i--) {
+          if (values[i][0] === customerName) {
+            custSheet.deleteRow(i + 1);
+            deletedFrom.push('顧客リスト');
+            break;
+          }
+        }
+      }
+
+      // 2. 前払い管理から削除
+      const depSheet = ss.getSheetByName("前払い管理");
+      if (depSheet) {
+        const values = depSheet.getDataRange().getValues();
+        for (let i = values.length - 1; i >= 1; i--) {
+          if (values[i][0] === customerName) {
+            depSheet.deleteRow(i + 1);
+            deletedFrom.push('前払い管理');
+            break;
+          }
+        }
+      }
+
+      // 3. デポジット履歴から該当顧客の行をすべて削除
+      const histSheet = ss.getSheetByName("デポジット履歴");
+      if (histSheet) {
+        const values = histSheet.getDataRange().getValues();
+        let count = 0;
+        for (let i = values.length - 1; i >= 1; i--) {
+          if (values[i][1] === customerName) {
+            histSheet.deleteRow(i + 1);
+            count++;
+          }
+        }
+        if (count > 0) deletedFrom.push('デポジット履歴(' + count + '件)');
+      }
+
+      // 注意: 業務報告は削除しない（売上・スタッフ報酬の記録として残す）
+      return output.setContent(JSON.stringify({ success: true, deletedFrom: deletedFrom }));
+    }
+
     // ⑤-2 業務報告の削除（デポジット逆戻し＋残高返却付き）
     if (action === 'deleteReport') {
       const sheet = ss.getSheetByName("業務報告");

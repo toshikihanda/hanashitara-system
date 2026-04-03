@@ -1901,6 +1901,47 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     </button>
                                                 )}
 
+                                                {/* 顧客削除ボタン */}
+                                                <button
+                                                    disabled={isSaving}
+                                                    onClick={async () => {
+                                                        const name = editCustomerData.customerName || editingCustomerName;
+                                                        if (!confirm(`「${name}」さんを削除しますか？\n\n以下が削除されます:\n・顧客リストの登録\n・前払い管理の残高\n・デポジット履歴\n\n※業務報告（売上記録）は残ります。`)) return;
+                                                        if (!confirm(`本当に削除してよろしいですか？\nこの操作は取り消せません。`)) return;
+                                                        setIsSaving(true);
+                                                        setSavingMessage('顧客情報を削除中...');
+                                                        try {
+                                                            const res = await fetch(GAS_URL, {
+                                                                method: 'POST',
+                                                                body: JSON.stringify({ action: 'deleteCustomer', customerName: editingCustomerName })
+                                                            });
+                                                            const json = await res.json();
+                                                            if (json.success) {
+                                                                setEditingCustomerName(null);
+                                                                // ローカルステートからも削除
+                                                                setDeposits(prev => { const n = { ...prev }; delete n[editingCustomerName!]; return n; });
+                                                                setCustomerPhones(prev => { const n = { ...prev }; delete n[editingCustomerName!]; return n; });
+                                                                setCustomerPasswords(prev => { const n = { ...prev }; delete n[editingCustomerName!]; return n; });
+                                                                // デポジット履歴も再取得
+                                                                const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`);
+                                                                const histJson = await histRes.json();
+                                                                if (histJson.success) setDepositLogs(histJson.history);
+                                                                showToast(`${editingCustomerName} さんを削除しました`);
+                                                            } else {
+                                                                alert('エラー: ' + (json.message || '削除に失敗しました'));
+                                                            }
+                                                        } catch (e) {
+                                                            alert('エラーが発生しました');
+                                                        } finally {
+                                                            setIsSaving(false);
+                                                            setSavingMessage(null);
+                                                        }
+                                                    }}
+                                                    className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900/30 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg font-bold hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition-colors text-sm disabled:opacity-50"
+                                                >
+                                                    この顧客を削除する
+                                                </button>
+
                                                 <div className="flex gap-3">
                                                     <button
                                                         onClick={() => setEditingCustomerName(null)}
