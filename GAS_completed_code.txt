@@ -1,5 +1,15 @@
 const SHEET_ID = '12yZfMnBIqW5Q7WOtHnnZLIDz9NAgkTem8RFoTMINUfU';
 
+// JST日時文字列を返すヘルパー（スプレッドシートへの保存時に統一使用）
+function nowJST() {
+  return Utilities.formatDate(new Date(), "JST", "yyyy/MM/dd HH:mm:ss");
+}
+
+// JST日付のみ（時刻なし）を返すヘルパー
+function todayJST() {
+  return Utilities.formatDate(new Date(), "JST", "yyyy/MM/dd");
+}
+
 function doPost(e) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   
@@ -46,7 +56,7 @@ function doPost(e) {
           }
         }
         if (!custExists) {
-          custSheet.appendRow([data.customerName, "'" + data.customerPhone, new Date().toLocaleString('ja-JP')]);
+          custSheet.appendRow([data.customerName, "'" + data.customerPhone, nowJST()]);
           // 前払い管理にも0円で枠を作成
           const depSheet = ss.getSheetByName('前払い管理');
           if (depSheet) {
@@ -236,7 +246,7 @@ function doPost(e) {
         `'${data.phone}`,
         data.name,
         data.reason,
-        new Date().toLocaleString('ja-JP')
+        nowJST()
       ]);
 
       // 全スタッフへブラックリスト登録の一斉通知メール
@@ -282,7 +292,7 @@ function doPost(e) {
       }
       
       if (!exists) {
-        sheet.appendRow([customerName, `'${phone}`, new Date().toLocaleString('ja-JP'), data.password || '']);
+        sheet.appendRow([customerName, `'${phone}`, nowJST(), data.password || '']);
       }
       
       // デポジット用にも0円で枠を作っておく
@@ -397,7 +407,7 @@ function doPost(e) {
 
       // 履歴に記録
       const typeLabel = data.type === 'charge' ? 'チャージ' : '利用';
-      historySheet.appendRow([new Date().toLocaleString('ja-JP'), customerName, amount, typeLabel, newBalance]);
+      historySheet.appendRow([nowJST(), customerName, amount, typeLabel, newBalance]);
       
       return output.setContent(JSON.stringify({ success: true, newBalance: newBalance }));
     }
@@ -435,7 +445,7 @@ function doPost(e) {
 
       // 履歴に残高調整ログを追加
       const diff = newBalance - oldBalance;
-      historySheet.appendRow([new Date().toLocaleString('ja-JP'), customerName, diff, '残高調整', newBalance]);
+      historySheet.appendRow([nowJST(), customerName, diff, '残高調整', newBalance]);
 
       return output.setContent(JSON.stringify({ success: true, newBalance: newBalance }));
     }
@@ -590,12 +600,12 @@ function doPost(e) {
       const customers = [];
       for (let i = 1; i <= 20; i++) {
         customers.push({ name: `テスト顧客${i}号`, phone: `090-${String(i).padStart(4, '0')}-0000` });
-        ss.getSheetByName("顧客リスト").appendRow([`テスト顧客${i}号`, `'090-${String(i).padStart(4, '0')}-0000`, new Date().toLocaleDateString('ja-JP')]);
+        ss.getSheetByName("顧客リスト").appendRow([`テスト顧客${i}号`, `'090-${String(i).padStart(4, '0')}-0000`, todayJST()]);
       }
 
       // ブラックリスト2名
-      ss.getSheetByName("ブラックリスト").appendRow(["'090-9999-9999", "悪質ユーザーA", "未払いが続いたため", new Date().toLocaleString('ja-JP')]);
-      ss.getSheetByName("ブラックリスト").appendRow(["'080-8888-8888", "イタズラ迷惑客", "暴言・イタズラ電話", new Date().toLocaleString('ja-JP')]);
+      ss.getSheetByName("ブラックリスト").appendRow(["'090-9999-9999", "悪質ユーザーA", "未払いが続いたため", nowJST()]);
+      ss.getSheetByName("ブラックリスト").appendRow(["'080-8888-8888", "イタズラ迷惑客", "暴言・イタズラ電話", nowJST()]);
 
       // 前払い3名
       const prepayCust = customers.slice(0, 3);
@@ -648,6 +658,12 @@ function doGet(e) {
       const sheet = ss.getSheetByName('業務報告');
       const data = sheet.getDataRange().getValues();
       if (data.length > 0) data.shift();
+      // 日付列(index 1)がDate型の場合はJST文字列に変換
+      data.forEach(row => {
+        if (row[1] instanceof Date) {
+          row[1] = Utilities.formatDate(row[1], "JST", "yyyy/MM/dd HH:mm:ss");
+        }
+      });
       return output.setContent(JSON.stringify({ success: true, data: data }));
     }
 
@@ -796,8 +812,11 @@ function doGet(e) {
         const histData = histSheet.getDataRange().getValues();
         for (let i = 1; i < histData.length; i++) {
           if (histData[i][1] === customerName && histData[i][3] === 'チャージ') {
+            const hDate = histData[i][0] instanceof Date
+              ? Utilities.formatDate(histData[i][0], "JST", "yyyy/MM/dd HH:mm:ss")
+              : String(histData[i][0]);
             history.push({
-              date: histData[i][0],
+              date: hDate,
               type: 'charge',
               chargeAmount: Number(histData[i][2]) || 0,
               totalCharged: Number(histData[i][2]) || 0
@@ -844,8 +863,12 @@ function doGet(e) {
         const data = sheet.getDataRange().getValues();
         if (data.length > 0) data.shift(); // ヘッダーを削除
         data.forEach(row => {
+          // 日付がDate型の場合はJST文字列に変換してから返す
+          const dateVal = row[0] instanceof Date
+            ? Utilities.formatDate(row[0], "JST", "yyyy/MM/dd HH:mm:ss")
+            : String(row[0]);
           history.push({
-            date: row[0],
+            date: dateVal,
             customerName: row[1],
             amount: Number(row[2]) || 0,
             type: row[3],

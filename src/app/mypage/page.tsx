@@ -123,7 +123,14 @@ export default function StaffMyPage() {
 
     // 選択月のデータのみフィルタリング
     const monthReports = reports.filter(r => {
-        const d = new Date(r.date);
+        const dateStr = String(r.date);
+        // yyyy/MM/dd形式の場合は直接パース
+        if (/^\d{4}\/\d{1,2}\//.test(dateStr)) {
+            const parts = dateStr.split('/');
+            const monthStr = `${parts[0]}-${parts[1].padStart(2, '0')}`;
+            return monthStr === selectedMonth;
+        }
+        const d = new Date(dateStr);
         const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         return monthStr === selectedMonth;
     });
@@ -263,7 +270,7 @@ export default function StaffMyPage() {
                                 ) : (
                                     monthReports.map((r, i) => (
                                         <tr key={i} className="text-gray-700 dark:text-gray-300 print:text-black">
-                                            <td className="py-4 px-2">{new Date(r.date).toLocaleDateString('ja-JP')}</td>
+                                            <td className="py-4 px-2">{String(r.date).includes('/') ? String(r.date).split(' ')[0] : new Date(r.date).toLocaleDateString('ja-JP')}</td>
                                             <td className="py-4 px-2">{r.customerName}</td>
                                             <td className="py-4 px-2 text-right">¥{r.totalSales.toLocaleString()}</td>
                                             <td className="py-4 px-2 text-right font-bold text-gray-900 dark:text-gray-100">¥{r.staffShare.toLocaleString()}</td>

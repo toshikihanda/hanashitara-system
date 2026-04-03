@@ -15,6 +15,10 @@ export default function ReportForm() {
         const today = new Date();
         return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     });
+    const [reportTime, setReportTime] = useState(() => {
+        const now = new Date();
+        return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    });
     const [phoneNumber, setPhoneNumber] = useState('');
     const [customerName, setCustomerName] = useState('');
     const [services, setServices] = useState<ServiceDetail[]>([{ type: 'listen', minutes: 0 }]);
@@ -167,8 +171,9 @@ export default function ReportForm() {
                 return;
             }
 
-            // 送信データの整形（GASへ送る形式） - 日付は選択された値を使用
-            const formattedDate = new Date(reportDate).toLocaleDateString('ja-JP');
+            // 送信データの整形（GASへ送る形式） - 日付+時刻をJST形式で送信
+            const [year, month, day] = reportDate.split('-');
+            const formattedDate = `${year}/${month}/${day} ${reportTime}:00`;
             const reportData = {
                 action: 'addReport',
                 checkDuplicate: !forceSubmit, // 初回送信時は重複チェックをお願いする
@@ -245,7 +250,7 @@ export default function ReportForm() {
 
             <form onSubmit={handleSubmit} className="space-y-6">
                 {/* スタッフ情報と日付 */}
-                <div className="space-y-4 border-b dark:border-gray-700 border-gray-100 dark:border-gray-700 pb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-4 border-b dark:border-gray-700 border-gray-100 dark:border-gray-700 pb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-4 mt-0">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             スタッフ名 <span className="text-red-500">*</span>
@@ -275,6 +280,18 @@ export default function ReportForm() {
                             className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800"
                             value={reportDate}
                             onChange={(e) => setReportDate(e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            対応時刻
+                        </label>
+                        <input
+                            type="time"
+                            required
+                            className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800"
+                            value={reportTime}
+                            onChange={(e) => setReportTime(e.target.value)}
                         />
                     </div>
                 </div>

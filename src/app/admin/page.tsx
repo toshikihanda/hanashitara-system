@@ -102,6 +102,27 @@ export default function AdminDashboard() {
 
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzhzZLoVQRSYYykqnu88ebBtx79htz-3A7YDa3RgBKbjYJ-ie308nsQXhJflpEnNfuz0g/exec';
 
+    // JST日付文字列を安全にフォーマットするヘルパー
+    // GASから「yyyy/MM/dd HH:mm:ss」形式で来る想定。Date型や旧形式にも対応
+    const formatJSTDate = (dateStr: string | Date, withTime = false): string => {
+        if (!dateStr) return '';
+        const s = String(dateStr);
+        // 既にyyyy/MM/dd形式ならそのまま使う
+        if (/^\d{4}\/\d{1,2}\/\d{1,2}/.test(s)) {
+            return withTime ? s : s.split(' ')[0];
+        }
+        // それ以外はDateオブジェクト化してJSTフォーマット
+        const d = new Date(s);
+        if (isNaN(d.getTime())) return s;
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        if (!withTime) return `${y}/${m}/${day}`;
+        const h = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        return `${y}/${m}/${day} ${h}:${min}`;
+    };
+
     // オーナー判定（オーナーの売上は全額がシステム利益になる）
     const isOwnerStaff = (staffName: string) => staffName === '吉川（オーナー）';
 
@@ -1949,7 +1970,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         <tbody>
                                             {monthReports.filter(r => r.staff === selectedPdfStaff).map(r => (
                                                 <tr key={r.id} className="text-center print:bg-white">
-                                                    <td className="border border-gray-400 py-2 px-2 text-gray-700 print:text-black">{new Date(r.date).toLocaleDateString('ja-JP').slice(5)}</td>
+                                                    <td className="border border-gray-400 py-2 px-2 text-gray-700 print:text-black">{formatJSTDate(r.date).slice(5)}</td>
                                                     <td className="border border-gray-400 py-2 px-2 text-gray-800 font-medium print:text-black">{r.customerName}</td>
                                                     <td className="border border-gray-400 py-2 px-2 text-xs text-gray-600 font-medium whitespace-pre-wrap text-left break-all max-w-[250px] print:text-black">{r.services.split(', ').join('\n')}</td>
                                                     <td className="border border-gray-400 py-2 px-2 text-gray-700 print:text-black">¥{r.totalSales.toLocaleString()}</td>
@@ -2058,7 +2079,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         <tbody>
                                             {monthReports.filter(r => r.staff === showStaffDetailFor).map(r => (
                                                 <tr key={r.id} className="border-b dark:border-gray-700 hover:bg-gray-50/50 dark:bg-gray-800/50">
-                                                    <td className="px-4 py-3">{new Date(r.date).toLocaleDateString('ja-JP').slice(5)}</td>
+                                                    <td className="px-4 py-3">{formatJSTDate(r.date).slice(5)}</td>
                                                     <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">{r.customerName}</td>
                                                     <td className="px-4 py-3 text-right">¥{r.totalSales.toLocaleString()}</td>
                                                     <td className="px-4 py-3 text-right font-bold text-indigo-700">¥{r.staffShare.toLocaleString()}</td>
@@ -2108,7 +2129,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                             const cleanServices = r.services.replace(/\s*->\s*計算\d+分/g, '').replace(/\((\d+)分\)/g, ' $1分');
                                                             return (
                                                                 <tr key={r.id} className="border-b dark:border-gray-700 hover:bg-gray-50/50 dark:bg-gray-800/50">
-                                                                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{new Date(r.date).toLocaleDateString('ja-JP')}</td>
+                                                                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{formatJSTDate(r.date)}</td>
                                                                     <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">{r.staff}</td>
                                                                     <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-pre-wrap">{cleanServices}</td>
                                                                     <td className="px-4 py-3 text-right font-bold text-gray-700 dark:text-gray-300">¥{r.totalSales.toLocaleString()}</td>
@@ -2147,7 +2168,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 <tbody>
                                                     {depositLogs.filter(log => log.customerName === showHistoryForCustomer).map((log, i) => (
                                                         <tr key={i} className="border-b dark:border-gray-700 hover:bg-gray-50/50 dark:bg-gray-800/50">
-                                                            <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{new Date(log.date).toLocaleString('ja-JP')}</td>
+                                                            <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{formatJSTDate(log.date, true)}</td>
                                                             <td className="px-4 py-3 text-center">
                                                                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${log.type === 'チャージ' ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>
                                                                     {log.type}
@@ -2224,7 +2245,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     {memoReports.map(r => (
                                                         <div key={r.id} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 shadow-sm">
                                                             <div className="flex items-center gap-2 mb-1">
-                                                                <span className="text-xs text-gray-500 dark:text-gray-400">{new Date(r.date).toLocaleDateString('ja-JP')}</span>
+                                                                <span className="text-xs text-gray-500 dark:text-gray-400">{formatJSTDate(r.date)}</span>
                                                                 <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded">{r.staff}</span>
                                                             </div>
                                                             <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{r.memo}</p>
