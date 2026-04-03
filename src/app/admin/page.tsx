@@ -2128,7 +2128,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     {/* 📒 通帳タブ */}
                                     {historyTabMode === 'ledger' && (() => {
                                         const customer = showHistoryForCustomer!;
-                                        // 通話履歴（マイナス）
+                                        // 通話履歴（参考表示用・残高計算には含めない）
                                         const usageEntries = reports.filter(r => r.customerName === customer).map(r => ({
                                             date: r.date,
                                             type: 'usage' as const,
@@ -2136,32 +2136,33 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             amount: -r.totalSales,
                                             isPaid: r.isPaid,
                                             id: r.id,
+                                            reportId: r.id,
+                                            totalSales: r.totalSales,
+                                            customerPhone: r.customerPhone,
                                         }));
-                                        // デポジット履歴（GASが記録した符号をそのまま使用）
+                                        // デポジット履歴（GASが記録した符号・残高をそのまま使用）
                                         const depositEntries = depositLogs.filter(log => log.customerName === customer).map((log, i) => ({
                                             date: log.date,
                                             type: 'deposit' as const,
                                             label: log.type,
-                                            amount: log.amount, // GASが正しい符号で記録（チャージ=+, 未払い充当=-, 返還=+）
+                                            amount: log.amount,
                                             isPaid: true,
                                             id: `dep-${i}`,
+                                            reportId: '',
+                                            totalSales: 0,
+                                            customerPhone: '',
+                                            gasBalance: log.balance, // GASが記録した正確な残高
                                         }));
-                                        // 結合して日付昇順ソート（通帳風）
+                                        // 結合して日付昇順ソート
                                         const allEntries = [...usageEntries, ...depositEntries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-                                        // 各時点の残高を計算
-                                        let runningBalance = 0;
+                                        // 残高計算: デポジット履歴のみで計算（GAS記録の残高を使用）
+                                        // 利用行は参考表示のみ（残高はデポジット履歴が正しく追跡済み）
+                                        let lastDepositBalance = 0;
                                         const entriesWithBalance = allEntries.map(entry => {
-                                            if (entry.type === 'usage') {
-                                                // 利用は入金済（デポジット引き落とし済み）の場合のみ残高に影響
-                                                if (entry.isPaid) {
-                                                    runningBalance += entry.amount; // マイナス値
-                                                }
-                                            } else {
-                                                // デポジット履歴はGASの符号をそのまま加算
-                                                // チャージ=+, 未払い充当=-, 返還=+, 残高調整=差額
-                                                runningBalance += entry.amount;
+                                            if (entry.type === 'deposit' && 'gasBalance' in entry) {
+                                                lastDepositBalance = (entry as any).gasBalance;
                                             }
-                                            return { ...entry, balance: runningBalance };
+                                            return { ...entry, balance: lastDepositBalance };
                                         });
                                         return (
                                             <div>
@@ -2174,18 +2175,19 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                 <th className="px-3 py-2">内容</th>
                                                                 <th className="px-3 py-2 text-right">金額</th>
                                                                 <th className="px-3 py-2 text-right">残高</th>
+                                                                <th className="px-3 py-2 text-center">操作</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
                                                             {entriesWithBalance.length === 0 && (
-                                                                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">履歴がありません</td></tr>
+                                                                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">履歴がありません</td></tr>
                                                             )}
                                                             {entriesWithBalance.map((entry, i) => (
-                                                                <tr key={entry.id + '-' + i} className="border-b dark:border-gray-700 hover:bg-gray-50/50">
+                                                                <tr key={entry.id + '-' + i} className={`border-b dark:border-gray-700 hover:bg-gray-50/50 ${entry.type === 'usage' ? 'bg-gray-50/30' : ''}`}>
                                                                     <td className="px-3 py-2 text-xs text-gray-500">{formatJSTDate(entry.date, true)}</td>
                                                                     <td className="px-3 py-2">
                                                                         {entry.type === 'usage' ? (
-                                                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">利用</span>
+                                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.isPaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{entry.isPaid ? '利用(済)' : '利用(未払)'}</span>
                                                                         ) : (
                                                                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.amount >= 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>{entry.label}</span>
                                                                         )}
@@ -2194,13 +2196,44 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     <td className={`px-3 py-2 text-right font-bold ${entry.amount >= 0 ? 'text-indigo-600' : 'text-orange-600'}`}>
                                                                         {entry.amount >= 0 ? '+' : ''}{entry.amount.toLocaleString()}
                                                                     </td>
-                                                                    <td className="px-3 py-2 text-right font-bold text-gray-800 dark:text-gray-200">¥{entry.balance.toLocaleString()}</td>
+                                                                    <td className="px-3 py-2 text-right font-bold text-gray-800 dark:text-gray-200">
+                                                                        {entry.type === 'deposit' ? `¥${entry.balance.toLocaleString()}` : <span className="text-gray-400">-</span>}
+                                                                    </td>
+                                                                    <td className="px-3 py-2 text-center">
+                                                                        {entry.type === 'usage' && entry.reportId && (
+                                                                            <button
+                                                                                disabled={isSaving}
+                                                                                onClick={async () => {
+                                                                                    if (!confirm(`この利用履歴を削除しますか？\n\n${formatJSTDate(entry.date, true)} / ¥${entry.totalSales.toLocaleString()}\n\n※デポジット支払い済みの場合、残高に返還されます。`)) return;
+                                                                                    setIsSaving(true);
+                                                                                    setSavingMessage('削除中...');
+                                                                                    try {
+                                                                                        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteReport', id: entry.reportId }) });
+                                                                                        const json = await res.json();
+                                                                                        if (json.success) {
+                                                                                            setReports(prev => prev.filter(r => r.id !== entry.reportId));
+                                                                                            if (json.customerName && json.newBalance !== undefined) {
+                                                                                                setDeposits(prev => ({ ...prev, [json.customerName]: json.newBalance }));
+                                                                                            }
+                                                                                            // デポジット履歴も再取得（返還ログが追加されるため）
+                                                                                            const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`);
+                                                                                            const histJson = await histRes.json();
+                                                                                            if (histJson.success) setDepositLogs(histJson.history);
+                                                                                            showToast('削除しました');
+                                                                                        } else { alert('エラー: ' + (json.message || '')); }
+                                                                                    } catch (e) { alert('エラーが発生しました'); }
+                                                                                    finally { setIsSaving(false); setSavingMessage(null); }
+                                                                                }}
+                                                                                className="text-red-500 hover:text-red-700 text-xs font-bold disabled:opacity-50"
+                                                                            >🗑️</button>
+                                                                        )}
+                                                                    </td>
                                                                 </tr>
                                                             ))}
                                                         </tbody>
                                                     </table>
                                                 </div>
-                                                <p className="text-xs text-gray-400 mt-2">※ 利用が「入金済」の場合のみ残高に反映されます。未入金の利用は残高計算に含まれません。</p>
+                                                <p className="text-xs text-gray-400 mt-2">※ 残高列はデポジット操作時の確定残高を表示。利用行は参考表示です。</p>
                                             </div>
                                         );
                                     })()}
