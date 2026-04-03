@@ -2129,7 +2129,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                             const cleanServices = r.services.replace(/\s*->\s*計算\d+分/g, '').replace(/\((\d+)分\)/g, ' $1分');
                                                             return (
                                                                 <tr key={r.id} className="border-b dark:border-gray-700 hover:bg-gray-50/50 dark:bg-gray-800/50">
-                                                                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{formatJSTDate(r.date)}</td>
+                                                                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{formatJSTDate(r.date, true)}</td>
                                                                     <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">{r.staff}</td>
                                                                     <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-pre-wrap">{cleanServices}</td>
                                                                     <td className="px-4 py-3 text-right font-bold text-gray-700 dark:text-gray-300">¥{r.totalSales.toLocaleString()}</td>
@@ -2245,7 +2245,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     {memoReports.map(r => (
                                                         <div key={r.id} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 shadow-sm">
                                                             <div className="flex items-center gap-2 mb-1">
-                                                                <span className="text-xs text-gray-500 dark:text-gray-400">{formatJSTDate(r.date)}</span>
+                                                                <span className="text-xs text-gray-500 dark:text-gray-400">{formatJSTDate(r.date, true)}</span>
                                                                 <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded">{r.staff}</span>
                                                             </div>
                                                             <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{r.memo}</p>
