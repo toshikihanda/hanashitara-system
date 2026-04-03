@@ -635,7 +635,9 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
     });
 
     // 登録日ベースでお客様番号（連番）を割り当てるために一時ソート
+    // depositsにもcustomerPhonesにも存在しない顧客は削除済みとみなして除外
     const allCustomers = Array.from(customerMap.entries())
+        .filter(([name]) => deposits[name] !== undefined || customerPhones[name] !== undefined)
         .map(([name, data]) => ({ name, ...data }))
         .sort((a, b) => new Date(a.registeredDate).getTime() - new Date(b.registeredDate).getTime());
 
