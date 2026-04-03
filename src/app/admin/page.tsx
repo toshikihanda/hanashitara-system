@@ -1917,16 +1917,19 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                             });
                                                             const json = await res.json();
                                                             if (json.success) {
+                                                                const deletedName = editingCustomerName;
                                                                 setEditingCustomerName(null);
                                                                 // ローカルステートからも削除
-                                                                setDeposits(prev => { const n = { ...prev }; delete n[editingCustomerName!]; return n; });
-                                                                setCustomerPhones(prev => { const n = { ...prev }; delete n[editingCustomerName!]; return n; });
-                                                                setCustomerPasswords(prev => { const n = { ...prev }; delete n[editingCustomerName!]; return n; });
-                                                                // デポジット履歴も再取得
+                                                                setDeposits(prev => { const n = { ...prev }; delete n[deletedName!]; return n; });
+                                                                setCustomerPhones(prev => { const n = { ...prev }; delete n[deletedName!]; return n; });
+                                                                setCustomerPasswords(prev => { const n = { ...prev }; delete n[deletedName!]; return n; });
+                                                                // 全データ再取得（業務報告の顧客名参照も消すため）
+                                                                fetchReports(false);
+                                                                fetchDeposits();
                                                                 const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`);
                                                                 const histJson = await histRes.json();
                                                                 if (histJson.success) setDepositLogs(histJson.history);
-                                                                showToast(`${editingCustomerName} さんを削除しました`);
+                                                                showToast(`${deletedName} さんを削除しました`);
                                                             } else {
                                                                 alert('エラー: ' + (json.message || '削除に失敗しました'));
                                                             }
