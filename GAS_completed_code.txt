@@ -10,6 +10,19 @@ function todayJST() {
   return Utilities.formatDate(new Date(), "JST", "yyyy/MM/dd");
 }
 
+// 顧客の現在のデポジット残高を取得するヘルパー
+function getCustomerBalance(ss, customerName) {
+  const sheet = ss.getSheetByName("前払い管理");
+  if (!sheet) return 0;
+  const values = sheet.getDataRange().getValues();
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][0] === customerName) {
+      return Number(values[i][2]) || 0;
+    }
+  }
+  return 0;
+}
+
 function doPost(e) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   
@@ -161,7 +174,7 @@ function doPost(e) {
       }));
     }
     
-    // ② 業務報告の修正（管理者用）
+    // ② 業務報告の修正（管理者用・残高返却付き）
     if (action === 'editReport') {
       const sheet = ss.getSheetByName('業務報告');
       const values = sheet.getDataRange().getValues();
@@ -171,7 +184,9 @@ function doPost(e) {
           sheet.getRange(i + 1, 4).setValue(`'${data.customerPhone}`);
           sheet.getRange(i + 1, 5).setValue(data.customerName);
           sheet.getRange(i + 1, 7).setValue(data.totalSales);
-          return output.setContent(JSON.stringify({ success: true }));
+          const customerName = data.customerName;
+          const newBalance = getCustomerBalance(ss, customerName);
+          return output.setContent(JSON.stringify({ success: true, customerName: customerName, newBalance: newBalance }));
         }
       }
       return output.setContent(JSON.stringify({ success: false, message: 'IDが見つかりません' }));
@@ -355,21 +370,23 @@ function doPost(e) {
       return output.setContent(JSON.stringify({ success: true }));
     }
 
-    // ⑤-2 業務報告の削除
+    // ⑤-2 業務報告の削除（残高返却付き）
     if (action === 'deleteReport') {
       const sheet = ss.getSheetByName("業務報告");
       if (!sheet) return output.setContent(JSON.stringify({ success: false, message: '業務報告シートがありません' }));
       const values = sheet.getDataRange().getValues();
       for (let i = 1; i < values.length; i++) {
         if (values[i][0] === data.id) {
+          const customerName = values[i][4]; // E列: 顧客名
           sheet.deleteRow(i + 1);
-          return output.setContent(JSON.stringify({ success: true }));
+          const newBalance = getCustomerBalance(ss, customerName);
+          return output.setContent(JSON.stringify({ success: true, customerName: customerName, newBalance: newBalance }));
         }
       }
       return output.setContent(JSON.stringify({ success: false, message: '対象の報告が見つかりません' }));
     }
 
-    // ⑥ チャージ・利用（ボーナス対応 ＆ 履歴保存）
+    // ⑥ チャージ・利用（ボーナス対応 ＆ 履歴保存 ＆ 未払い自動精算）
     if (action === 'updateDeposit') {
       const sheet = ss.getSheetByName("前払い管理");
       let historySheet = ss.getSheetByName("デポジット履歴");
@@ -381,14 +398,15 @@ function doPost(e) {
       if (!sheet) {
         return output.setContent(JSON.stringify({ success: false, message: '前払い管理シートがありません' }));
       }
-      
+
       const customerName = data.customerName;
-      const amount = Number(data.amount) || 0; 
-      
+      const amount = Number(data.amount) || 0;
+      const isCharge = data.type === 'charge';
+
       const values = sheet.getDataRange().getValues();
       let customerRowIndex = -1;
       let currentBalance = 0;
-      
+
       for (let i = 1; i < values.length; i++) {
         if (values[i][0] === customerName) {
           customerRowIndex = i + 1;
@@ -396,20 +414,76 @@ function doPost(e) {
           break;
         }
       }
-      
-      let newBalance = currentBalance + amount;
+
+      let remainingCharge = amount;
+      let totalSettled = 0;
+      const settledReports = [];
+
+      // チャージ時のみ：未払い業務報告を古い順に自動精算
+      if (isCharge && remainingCharge > 0) {
+        const reportSheet = ss.getSheetByName("業務報告");
+        if (reportSheet) {
+          const repValues = reportSheet.getDataRange().getValues();
+          // 未入金かつ請求額 > 0 のレコードを古い順に収集
+          const unpaidRows = [];
+          for (let i = 1; i < repValues.length; i++) {
+            if (repValues[i][4] === customerName && repValues[i][8] === '未入金') {
+              const billing = Number(repValues[i][11]) || 0;
+              if (billing > 0) {
+                unpaidRows.push({ rowIndex: i + 1, billing: billing, date: repValues[i][1] });
+              }
+            }
+          }
+          // 古い順にソート（行番号が小さい=古い）
+          unpaidRows.sort((a, b) => a.rowIndex - b.rowIndex);
+
+          for (const unpaid of unpaidRows) {
+            if (remainingCharge <= 0) break;
+            if (remainingCharge >= unpaid.billing) {
+              // 全額充当
+              remainingCharge -= unpaid.billing;
+              totalSettled += unpaid.billing;
+              reportSheet.getRange(unpaid.rowIndex, 9).setValue('入金済');
+              reportSheet.getRange(unpaid.rowIndex, 10).setValue(nowJST());
+              reportSheet.getRange(unpaid.rowIndex, 12).setValue(0); // 請求額を0に
+              settledReports.push({ date: unpaid.date, amount: unpaid.billing });
+            } else {
+              // 一部充当（残りのチャージ額で部分的に支払い）
+              const partialPay = remainingCharge;
+              totalSettled += partialPay;
+              reportSheet.getRange(unpaid.rowIndex, 12).setValue(unpaid.billing - partialPay);
+              remainingCharge = 0;
+              settledReports.push({ date: unpaid.date, amount: partialPay, partial: true });
+            }
+          }
+        }
+      }
+
+      // 残ったチャージ額を残高に加算
+      let newBalance = currentBalance + (isCharge ? remainingCharge : amount);
       if (customerRowIndex !== -1) {
         sheet.getRange(customerRowIndex, 3).setValue(newBalance);
       } else {
-        sheet.appendRow([customerName, '', amount]);
-        newBalance = amount;
+        sheet.appendRow([customerName, '', isCharge ? remainingCharge : amount]);
+        newBalance = isCharge ? remainingCharge : amount;
       }
 
       // 履歴に記録
-      const typeLabel = data.type === 'charge' ? 'チャージ' : '利用';
+      const typeLabel = isCharge ? 'チャージ' : '利用';
+      // チャージ全額を履歴に記録（元のチャージ額）
       historySheet.appendRow([nowJST(), customerName, amount, typeLabel, newBalance]);
-      
-      return output.setContent(JSON.stringify({ success: true, newBalance: newBalance }));
+
+      // 自動精算があった場合、精算ログも追加
+      if (totalSettled > 0) {
+        historySheet.appendRow([nowJST(), customerName, -totalSettled, '未払い充当', newBalance]);
+      }
+
+      return output.setContent(JSON.stringify({
+        success: true,
+        newBalance: newBalance,
+        autoSettled: totalSettled,
+        settledReports: settledReports
+      }));
     }
 
     // ⑥-2 残高強制上書き
@@ -475,7 +549,8 @@ function doPost(e) {
 
         if (dateMatch && rowName === data.customerName && rowAmount === Number(data.amount) && rowType === data.type) {
           historySheet.deleteRow(i + 1);
-          return output.setContent(JSON.stringify({ success: true }));
+          const newBalance = getCustomerBalance(ss, data.customerName);
+          return output.setContent(JSON.stringify({ success: true, newBalance: newBalance }));
         }
       }
 

@@ -74,6 +74,7 @@ export default function AdminDashboard() {
     const [depositLogs, setDepositLogs] = useState<any[]>([]);
     const [showHistoryForCustomer, setShowHistoryForCustomer] = useState<string | null>(null);
     const [showStaffDetailFor, setShowStaffDetailFor] = useState<string | null>(null);
+    const [historyTabMode, setHistoryTabMode] = useState<'detail' | 'ledger'>('detail');
 
     // インライン編集用ステート
     const [editingReportId, setEditingReportId] = useState<string | null>(null);
@@ -1174,7 +1175,10 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                                         });
                                                                                         const json = await res.json();
                                                                                         if (json.success) {
-                                                                                            fetchReports(false);
+                                                                                            setReports(prev => prev.filter(r => r.id !== report.id));
+                                                                                            if (json.customerName && json.newBalance !== undefined) {
+                                                                                                setDeposits(prev => ({ ...prev, [json.customerName]: json.newBalance }));
+                                                                                            }
                                                                                             showToast('報告を削除しました');
                                                                                         } else {
                                                                                             alert('エラー: ' + (json.message || '削除に失敗しました'));
@@ -1211,7 +1215,11 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                                         const json = await res.json();
                                                                                         if (json.success) {
                                                                                             setEditingReportId(null);
-                                                                                            fetchReports(false);
+                                                                                            // ローカルのreportsステートを直接更新
+                                                                                            setReports(prev => prev.map(r => r.id === report.id ? { ...r, customerName: editReportData.customerName, customerPhone: editReportData.customerPhone, totalSales: editReportData.totalSales } : r));
+                                                                                            if (json.customerName && json.newBalance !== undefined) {
+                                                                                                setDeposits(prev => ({ ...prev, [json.customerName]: json.newBalance }));
+                                                                                            }
                                                                                             showToast('報告を更新しました');
                                                                                         } else {
                                                                                             alert('エラー: ' + (json.message || '更新に失敗しました'));
@@ -2101,11 +2109,102 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                     {showHistoryForCustomer && (
                         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60] PrintHidden pt-20">
                             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-4xl w-full max-h-[85vh] flex flex-col mt-4">
-                                <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900 rounded-t-xl">
-                                    <h3 className="font-bold text-lg text-gray-800 dark:text-gray-200">{showHistoryForCustomer} 様の ご利用履歴</h3>
-                                    <button onClick={() => setShowHistoryForCustomer(null)} className="text-gray-400 dark:text-gray-500 hover:text-gray-800 dark:text-gray-200 text-xl font-bold">✕</button>
+                                <div className="p-4 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-900 rounded-t-xl">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h3 className="font-bold text-lg text-gray-800 dark:text-gray-200">{showHistoryForCustomer} 様の ご利用履歴</h3>
+                                        <button onClick={() => setShowHistoryForCustomer(null)} className="text-gray-400 dark:text-gray-500 hover:text-gray-800 dark:text-gray-200 text-xl font-bold">✕</button>
+                                    </div>
+                                    <div className="flex gap-1">
+                                        <button onClick={() => setHistoryTabMode('detail')} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${historyTabMode === 'detail' ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+                                            個別履歴
+                                        </button>
+                                        <button onClick={() => setHistoryTabMode('ledger')} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${historyTabMode === 'ledger' ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+                                            📒 綜合帳簿
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8 bg-gray-50/30">
+
+                                    {/* 📒 綜合帳簿タブ */}
+                                    {historyTabMode === 'ledger' && (() => {
+                                        const customer = showHistoryForCustomer!;
+                                        // 通話履歴（マイナス）
+                                        const usageEntries = reports.filter(r => r.customerName === customer).map(r => ({
+                                            date: r.date,
+                                            type: 'usage' as const,
+                                            label: `${r.staff} / ${r.services.replace(/\s*->\s*計算\d+分/g, '').replace(/\((\d+)分\)/g, ' $1分')}`,
+                                            amount: -r.totalSales,
+                                            isPaid: r.isPaid,
+                                            id: r.id,
+                                        }));
+                                        // デポジット履歴（プラスまたはマイナス）
+                                        const depositEntries = depositLogs.filter(log => log.customerName === customer).map((log, i) => ({
+                                            date: log.date,
+                                            type: 'deposit' as const,
+                                            label: log.type,
+                                            amount: log.type === 'チャージ' || log.type === '残高調整' ? Math.abs(log.amount) : -Math.abs(log.amount),
+                                            isPaid: true,
+                                            id: `dep-${i}`,
+                                        }));
+                                        // 結合して日付昇順ソート（通帳風）
+                                        const allEntries = [...usageEntries, ...depositEntries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                                        // 各時点の残高を計算
+                                        let runningBalance = 0;
+                                        const entriesWithBalance = allEntries.map(entry => {
+                                            // 利用は入金済ならデポジットから引かれている、未入金なら残高に影響しない
+                                            if (entry.type === 'usage') {
+                                                if (entry.isPaid) {
+                                                    runningBalance += entry.amount; // マイナス値
+                                                }
+                                            } else {
+                                                runningBalance += entry.amount;
+                                            }
+                                            return { ...entry, balance: runningBalance };
+                                        });
+                                        return (
+                                            <div>
+                                                <div className="bg-white dark:bg-gray-800 rounded border shadow-sm overflow-hidden">
+                                                    <table className="w-full text-sm text-left">
+                                                        <thead className="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-b dark:border-gray-700">
+                                                            <tr>
+                                                                <th className="px-3 py-2">日時</th>
+                                                                <th className="px-3 py-2">種別</th>
+                                                                <th className="px-3 py-2">内容</th>
+                                                                <th className="px-3 py-2 text-right">金額</th>
+                                                                <th className="px-3 py-2 text-right">残高</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {entriesWithBalance.length === 0 && (
+                                                                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">履歴がありません</td></tr>
+                                                            )}
+                                                            {entriesWithBalance.map((entry, i) => (
+                                                                <tr key={entry.id + '-' + i} className="border-b dark:border-gray-700 hover:bg-gray-50/50">
+                                                                    <td className="px-3 py-2 text-xs text-gray-500">{formatJSTDate(entry.date, true)}</td>
+                                                                    <td className="px-3 py-2">
+                                                                        {entry.type === 'usage' ? (
+                                                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">利用</span>
+                                                                        ) : (
+                                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.label === 'チャージ' ? 'bg-indigo-100 text-indigo-700' : entry.label === '未払い充当' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'}`}>{entry.label}</span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400 max-w-[200px] truncate">{entry.type === 'usage' ? entry.label : ''}</td>
+                                                                    <td className={`px-3 py-2 text-right font-bold ${entry.amount >= 0 ? 'text-indigo-600' : 'text-orange-600'}`}>
+                                                                        {entry.amount >= 0 ? '+' : ''}{entry.amount.toLocaleString()}
+                                                                    </td>
+                                                                    <td className="px-3 py-2 text-right font-bold text-gray-800 dark:text-gray-200">¥{entry.balance.toLocaleString()}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                <p className="text-xs text-gray-400 mt-2">※ 利用が「入金済」の場合のみ残高に反映されます。未入金の利用は残高計算に含まれません。</p>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* 個別履歴タブ */}
+                                    {historyTabMode === 'detail' && <>
 
                                     {/* 利用・売上履歴 (業務報告から抽出) */}
                                     <div>
@@ -2203,6 +2302,9 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                                     const originalIdx = prev.indexOf(filtered[i]);
                                                                                     return idx !== originalIdx;
                                                                                 }));
+                                                                                if (resJson.newBalance !== undefined && showHistoryForCustomer) {
+                                                                                    setDeposits(prev => ({ ...prev, [showHistoryForCustomer]: resJson.newBalance }));
+                                                                                }
                                                                             } else {
                                                                                 alert('削除に失敗しました: ' + (resJson.message || ''));
                                                                             }
@@ -2255,6 +2357,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             );
                                         })()}
                                     </div>
+
+                                    </>}
 
                                 </div>
                             </div>
@@ -2411,6 +2515,13 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
 
                                         if (resJson.success && resJson.newBalance !== undefined) {
                                             setDeposits(prev => ({ ...prev, [chargeTarget]: resJson.newBalance }));
+                                            // 自動精算があった場合、レポートを再取得して入金状況を反映
+                                            if (resJson.autoSettled > 0) {
+                                                fetchReports(false);
+                                                showToast(`チャージ完了。未払い ¥${resJson.autoSettled.toLocaleString()} を自動精算しました`);
+                                            } else {
+                                                showToast('チャージが完了しました');
+                                            }
                                         } else {
                                             setDeposits(prev => ({ ...prev, [chargeTarget]: (prev[chargeTarget] || 0) + totalAmount }));
                                         }
