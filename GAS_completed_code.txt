@@ -370,7 +370,7 @@ function doPost(e) {
       return output.setContent(JSON.stringify({ success: true }));
     }
 
-    // ⑤-2 業務報告の削除（残高返却付き）
+    // ⑤-2 業務報告の削除（デポジット逆戻し＋残高返却付き）
     if (action === 'deleteReport') {
       const sheet = ss.getSheetByName("業務報告");
       if (!sheet) return output.setContent(JSON.stringify({ success: false, message: '業務報告シートがありません' }));
@@ -378,6 +378,30 @@ function doPost(e) {
       for (let i = 1; i < values.length; i++) {
         if (values[i][0] === data.id) {
           const customerName = values[i][4]; // E列: 顧客名
+          const depositUsed = Number(values[i][10]) || 0; // K列: デポジット使用額
+          const paidStatus = values[i][8]; // I列: 入金状況
+
+          // デポジットが使われていた場合、その分を残高に戻す
+          if (depositUsed > 0) {
+            const depSheet = ss.getSheetByName("前払い管理");
+            if (depSheet) {
+              const depValues = depSheet.getDataRange().getValues();
+              for (let j = 1; j < depValues.length; j++) {
+                if (depValues[j][0] === customerName) {
+                  const currentBal = Number(depValues[j][2]) || 0;
+                  depSheet.getRange(j + 1, 3).setValue(currentBal + depositUsed);
+                  break;
+                }
+              }
+            }
+            // 履歴にデポジット返還ログを記録
+            let historySheet = ss.getSheetByName("デポジット履歴");
+            if (historySheet) {
+              const newBal = getCustomerBalance(ss, customerName);
+              historySheet.appendRow([nowJST(), customerName, depositUsed, '報告削除による返還', newBal]);
+            }
+          }
+
           sheet.deleteRow(i + 1);
           const newBalance = getCustomerBalance(ss, customerName);
           return output.setContent(JSON.stringify({ success: true, customerName: customerName, newBalance: newBalance }));

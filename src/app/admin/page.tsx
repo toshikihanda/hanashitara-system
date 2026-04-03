@@ -2218,6 +2218,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         <th className="px-4 py-2">利用サービス</th>
                                                         <th className="px-4 py-2 text-right">売上(請求額)</th>
                                                         <th className="px-4 py-2 text-center">入金状況</th>
+                                                        <th className="px-4 py-2 text-center">操作</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -2237,12 +2238,46 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                             {r.isPaid ? '入金済' : '未入金'}
                                                                         </span>
                                                                     </td>
+                                                                    <td className="px-4 py-3 text-center">
+                                                                        <button
+                                                                            disabled={isSaving}
+                                                                            onClick={async () => {
+                                                                                if (!confirm(`この利用履歴を削除しますか？\n\n${formatJSTDate(r.date, true)} / ¥${r.totalSales.toLocaleString()}\n\n※デポジットで支払い済みの場合、残高に自動で返還されます。`)) return;
+                                                                                setIsSaving(true);
+                                                                                setSavingMessage('履歴を削除中...');
+                                                                                try {
+                                                                                    const res = await fetch(GAS_URL, {
+                                                                                        method: 'POST',
+                                                                                        body: JSON.stringify({ action: 'deleteReport', id: r.id })
+                                                                                    });
+                                                                                    const json = await res.json();
+                                                                                    if (json.success) {
+                                                                                        setReports(prev => prev.filter(rep => rep.id !== r.id));
+                                                                                        if (json.customerName && json.newBalance !== undefined) {
+                                                                                            setDeposits(prev => ({ ...prev, [json.customerName]: json.newBalance }));
+                                                                                        }
+                                                                                        showToast('利用履歴を削除しました');
+                                                                                    } else {
+                                                                                        alert('エラー: ' + (json.message || '削除に失敗しました'));
+                                                                                    }
+                                                                                } catch (e) {
+                                                                                    alert('エラーが発生しました');
+                                                                                } finally {
+                                                                                    setIsSaving(false);
+                                                                                    setSavingMessage(null);
+                                                                                }
+                                                                            }}
+                                                                            className="text-red-500 hover:text-red-700 text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                        >
+                                                                            🗑️ 削除
+                                                                        </button>
+                                                                    </td>
                                                                 </tr>
                                                             );
                                                         })}
                                                     {reports.filter(r => r.customerName === showHistoryForCustomer).length === 0 && (
                                                         <tr>
-                                                            <td colSpan={5} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500">通話のご利用履歴がありません</td>
+                                                            <td colSpan={6} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500">通話のご利用履歴がありません</td>
                                                         </tr>
                                                     )}
                                                 </tbody>
