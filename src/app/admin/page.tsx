@@ -2199,28 +2199,86 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     <td className="px-3 py-2 text-right font-bold text-gray-800 dark:text-gray-200">
                                                                         {entry.type === 'deposit' ? `¥${entry.balance.toLocaleString()}` : <span className="text-gray-400">-</span>}
                                                                     </td>
-                                                                    <td className="px-3 py-2 text-center">
+                                                                    <td className="px-3 py-2 text-center whitespace-nowrap">
                                                                         {entry.type === 'usage' && entry.reportId && (
+                                                                            <div className="flex items-center justify-center gap-1">
+                                                                                <button
+                                                                                    disabled={isSaving}
+                                                                                    onClick={() => {
+                                                                                        const newAmount = prompt(`売上額を変更（現在: ¥${entry.totalSales.toLocaleString()}）`, String(entry.totalSales));
+                                                                                        if (newAmount === null) return;
+                                                                                        const val = Number(newAmount);
+                                                                                        if (isNaN(val) || val < 0) { alert('有効な金額を入力してください'); return; }
+                                                                                        (async () => {
+                                                                                            setIsSaving(true);
+                                                                                            setSavingMessage('編集中...');
+                                                                                            try {
+                                                                                                const rep = reports.find(r => r.id === entry.reportId);
+                                                                                                const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'editReport', id: entry.reportId, customerName: customer, customerPhone: rep?.customerPhone || entry.customerPhone, totalSales: val }) });
+                                                                                                const json = await res.json();
+                                                                                                if (json.success) {
+                                                                                                    setReports(prev => prev.map(r => r.id === entry.reportId ? { ...r, totalSales: val } : r));
+                                                                                                    if (json.customerName && json.newBalance !== undefined) {
+                                                                                                        setDeposits(prev => ({ ...prev, [json.customerName]: json.newBalance }));
+                                                                                                    }
+                                                                                                    const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`);
+                                                                                                    const histJson = await histRes.json();
+                                                                                                    if (histJson.success) setDepositLogs(histJson.history);
+                                                                                                    showToast(`売上を ¥${val.toLocaleString()} に変更しました`);
+                                                                                                } else { alert('エラー: ' + (json.message || '')); }
+                                                                                            } catch (e) { alert('エラーが発生しました'); }
+                                                                                            finally { setIsSaving(false); setSavingMessage(null); }
+                                                                                        })();
+                                                                                    }}
+                                                                                    className="text-blue-500 hover:text-blue-700 text-xs font-bold disabled:opacity-50"
+                                                                                >✏️</button>
+                                                                                <button
+                                                                                    disabled={isSaving}
+                                                                                    onClick={async () => {
+                                                                                        if (!confirm(`この利用履歴を削除しますか？\n\n${formatJSTDate(entry.date, true)} / ¥${entry.totalSales.toLocaleString()}\n\n※デポジット支払い済みの場合、残高に返還されます。`)) return;
+                                                                                        setIsSaving(true);
+                                                                                        setSavingMessage('削除中...');
+                                                                                        try {
+                                                                                            const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteReport', id: entry.reportId }) });
+                                                                                            const json = await res.json();
+                                                                                            if (json.success) {
+                                                                                                setReports(prev => prev.filter(r => r.id !== entry.reportId));
+                                                                                                if (json.customerName && json.newBalance !== undefined) {
+                                                                                                    setDeposits(prev => ({ ...prev, [json.customerName]: json.newBalance }));
+                                                                                                }
+                                                                                                const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`);
+                                                                                                const histJson = await histRes.json();
+                                                                                                if (histJson.success) setDepositLogs(histJson.history);
+                                                                                                showToast('削除しました');
+                                                                                            } else { alert('エラー: ' + (json.message || '')); }
+                                                                                        } catch (e) { alert('エラーが発生しました'); }
+                                                                                        finally { setIsSaving(false); setSavingMessage(null); }
+                                                                                    }}
+                                                                                    className="text-red-500 hover:text-red-700 text-xs font-bold disabled:opacity-50"
+                                                                                >🗑️</button>
+                                                                            </div>
+                                                                        )}
+                                                                        {entry.type === 'deposit' && (
                                                                             <button
                                                                                 disabled={isSaving}
                                                                                 onClick={async () => {
-                                                                                    if (!confirm(`この利用履歴を削除しますか？\n\n${formatJSTDate(entry.date, true)} / ¥${entry.totalSales.toLocaleString()}\n\n※デポジット支払い済みの場合、残高に返還されます。`)) return;
+                                                                                    if (!confirm(`このデポジット履歴を削除しますか？\n\n${entry.label}: ¥${entry.amount.toLocaleString()}\n\n※前払い管理の残高は変更されません。必要に応じて手動で調整してください。`)) return;
                                                                                     setIsSaving(true);
                                                                                     setSavingMessage('削除中...');
                                                                                     try {
-                                                                                        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteReport', id: entry.reportId }) });
-                                                                                        const json = await res.json();
-                                                                                        if (json.success) {
-                                                                                            setReports(prev => prev.filter(r => r.id !== entry.reportId));
-                                                                                            if (json.customerName && json.newBalance !== undefined) {
-                                                                                                setDeposits(prev => ({ ...prev, [json.customerName]: json.newBalance }));
-                                                                                            }
-                                                                                            // デポジット履歴も再取得（返還ログが追加されるため）
+                                                                                        const log = depositLogs.filter(l => l.customerName === customer)[depositEntries.findIndex(d => d.id === entry.id)];
+                                                                                        if (!log) { alert('該当する履歴が見つかりません'); return; }
+                                                                                        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteDepositHistory', date: log.date, customerName: log.customerName, amount: log.amount, type: log.type }) });
+                                                                                        const resJson = await res.json();
+                                                                                        if (resJson.success) {
                                                                                             const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`);
                                                                                             const histJson = await histRes.json();
                                                                                             if (histJson.success) setDepositLogs(histJson.history);
+                                                                                            if (resJson.newBalance !== undefined) {
+                                                                                                setDeposits(prev => ({ ...prev, [customer]: resJson.newBalance }));
+                                                                                            }
                                                                                             showToast('削除しました');
-                                                                                        } else { alert('エラー: ' + (json.message || '')); }
+                                                                                        } else { alert('削除に失敗: ' + (resJson.message || '')); }
                                                                                     } catch (e) { alert('エラーが発生しました'); }
                                                                                     finally { setIsSaving(false); setSavingMessage(null); }
                                                                                 }}
