@@ -250,15 +250,15 @@ export default function ReportForm() {
 
             <form onSubmit={handleSubmit} className="space-y-6">
                 {/* スタッフ情報と日付 */}
-                <div className="space-y-4 border-b dark:border-gray-700 border-gray-100 dark:border-gray-700 pb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-4 mt-0">
+                <div className="border-b dark:border-gray-700 border-gray-100 pb-6 space-y-4">
+                    <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             スタッフ名 <span className="text-red-500">*</span>
                         </label>
                         <select
                             required
                             disabled={isLoadingStaffList}
-                            className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                             value={staffName}
                             onChange={(e) => setStaffName(e.target.value)}
                         >
@@ -270,29 +270,31 @@ export default function ReportForm() {
                             ))}
                         </select>
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            対応日 (報告を忘れた場合は過去を選択)
-                        </label>
-                        <input
-                            type="date"
-                            required
-                            className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800"
-                            value={reportDate}
-                            onChange={(e) => setReportDate(e.target.value)}
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            対応時刻
-                        </label>
-                        <input
-                            type="time"
-                            required
-                            className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800"
-                            value={reportTime}
-                            onChange={(e) => setReportTime(e.target.value)}
-                        />
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                対応日 <span className="text-xs text-gray-400 font-normal">※過去日も選択可</span>
+                            </label>
+                            <input
+                                type="date"
+                                required
+                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800"
+                                value={reportDate}
+                                onChange={(e) => setReportDate(e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                対応時刻
+                            </label>
+                            <input
+                                type="time"
+                                required
+                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800"
+                                value={reportTime}
+                                onChange={(e) => setReportTime(e.target.value)}
+                            />
+                        </div>
                     </div>
                 </div>
 
