@@ -2137,12 +2137,12 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             isPaid: r.isPaid,
                                             id: r.id,
                                         }));
-                                        // デポジット履歴（プラスまたはマイナス）
+                                        // デポジット履歴（GASが記録した符号をそのまま使用）
                                         const depositEntries = depositLogs.filter(log => log.customerName === customer).map((log, i) => ({
                                             date: log.date,
                                             type: 'deposit' as const,
                                             label: log.type,
-                                            amount: log.type === 'チャージ' || log.type === '残高調整' ? Math.abs(log.amount) : -Math.abs(log.amount),
+                                            amount: log.amount, // GASが正しい符号で記録（チャージ=+, 未払い充当=-, 返還=+）
                                             isPaid: true,
                                             id: `dep-${i}`,
                                         }));
@@ -2151,12 +2151,14 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         // 各時点の残高を計算
                                         let runningBalance = 0;
                                         const entriesWithBalance = allEntries.map(entry => {
-                                            // 利用は入金済ならデポジットから引かれている、未入金なら残高に影響しない
                                             if (entry.type === 'usage') {
+                                                // 利用は入金済（デポジット引き落とし済み）の場合のみ残高に影響
                                                 if (entry.isPaid) {
                                                     runningBalance += entry.amount; // マイナス値
                                                 }
                                             } else {
+                                                // デポジット履歴はGASの符号をそのまま加算
+                                                // チャージ=+, 未払い充当=-, 返還=+, 残高調整=差額
                                                 runningBalance += entry.amount;
                                             }
                                             return { ...entry, balance: runningBalance };
@@ -2185,7 +2187,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                         {entry.type === 'usage' ? (
                                                                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">利用</span>
                                                                         ) : (
-                                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.label === 'チャージ' ? 'bg-indigo-100 text-indigo-700' : entry.label === '未払い充当' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'}`}>{entry.label}</span>
+                                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.amount >= 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>{entry.label}</span>
                                                                         )}
                                                                     </td>
                                                                     <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400 max-w-[200px] truncate">{entry.type === 'usage' ? entry.label : ''}</td>
@@ -2304,12 +2306,12 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         <tr key={i} className="border-b dark:border-gray-700 hover:bg-gray-50/50 dark:bg-gray-800/50">
                                                             <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{formatJSTDate(log.date, true)}</td>
                                                             <td className="px-4 py-3 text-center">
-                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${log.type === 'チャージ' ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>
+                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${log.amount >= 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>
                                                                     {log.type}
                                                                 </span>
                                                             </td>
-                                                            <td className={`px-4 py-3 text-right font-bold ${log.type === 'チャージ' ? 'text-indigo-600' : 'text-orange-600'}`}>
-                                                                {log.type === 'チャージ' ? '+' : '-'}¥{Math.abs(log.amount).toLocaleString()}
+                                                            <td className={`px-4 py-3 text-right font-bold ${log.amount >= 0 ? 'text-indigo-600' : 'text-orange-600'}`}>
+                                                                {log.amount >= 0 ? '+' : ''}¥{log.amount.toLocaleString()}
                                                             </td>
                                                             <td className="px-4 py-3 text-right font-bold text-gray-800 dark:text-gray-200">¥{log.balance.toLocaleString()}</td>
                                                             <td className="px-4 py-3 text-center">
