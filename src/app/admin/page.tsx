@@ -1075,7 +1075,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                 {new Date(report.date).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })}
                                                             </td>
                                                             <td className="px-6 py-4 font-bold text-gray-900 dark:text-gray-100">{report.staff}</td>
-                                                            <td className="px-6 py-4 text-gray-900 dark:text-gray-100 min-w-[6em] max-w-[8em]">
+                                                            <td className="px-6 py-4 text-gray-900 dark:text-gray-100 min-w-[8em]">
                                                                 {isEditing ? (
                                                                     <input
                                                                         type="text"
@@ -1084,10 +1084,10 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                         className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-sm"
                                                                     />
                                                                 ) : (
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="break-words">{report.customerName}</span>
+                                                                    <div className="flex items-center gap-1.5 flex-nowrap">
+                                                                        <span className="whitespace-nowrap">{report.customerName}</span>
                                                                         {isUrgent && (
-                                                                            <span className="text-[10px] px-2 py-0.5 rounded bg-red-500 text-white font-bold whitespace-nowrap">催促要</span>
+                                                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500 text-white font-bold whitespace-nowrap shrink-0">催促要</span>
                                                                         )}
                                                                     </div>
                                                                 )}
