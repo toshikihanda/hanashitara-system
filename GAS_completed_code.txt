@@ -104,10 +104,21 @@ function doPost(e) {
         }
         if (!custExists) {
           custSheet.appendRow([data.customerName, "'" + data.customerPhone, nowJST()]);
-          // 前払い管理にも0円で枠を作成
+          // 前払い管理にも0円で枠を作成（★ 電話番号重複チェック付き）
           const depSheet = ss.getSheetByName('前払い管理');
           if (depSheet) {
-            depSheet.appendRow([data.customerName, "'" + data.customerPhone, 0]);
+            const depVals = depSheet.getDataRange().getValues();
+            const normPhone = normalizePhoneGAS(data.customerPhone);
+            let depExists = false;
+            for (let di = 1; di < depVals.length; di++) {
+              if (normalizePhoneGAS(depVals[di][1]) === normPhone) {
+                depExists = true;
+                break;
+              }
+            }
+            if (!depExists) {
+              depSheet.appendRow([data.customerName, "'" + data.customerPhone, 0]);
+            }
           }
         }
       }
@@ -402,8 +413,10 @@ function doPost(e) {
       const values = sheet.getDataRange().getValues();
       
       let exists = false;
+      const normNewPhone = normalizePhoneGAS(phone);
       for (let i = 1; i < values.length; i++) {
-        if (values[i][0] === customerName) {
+        // 名前 OR 電話番号 で重複チェック
+        if (values[i][0] === customerName || (normNewPhone && normalizePhoneGAS(values[i][1]) === normNewPhone)) {
           exists = true;
           break;
         }
@@ -413,13 +426,18 @@ function doPost(e) {
         sheet.appendRow([customerName, `'${phone}`, nowJST(), data.password || '']);
       }
       
-      // デポジット用にも0円で枠を作っておく
+      // デポジット用にも0円で枠を作っておく（★ 電話番号重複チェック付き）
       let depSheet = ss.getSheetByName("前払い管理");
       if (depSheet) {
         const depValues = depSheet.getDataRange().getValues();
+        const normPhone = normalizePhoneGAS(phone);
         let depExists = false;
         for (let i = 1; i < depValues.length; i++) {
-          if (depValues[i][0] === customerName) depExists = true;
+          // 電話番号 OR 名前 で重複チェック
+          if ((normPhone && normalizePhoneGAS(depValues[i][1]) === normPhone) || String(depValues[i][0]).trim() === customerName) {
+            depExists = true;
+            break;
+          }
         }
         if (!depExists) depSheet.appendRow([customerName, `'${phone}`, 0]);
       }
@@ -653,8 +671,22 @@ function doPost(e) {
       if (customerRowIndex !== -1) {
         sheet.getRange(customerRowIndex, 3).setValue(newBalance);
       } else {
-        sheet.appendRow([customerName, '', isCharge ? remainingCharge : amount]);
-        newBalance = isCharge ? remainingCharge : amount;
+        // ★ 新規追加前に電話番号で既存行を再チェック（重複防止）
+        const recheckValues = sheet.getDataRange().getValues();
+        let foundExisting = false;
+        for (let ri = 1; ri < recheckValues.length; ri++) {
+          if (normalizePhoneGAS(recheckValues[ri][1]) === chargePhone) {
+            // 既存行が見つかった場合はそちらを更新
+            sheet.getRange(ri + 1, 3).setValue(Number(recheckValues[ri][2] || 0) + (isCharge ? remainingCharge : amount));
+            newBalance = Number(recheckValues[ri][2] || 0) + (isCharge ? remainingCharge : amount);
+            foundExisting = true;
+            break;
+          }
+        }
+        if (!foundExisting) {
+          sheet.appendRow([customerName, "'" + (data.customerPhone || ''), isCharge ? remainingCharge : amount]);
+          newBalance = isCharge ? remainingCharge : amount;
+        }
       }
 
       // ★ Bug#4修正: 履歴に正確な残高を記録
