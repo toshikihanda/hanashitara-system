@@ -91,6 +91,7 @@ export default function AdminDashboard() {
     const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
     const [showChargeModal, setShowChargeModal] = useState(false);
     const [chargeTarget, setChargeTarget] = useState<string | null>(null);
+    const [chargeTargetPhone, setChargeTargetPhone] = useState<string | null>(null);
     const [newCustomerData, setNewCustomerData] = useState({ name: '', phone: '', password: '' });
     const [chargeData, setChargeData] = useState({ amount: '', bonusRate: bonusRate.toString() });
 
@@ -1764,6 +1765,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                 <button
                                                                     onClick={() => {
                                                                         setChargeTarget(customerName);
+                                                                        setChargeTargetPhone(phone);
                                                                         setShowChargeModal(true);
                                                                     }}
                                                                     className="px-2.5 py-1 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-700 rounded text-xs font-bold hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors whitespace-nowrap">
@@ -1864,6 +1866,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     body: JSON.stringify({
                                                                         action: 'fixDepositBalance',
                                                                         customerName: editingCustomerName,
+                                                                        customerPhone: customerList.find(c => c.name === editingCustomerName)?.phone || '',
                                                                         newBalance: newBalance
                                                                     })
                                                                 });
@@ -2174,6 +2177,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     {/* 📒 通帳タブ */}
                                     {historyTabMode === 'ledger' && (() => {
                                         const customer = showHistoryForCustomer!;
+                                        // 顧客の電話番号を取得（★ API呼び出し時に使用）
+                                        const customerPhoneForHistory = reports.find(r => r.customerName === customer)?.customerPhone || customerList.find(c => c.name === customer)?.phone || '';
                                         // 通話履歴（参考表示用・残高計算には含めない）
                                         const usageEntries = reports.filter(r => r.customerName === customer).map(r => ({
                                             date: r.date,
@@ -2319,7 +2324,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                                         try {
                                                                                             const log = depositLogs.filter(l => l.customerName === customer)[depositEntries.findIndex(d => d.id === entry.id)];
                                                                                             if (!log) { alert('該当する履歴が見つかりません'); return; }
-                                                                                            const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'editDepositHistory', date: log.date, customerName: log.customerName, oldAmount: log.amount, newAmount: val, type: log.type }) });
+                                                                                            const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'editDepositHistory', date: log.date, customerName: log.customerName, customerPhone: customerPhoneForHistory, oldAmount: log.amount, newAmount: val, type: log.type }) });
                                                                                             const resJson = await res.json();
                                                                                             if (resJson.success) {
                                                                                                 const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`);
@@ -2345,7 +2350,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                                     try {
                                                                                         const log = depositLogs.filter(l => l.customerName === customer)[depositEntries.findIndex(d => d.id === entry.id)];
                                                                                         if (!log) { alert('該当する履歴が見つかりません'); return; }
-                                                                                        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteDepositHistory', date: log.date, customerName: log.customerName, amount: log.amount, type: log.type }) });
+                                                                                        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteDepositHistory', date: log.date, customerName: log.customerName, customerPhone: customerPhoneForHistory, amount: log.amount, type: log.type }) });
                                                                                         const resJson = await res.json();
                                                                                         if (resJson.success) {
                                                                                             const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`);
@@ -2657,7 +2662,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
 
             {/* チャージモーダル */}
             {showChargeModal && chargeTarget && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => { setShowChargeModal(false); setChargeTarget(null); }}>
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => { setShowChargeModal(false); setChargeTarget(null); setChargeTargetPhone(null); }}>
                     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
                         <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">{chargeTarget}さんへチャージ</h3>
                         <div className="space-y-3">
@@ -2689,7 +2694,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                         </div>
                         <div className="flex gap-3 mt-6">
                             <button
-                                onClick={() => { setShowChargeModal(false); setChargeTarget(null); }}
+                                onClick={() => { setShowChargeModal(false); setChargeTarget(null); setChargeTargetPhone(null); }}
                                 className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-bold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
                             >
                                 キャンセル
@@ -2712,6 +2717,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 action: 'updateDeposit',
                                                 type: 'charge',
                                                 customerName: chargeTarget,
+                                                customerPhone: chargeTargetPhone ? normalizePhone(chargeTargetPhone) : '',
                                                 amount: totalAmount,
                                                 rawAmount: Number(chargeData.amount),
                                                 bonusRate: Number(chargeData.bonusRate)
@@ -2734,6 +2740,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         setChargeData({ amount: '', bonusRate: bonusRate.toString() });
                                         setShowChargeModal(false);
                                         setChargeTarget(null);
+                                        setChargeTargetPhone(null);
                                     } catch (err) {
                                         console.error(err);
                                         alert('エラーが発生しました');
