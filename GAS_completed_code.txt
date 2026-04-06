@@ -14,9 +14,10 @@ function todayJST() {
 function getCustomerBalance(ss, customerName) {
   const sheet = ss.getSheetByName("前払い管理");
   if (!sheet) return 0;
+  const trimmedName = String(customerName).trim();
   const values = sheet.getDataRange().getValues();
   for (let i = 1; i < values.length; i++) {
-    if (values[i][0] === customerName) {
+    if (String(values[i][0]).trim() === trimmedName) {
       return Number(values[i][2]) || 0;
     }
   }
@@ -30,6 +31,18 @@ function doPost(e) {
     const data = JSON.parse(e.postData.contents);
     const action = data.action;
     const output = ContentService.createTextOutput().setMimeType(ContentService.MimeType.JSON);
+
+    // デポジット関連の排他制御が必要なアクション一覧
+    const depositLockActions = ['addReport', 'editReport', 'deleteReport', 'updateDeposit', 'fixDepositBalance', 'deleteDepositHistory', 'editDepositHistory'];
+    let lock = null;
+    if (depositLockActions.includes(action)) {
+      lock = LockService.getDocumentLock();
+      try {
+        lock.waitLock(15000); // 最大15秒待機
+      } catch (lockError) {
+        return output.setContent(JSON.stringify({ success: false, message: 'サーバーが混み合っています。少し時間を置いて再度お試しください。' }));
+      }
+    }
     
     // ① 業務報告の追加（重複チェック対応）
     if (action === 'addReport') {
@@ -93,22 +106,37 @@ function doPost(e) {
         const dValues = depositSheet.getDataRange().getValues();
         let customerFound = false;
         for (let i = 1; i < dValues.length; i++) {
-          if (dValues[i][0] === customerName) {
+          if (String(dValues[i][0]).trim() === String(customerName).trim()) {
             customerFound = true;
             currentDeposit = Number(dValues[i][2]) || 0; // 残高は3列目(C列)に変更
             if (currentDeposit >= sales) {
               // デポジットで全額カバーできる場合
-              depositSheet.getRange(i + 1, 3).setValue(currentDeposit - sales);
+              const newBal = currentDeposit - sales;
+              depositSheet.getRange(i + 1, 3).setValue(newBal);
               paidStatus = '入金済';  // デポジットで全額カバーできる場合は自動で入金済に
               autoDeducted = true;
               depositUsed = sales;
               billingAmount = 0;
+              // ★ Bug#1修正: デポジット履歴に自動引き落としを記録
+              let histSheet = ss.getSheetByName('デポジット履歴');
+              if (!histSheet) {
+                histSheet = ss.insertSheet('デポジット履歴');
+                histSheet.appendRow(['日時', 'お客様名', '増減額', '種別', '残高']);
+              }
+              histSheet.appendRow([nowJST(), customerName, -sales, '利用(自動引落)', newBal]);
             } else if (currentDeposit > 0) {
               // デポジットで一部カバーできる場合
               depositSheet.getRange(i + 1, 3).setValue(0); // 残高を0にする
               insufficientBalance = true;
               depositUsed = currentDeposit;
               billingAmount = sales - currentDeposit;
+              // ★ Bug#1修正: 一部引き落としもデポジット履歴に記録
+              let histSheet = ss.getSheetByName('デポジット履歴');
+              if (!histSheet) {
+                histSheet = ss.insertSheet('デポジット履歴');
+                histSheet.appendRow(['日時', 'お客様名', '増減額', '種別', '残高']);
+              }
+              histSheet.appendRow([nowJST(), customerName, -currentDeposit, '利用(一部引落)', 0]);
             } else {
               // デポジットがない場合
               depositUsed = 0;
@@ -204,7 +232,7 @@ function doPost(e) {
             if (depSheet) {
               const depValues = depSheet.getDataRange().getValues();
               for (let j = 1; j < depValues.length; j++) {
-                if (depValues[j][0] === customerName) {
+                if (String(depValues[j][0]).trim() === String(customerName).trim()) {
                   const currentBal = Number(depValues[j][2]) || 0;
 
                   let histSheet = ss.getSheetByName("デポジット履歴");
@@ -212,25 +240,27 @@ function doPost(e) {
                     // 売上増加: 差額分を残高から追加引き落とし
                     const diff = newSales - oldSales;
                     const additionalDeduct = Math.min(diff, currentBal);
-                    depSheet.getRange(j + 1, 3).setValue(currentBal - additionalDeduct);
+                    const newBal = currentBal - additionalDeduct;
+                    depSheet.getRange(j + 1, 3).setValue(newBal);
                     const newDepositUsed = oldDepositUsed + additionalDeduct;
                     sheet.getRange(i + 1, 11).setValue(newDepositUsed); // K列更新
                     sheet.getRange(i + 1, 12).setValue(newSales - newDepositUsed); // L列更新
                     // 履歴記録
                     if (histSheet && additionalDeduct > 0) {
-                      histSheet.appendRow([nowJST(), customerName, -additionalDeduct, '報告編集(追加引落)', currentBal - additionalDeduct]);
+                      histSheet.appendRow([nowJST(), customerName, -additionalDeduct, '報告編集(追加引落)', newBal]);
                     }
                   } else {
                     // 売上減少: 差額分を残高に返還
                     const diff = oldSales - newSales;
                     const refund = Math.min(diff, oldDepositUsed);
-                    depSheet.getRange(j + 1, 3).setValue(currentBal + refund);
+                    const newBal = currentBal + refund;
+                    depSheet.getRange(j + 1, 3).setValue(newBal);
                     const newDepositUsed = oldDepositUsed - refund;
                     sheet.getRange(i + 1, 11).setValue(newDepositUsed); // K列更新
                     sheet.getRange(i + 1, 12).setValue(newSales - newDepositUsed); // L列更新
                     // 履歴記録
                     if (histSheet && refund > 0) {
-                      histSheet.appendRow([nowJST(), customerName, refund, '報告編集(返還)', currentBal + refund]);
+                      histSheet.appendRow([nowJST(), customerName, refund, '報告編集(返還)', newBal]);
                     }
                   }
                   break;
@@ -243,9 +273,11 @@ function doPost(e) {
           }
 
           const newBalance = getCustomerBalance(ss, customerName);
+          if (lock) lock.releaseLock();
           return output.setContent(JSON.stringify({ success: true, customerName: customerName, newBalance: newBalance }));
         }
       }
+      if (lock) lock.releaseLock();
       return output.setContent(JSON.stringify({ success: false, message: 'IDが見つかりません' }));
     }
 
@@ -479,11 +511,14 @@ function doPost(e) {
     // ⑤-2 業務報告の削除（デポジット逆戻し＋残高返却付き）
     if (action === 'deleteReport') {
       const sheet = ss.getSheetByName("業務報告");
-      if (!sheet) return output.setContent(JSON.stringify({ success: false, message: '業務報告シートがありません' }));
+      if (!sheet) {
+        if (lock) lock.releaseLock();
+        return output.setContent(JSON.stringify({ success: false, message: '業務報告シートがありません' }));
+      }
       const values = sheet.getDataRange().getValues();
       for (let i = 1; i < values.length; i++) {
         if (values[i][0] === data.id) {
-          const customerName = values[i][4]; // E列: 顧客名
+          const customerName = String(values[i][4]).trim(); // E列: 顧客名
           const depositUsed = Number(values[i][10]) || 0; // K列: デポジット使用額
           const paidStatus = values[i][8]; // I列: 入金状況
 
@@ -493,9 +528,10 @@ function doPost(e) {
             if (depSheet) {
               const depValues = depSheet.getDataRange().getValues();
               for (let j = 1; j < depValues.length; j++) {
-                if (depValues[j][0] === customerName) {
+                if (String(depValues[j][0]).trim() === customerName) {
                   const currentBal = Number(depValues[j][2]) || 0;
-                  depSheet.getRange(j + 1, 3).setValue(currentBal + depositUsed);
+                  const newBal = currentBal + depositUsed;
+                  depSheet.getRange(j + 1, 3).setValue(newBal);
                   break;
                 }
               }
@@ -510,9 +546,11 @@ function doPost(e) {
 
           sheet.deleteRow(i + 1);
           const newBalance = getCustomerBalance(ss, customerName);
+          if (lock) lock.releaseLock();
           return output.setContent(JSON.stringify({ success: true, customerName: customerName, newBalance: newBalance }));
         }
       }
+      if (lock) lock.releaseLock();
       return output.setContent(JSON.stringify({ success: false, message: '対象の報告が見つかりません' }));
     }
 
@@ -526,10 +564,11 @@ function doPost(e) {
       }
 
       if (!sheet) {
+        if (lock) lock.releaseLock();
         return output.setContent(JSON.stringify({ success: false, message: '前払い管理シートがありません' }));
       }
 
-      const customerName = data.customerName;
+      const customerName = String(data.customerName).trim();
       const amount = Number(data.amount) || 0;
       const isCharge = data.type === 'charge';
 
@@ -538,7 +577,7 @@ function doPost(e) {
       let currentBalance = 0;
 
       for (let i = 1; i < values.length; i++) {
-        if (values[i][0] === customerName) {
+        if (String(values[i][0]).trim() === customerName) {
           customerRowIndex = i + 1;
           currentBalance = Number(values[i][2]) || 0;
           break;
@@ -557,7 +596,7 @@ function doPost(e) {
           // 未入金かつ請求額 > 0 のレコードを古い順に収集
           const unpaidRows = [];
           for (let i = 1; i < repValues.length; i++) {
-            if (repValues[i][4] === customerName && repValues[i][8] === '未入金') {
+            if (String(repValues[i][4]).trim() === customerName && repValues[i][8] === '未入金') {
               const billing = Number(repValues[i][11]) || 0;
               if (billing > 0) {
                 unpaidRows.push({ rowIndex: i + 1, originalIndex: i, billing: billing, date: repValues[i][1] });
@@ -603,16 +642,19 @@ function doPost(e) {
         newBalance = isCharge ? remainingCharge : amount;
       }
 
-      // 履歴に記録
+      // ★ Bug#4修正: 履歴に正確な残高を記録
       const typeLabel = isCharge ? 'チャージ' : '利用';
-      // チャージ全額を履歴に記録（元のチャージ額）
-      historySheet.appendRow([nowJST(), customerName, amount, typeLabel, newBalance]);
-
-      // 自動精算があった場合、精算ログも追加
-      if (totalSettled > 0) {
+      if (isCharge && totalSettled > 0) {
+        // チャージ＋自動精算があった場合：チャージ時点の残高と精算後の残高を分けて記録
+        const balBeforeSettle = currentBalance + amount; // チャージ直後（精算前）の仮残高
+        historySheet.appendRow([nowJST(), customerName, amount, typeLabel, balBeforeSettle]);
         historySheet.appendRow([nowJST(), customerName, -totalSettled, '未払い充当', newBalance]);
+      } else {
+        // チャージのみ or 利用のみの場合
+        historySheet.appendRow([nowJST(), customerName, isCharge ? amount : -Math.abs(amount), typeLabel, newBalance]);
       }
 
+      if (lock) lock.releaseLock();
       return output.setContent(JSON.stringify({
         success: true,
         newBalance: newBalance,
@@ -630,17 +672,18 @@ function doPost(e) {
         historySheet.appendRow(["日時", "お客様名", "増減額", "種別", "残高"]);
       }
       if (!sheet) {
+        if (lock) lock.releaseLock();
         return output.setContent(JSON.stringify({ success: false, message: '前払い管理シートがありません' }));
       }
 
-      const customerName = data.customerName;
+      const customerName = String(data.customerName).trim();
       const newBalance = Number(data.newBalance) || 0;
       const values = sheet.getDataRange().getValues();
       let found = false;
       let oldBalance = 0;
 
       for (let i = 1; i < values.length; i++) {
-        if (values[i][0] === customerName) {
+        if (String(values[i][0]).trim() === customerName) {
           oldBalance = Number(values[i][2]) || 0;
           sheet.getRange(i + 1, 3).setValue(newBalance);
           found = true;
@@ -649,6 +692,7 @@ function doPost(e) {
       }
 
       if (!found) {
+        if (lock) lock.releaseLock();
         return output.setContent(JSON.stringify({ success: false, message: '顧客が見つかりません' }));
       }
 
@@ -656,6 +700,7 @@ function doPost(e) {
       const diff = newBalance - oldBalance;
       historySheet.appendRow([nowJST(), customerName, diff, '残高調整', newBalance]);
 
+      if (lock) lock.releaseLock();
       return output.setContent(JSON.stringify({ success: true, newBalance: newBalance }));
     }
 
@@ -663,13 +708,15 @@ function doPost(e) {
     if (action === 'deleteDepositHistory') {
       const historySheet = ss.getSheetByName("デポジット履歴");
       if (!historySheet) {
+        if (lock) lock.releaseLock();
         return output.setContent(JSON.stringify({ success: false, message: 'デポジット履歴シートがありません' }));
       }
 
+      const targetCustomerName = String(data.customerName).trim();
       const values = historySheet.getDataRange().getValues();
       for (let i = 1; i < values.length; i++) {
         const rowDate = values[i][0];
-        const rowName = String(values[i][1]);
+        const rowName = String(values[i][1]).trim();
         const rowAmount = Number(values[i][2]);
         const rowType = String(values[i][3]);
 
@@ -682,14 +729,13 @@ function doPost(e) {
           dateMatch = String(rowDate) === String(data.date);
         }
 
-        if (dateMatch && rowName === data.customerName && rowAmount === Number(data.amount) && rowType === data.type) {
+        if (dateMatch && rowName === targetCustomerName && rowAmount === Number(data.amount) && rowType === data.type) {
           // 残高自動連動: 削除する履歴のamount分を残高から逆算
-          // 例: チャージ+1000を削除 → 残高から1000引く / 未払い充当-300を削除 → 残高に300戻す
           const depSheet = ss.getSheetByName("前払い管理");
           if (depSheet && rowAmount !== 0) {
             const depValues = depSheet.getDataRange().getValues();
             for (let j = 1; j < depValues.length; j++) {
-              if (depValues[j][0] === data.customerName) {
+              if (String(depValues[j][0]).trim() === targetCustomerName) {
                 const currentBal = Number(depValues[j][2]) || 0;
                 depSheet.getRange(j + 1, 3).setValue(currentBal - rowAmount);
                 break;
@@ -698,11 +744,13 @@ function doPost(e) {
           }
 
           historySheet.deleteRow(i + 1);
-          const newBalance = getCustomerBalance(ss, data.customerName);
+          const newBalance = getCustomerBalance(ss, targetCustomerName);
+          if (lock) lock.releaseLock();
           return output.setContent(JSON.stringify({ success: true, newBalance: newBalance }));
         }
       }
 
+      if (lock) lock.releaseLock();
       return output.setContent(JSON.stringify({ success: false, message: '該当する履歴が見つかりません' }));
     }
 
@@ -710,13 +758,15 @@ function doPost(e) {
     if (action === 'editDepositHistory') {
       const historySheet = ss.getSheetByName("デポジット履歴");
       if (!historySheet) {
+        if (lock) lock.releaseLock();
         return output.setContent(JSON.stringify({ success: false, message: 'デポジット履歴シートがありません' }));
       }
 
+      const targetCustomerName = String(data.customerName).trim();
       const values = historySheet.getDataRange().getValues();
       for (let i = 1; i < values.length; i++) {
         const rowDate = values[i][0];
-        const rowName = String(values[i][1]);
+        const rowName = String(values[i][1]).trim();
         const rowAmount = Number(values[i][2]);
         const rowType = String(values[i][3]);
 
@@ -728,7 +778,7 @@ function doPost(e) {
           dateMatch = String(rowDate) === String(data.date);
         }
 
-        if (dateMatch && rowName === data.customerName && rowAmount === Number(data.oldAmount) && rowType === data.type) {
+        if (dateMatch && rowName === targetCustomerName && rowAmount === Number(data.oldAmount) && rowType === data.type) {
           const newAmount = Number(data.newAmount) || 0;
           const diff = newAmount - rowAmount; // 差額（例: 1000→800なら-200）
 
@@ -740,7 +790,7 @@ function doPost(e) {
           if (depSheet && diff !== 0) {
             const depValues = depSheet.getDataRange().getValues();
             for (let j = 1; j < depValues.length; j++) {
-              if (depValues[j][0] === data.customerName) {
+              if (String(depValues[j][0]).trim() === targetCustomerName) {
                 const currentBal = Number(depValues[j][2]) || 0;
                 depSheet.getRange(j + 1, 3).setValue(currentBal + diff);
                 break;
@@ -749,13 +799,15 @@ function doPost(e) {
           }
 
           // 履歴の残高列も更新
-          const newBalance = getCustomerBalance(ss, data.customerName);
+          const newBalance = getCustomerBalance(ss, targetCustomerName);
           historySheet.getRange(i + 1, 5).setValue(newBalance);
 
+          if (lock) lock.releaseLock();
           return output.setContent(JSON.stringify({ success: true, newBalance: newBalance }));
         }
       }
 
+      if (lock) lock.releaseLock();
       return output.setContent(JSON.stringify({ success: false, message: '該当する履歴が見つかりません' }));
     }
 
@@ -918,8 +970,17 @@ function doPost(e) {
       return output.setContent(JSON.stringify({ success: true, message: 'デモデータの初期化が完了しました。' }));
     }
     
+    if (lock) lock.releaseLock();
     return output.setContent(JSON.stringify({ success: false, message: 'Invalid action' }));
   } catch (error) {
+    // エラー時もロックを確実に解放
+    try {
+      const lockActions = ['addReport', 'editReport', 'deleteReport', 'updateDeposit', 'fixDepositBalance', 'deleteDepositHistory', 'editDepositHistory'];
+      if (lockActions.includes(JSON.parse(e.postData.contents).action)) {
+        const releaseLock = LockService.getDocumentLock();
+        if (releaseLock) releaseLock.releaseLock();
+      }
+    } catch (lockErr) { /* ignore */ }
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: error.toString() })).setMimeType(ContentService.MimeType.JSON);
   }
 }

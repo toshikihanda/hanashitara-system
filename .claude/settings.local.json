@@ -5,7 +5,22 @@
       "mcp__Claude_Preview__preview_start",
       "Bash(where npm:*)",
       "Bash(where npx:*)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://hanashitara-system.vercel.app/)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://hanashitara-system.vercel.app/)",
+      "Bash(npm install:*)",
+      "Read(//c/Users/prime/Desktop/works/works2/開発系/**)",
+      "Bash(npx create-next-app@latest loop-station --typescript --tailwind --eslint --app --src-dir --no-turbopack --import-alias \"@/*\" --use-npm)",
+      "Bash(npx create-next-app@latest loop-station --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --use-npm)",
+      "Bash(printf \"n\\\\ny\\\\n\")",
+      "Bash(yes)",
+      "Bash(npx create-next-app@latest loop-station --ts --tailwind --eslint --app --src-dir --import-alias \"@/*\" --use-npm)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :3000)",
+      "Bash(taskkill //PID 33672 //F)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001)",
+      "Bash(for i:*)",
+      "Bash(do curl:*)",
+      "Bash(break)",
+      "Bash(done)"
     ]
   }
 }

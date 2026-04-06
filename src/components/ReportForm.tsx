@@ -207,6 +207,13 @@ export default function ReportForm() {
                 console.error("JSON parse error:", e);
             }
 
+            // サーバー混雑エラー（排他制御によるロック失敗）
+            if (data && !data.success && data.message && data.message.includes('混み合って')) {
+                alert(`⚠️ ${data.message}\n\n数秒後にもう一度お試しください。`);
+                setIsSubmitting(false);
+                return;
+            }
+
             // 重複チェックによる警告ダイアログ
             if (data && data.duplicate && !forceSubmit) {
                 setIsSubmitting(false); // 一旦ローディング解除
