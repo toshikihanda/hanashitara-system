@@ -30,6 +30,7 @@ export default function AdminDashboard() {
 
     // タブ状態管理
     const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'staff' | 'customers' | 'deposit'>('dashboard');
+    const [reportSearchQuery, setReportSearchQuery] = useState('');
     const [staffSearchQuery, setStaffSearchQuery] = useState('');
     const [staffSortOption, setStaffSortOption] = useState<'sales_desc' | 'totalSales_desc' | 'name_asc'>('sales_desc');
     const [customerSearchQuery, setCustomerSearchQuery] = useState('');
@@ -1010,6 +1011,16 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     >
                                         {showUnpaidOnly ? '✕ フィルタ解除' : '未入金のみ表示'}
                                     </button>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
+                                        <input
+                                            type="text"
+                                            placeholder="名前・スタッフ・電話番号で検索..."
+                                            className="border border-gray-200 dark:border-gray-700 pl-8 pr-4 py-2 text-sm rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 w-64 focus:w-72 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all"
+                                            value={reportSearchQuery}
+                                            onChange={(e) => setReportSearchQuery(e.target.value)}
+                                        />
+                                    </div>
                                 </section>
 
                                 <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border overflow-hidden">
@@ -1049,16 +1060,26 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             </thead>
                                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                                 {(() => {
-                                                    const filteredReports = showUnpaidOnly ? reports.filter(r => !r.isPaid || recentlyPaidIds.has(r.id)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : monthReports;
+                                                    const baseReports = showUnpaidOnly ? reports.filter(r => !r.isPaid || recentlyPaidIds.has(r.id)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : monthReports;
+                                                    const filteredReports = reportSearchQuery.trim() ? baseReports.filter(r => {
+                                                        const q = reportSearchQuery.trim().toLowerCase();
+                                                        return r.customerName.toLowerCase().includes(q) || r.staff.toLowerCase().includes(q) || r.customerPhone.includes(q) || normalizePhone(r.customerPhone).includes(normalizePhone(q));
+                                                    }) : baseReports;
                                                     return filteredReports.length === 0 && !isLoading && !errorText ? (
                                                         <tr>
                                                             <td colSpan={11} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">
-                                                                {showUnpaidOnly ? '未入金の報告データがありません' : '当月の報告データがありません'}
+                                                                {reportSearchQuery.trim() ? '検索条件に一致するデータがありません' : showUnpaidOnly ? '未入金の報告データがありません' : '当月の報告データがありません'}
                                                             </td>
                                                         </tr>
                                                     ) : null;
                                                 })()}
-                                                {(showUnpaidOnly ? reports.filter(r => !r.isPaid || recentlyPaidIds.has(r.id)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : monthReports).map((report) => {
+                                                {(() => {
+                                                    const baseReports = showUnpaidOnly ? reports.filter(r => !r.isPaid || recentlyPaidIds.has(r.id)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : monthReports;
+                                                    return reportSearchQuery.trim() ? baseReports.filter(r => {
+                                                        const q = reportSearchQuery.trim().toLowerCase();
+                                                        return r.customerName.toLowerCase().includes(q) || r.staff.toLowerCase().includes(q) || r.customerPhone.includes(q) || normalizePhone(r.customerPhone).includes(normalizePhone(q));
+                                                    }) : baseReports;
+                                                })().map((report) => {
                                                     const isEditing = editingReportId === report.id;
                                                     const isUrgent = !report.isPaid && report.daysPending >= 3;
                                                     return (
