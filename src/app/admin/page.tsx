@@ -86,6 +86,7 @@ export default function AdminDashboard() {
     const [editingCustomerName, setEditingCustomerName] = useState<string | null>(null);
     const [editCustomerData, setEditCustomerData] = useState<{ customerName: string, customerPhone: string, customerPassword: string }>({ customerName: '', customerPhone: '', customerPassword: '' });
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     // 顧客追加・チャージ用モーダルステート
     const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
@@ -752,21 +753,61 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
 
             {/* Main Content */}
             <main className="flex-1 overflow-x-hidden bg-gray-50/50 dark:bg-[#000000]">
+                {/* モバイルドロワーメニュー */}
+                {isMobileMenuOpen && (
+                    <div className="fixed inset-0 z-50 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
+                        <div className="absolute inset-0 bg-black/50" />
+                        <aside className="absolute left-0 top-0 h-full w-64 bg-[#181824] text-white flex flex-col shadow-xl" onClick={(e) => e.stopPropagation()}>
+                            <div className="p-4 py-5 border-b border-[#242436] flex items-center justify-between">
+                                <h1 className="text-lg font-bold flex items-center gap-2">📞 通話管理</h1>
+                                <button onClick={() => setIsMobileMenuOpen(false)} className="text-gray-400 hover:text-white text-xl">✕</button>
+                            </div>
+                            <nav className="flex-1 py-4 flex flex-col gap-1">
+                                <button onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }} className={`w-full text-left px-5 py-3 flex items-center gap-3 transition-colors text-sm ${activeTab === 'dashboard' ? 'bg-[#242436] text-white font-bold border-l-4 border-indigo-500' : 'text-gray-400 hover:bg-[#1a1a28] hover:text-gray-200 border-l-4 border-transparent'}`}>
+                                    <span className="text-lg">📊</span><span>ダッシュボード</span>
+                                </button>
+                                <button onClick={() => { setActiveTab('reports'); setIsMobileMenuOpen(false); }} className={`w-full text-left px-5 py-3 flex items-center gap-3 transition-colors text-sm ${activeTab === 'reports' ? 'bg-[#242436] text-white font-bold border-l-4 border-indigo-500' : 'text-gray-400 hover:bg-[#1a1a28] hover:text-gray-200 border-l-4 border-transparent'}`}>
+                                    <span className="text-lg">📄</span><span>業務報告一覧</span>
+                                </button>
+                                <button onClick={() => { setActiveTab('staff'); setIsMobileMenuOpen(false); }} className={`w-full text-left px-5 py-3 flex items-center gap-3 transition-colors text-sm ${activeTab === 'staff' ? 'bg-[#242436] text-white font-bold border-l-4 border-indigo-500' : 'text-gray-400 hover:bg-[#1a1a28] hover:text-gray-200 border-l-4 border-transparent'}`}>
+                                    <span className="text-lg">👥</span><span>スタッフ管理</span>
+                                </button>
+                                <button onClick={() => { setActiveTab('customers'); setIsMobileMenuOpen(false); }} className={`w-full text-left px-5 py-3 flex items-center gap-3 transition-colors text-sm ${activeTab === 'customers' ? 'bg-[#242436] text-white font-bold border-l-4 border-indigo-500' : 'text-gray-400 hover:bg-[#1a1a28] hover:text-gray-200 border-l-4 border-transparent'}`}>
+                                    <span className="text-lg">📱</span><span>顧客管理</span>
+                                </button>
+                                <div className="pt-4 mt-2 border-t border-[#242036]">
+                                    <a href="/mypage" target="_blank" className="w-full text-left px-5 py-3 flex items-center gap-3 transition-colors text-gray-400 hover:bg-[#1a1a28] hover:text-gray-200 border-l-4 border-transparent text-sm">
+                                        <span className="text-lg">✏️</span><span>業務報告入力</span>
+                                    </a>
+                                    <a href="/customer/login" target="_blank" className="w-full text-left px-5 py-3 flex items-center gap-3 transition-colors text-gray-400 hover:bg-[#1a1a28] hover:text-gray-200 border-l-4 border-transparent text-sm">
+                                        <span className="text-lg">👤</span><span>顧客マイページ</span>
+                                    </a>
+                                </div>
+                            </nav>
+                        </aside>
+                    </div>
+                )}
+
                 {/* Header (Top Nav Replacement) */}
-                <header className="bg-white dark:bg-[#111111] border-b border-gray-200 dark:border-gray-800 px-6 sm:px-8 py-4 flex items-center justify-between sticky top-0 z-40 print:hidden h-[72px]">
-                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
-                        {activeTab === 'dashboard' && 'ダッシュボード'}
-                        {activeTab === 'reports' && '業務報告一覧 / 入金確認'}
-                        {activeTab === 'staff' && 'スタッフ管理 / 給与計算'}
-                        {activeTab === 'customers' && '顧客管理'}
-                    </h2>
+                <header className="bg-white dark:bg-[#111111] border-b border-gray-200 dark:border-gray-800 px-4 sm:px-6 md:px-8 py-4 flex items-center justify-between sticky top-0 z-40 print:hidden h-[72px]">
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 -ml-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+                        </button>
+                        <h2 className="text-base sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+                            {activeTab === 'dashboard' && 'ダッシュボード'}
+                            {activeTab === 'reports' && '業務報告一覧'}
+                            {activeTab === 'staff' && 'スタッフ管理'}
+                            {activeTab === 'customers' && '顧客管理'}
+                        </h2>
+                    </div>
 
                     <div className="flex items-center gap-4">
-                        <div className="relative bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1">
+                        <div className="relative bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-1 sm:px-2 py-1 rounded-lg text-xs sm:text-sm font-bold shadow-sm flex items-center gap-0.5 sm:gap-1">
                             <button onClick={handlePrevMonth} className="hover:bg-gray-200 dark:hover:bg-gray-700 px-2 py-1 rounded transition-colors">
                                 &lt;
                             </button>
-                            <button onClick={() => setShowMonthPicker(!showMonthPicker)} className="hover:bg-gray-200 dark:hover:bg-gray-700 px-3 py-1 rounded transition-colors min-w-[90px]">
+                            <button onClick={() => setShowMonthPicker(!showMonthPicker)} className="hover:bg-gray-200 dark:hover:bg-gray-700 px-1.5 sm:px-3 py-1 rounded transition-colors min-w-[70px] sm:min-w-[90px]">
                                 {selectedMonth.replace('-', '年')}月
                             </button>
                             <button onClick={handleNextMonth} className="hover:bg-gray-200 dark:hover:bg-gray-700 px-2 py-1 rounded transition-colors">
@@ -798,47 +839,47 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                     </div>
                 </header>
 
-                <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-8 pb-32 print:p-0 print:m-0 print:space-y-0 print:pb-0 print:max-w-none">
+                <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-8 pb-32 print:p-0 print:m-0 print:space-y-0 print:pb-0 print:max-w-none">
                     <div className="print:hidden space-y-8">
 
                         {activeTab === 'dashboard' && (
                             <>
-                                <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-                                    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border-l-4 border-indigo-400 flex flex-col justify-center">
+                                <section className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
+                                    <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-xl shadow-sm border-l-4 border-indigo-400 flex flex-col justify-center">
                                         <p className="text-xs text-gray-500 font-medium mb-1">年間累計売上</p>
-                                        <p className="text-2xl font-black text-gray-900 dark:text-gray-100">¥{totalYearSales.toLocaleString()}</p>
+                                        <p className="text-xl sm:text-2xl font-black text-gray-900 dark:text-gray-100">¥{totalYearSales.toLocaleString()}</p>
                                         <p className="text-[10px] text-gray-400 mt-1">{currentYear}年</p>
                                     </div>
-                                    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border-l-4 border-teal-400 flex flex-col justify-center">
+                                    <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-xl shadow-sm border-l-4 border-teal-400 flex flex-col justify-center">
                                         <p className="text-xs text-gray-500 font-medium mb-1">月間売上</p>
-                                        <p className="text-2xl font-black text-gray-900 dark:text-gray-100">¥{totalMonthSales.toLocaleString()}</p>
+                                        <p className="text-xl sm:text-2xl font-black text-gray-900 dark:text-gray-100">¥{totalMonthSales.toLocaleString()}</p>
                                         <p className="text-[10px] text-gray-400 mt-1">{selectedMonth.replace('-', '年')}月</p>
                                     </div>
-                                    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border-l-4 border-blue-400 flex flex-col justify-center">
+                                    <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-xl shadow-sm border-l-4 border-blue-400 flex flex-col justify-center">
                                         <p className="text-xs text-gray-500 font-medium mb-1">オーナー取り分</p>
-                                        <p className="text-2xl font-black text-gray-900 dark:text-gray-100">¥{totalMonthProfit.toLocaleString()}</p>
+                                        <p className="text-xl sm:text-2xl font-black text-gray-900 dark:text-gray-100">¥{totalMonthProfit.toLocaleString()}</p>
                                         <p className="text-[10px] text-gray-400 mt-1">全体の{totalMonthSales > 0 ? Math.round(totalMonthProfit / totalMonthSales * 100) : 0}%</p>
                                     </div>
                                     <div
                                         onClick={() => { setActiveTab('reports'); setShowUnpaidOnly(true); }}
-                                        className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border-l-4 border-red-400 flex flex-col justify-center cursor-pointer hover:shadow-md hover:bg-red-50/30 transition-all"
+                                        className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-xl shadow-sm border-l-4 border-red-400 flex flex-col justify-center cursor-pointer hover:shadow-md hover:bg-red-50/30 transition-all"
                                         title="クリックで未入金一覧を表示"
                                     >
                                         <p className="text-xs text-gray-500 font-medium mb-1">未入金額</p>
-                                        <p className="text-2xl font-black text-gray-900 dark:text-gray-100">¥{totalUnpaid.toLocaleString()}</p>
+                                        <p className="text-xl sm:text-2xl font-black text-gray-900 dark:text-gray-100">¥{totalUnpaid.toLocaleString()}</p>
                                         <p className="text-[10px] text-gray-400 mt-1">{unpaidCount}件未入金 →</p>
                                     </div>
-                                    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border-l-4 border-purple-400 flex flex-col justify-center">
+                                    <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-xl shadow-sm border-l-4 border-purple-400 flex flex-col justify-center col-span-2 lg:col-span-1">
                                         <p className="text-xs text-gray-500 font-medium mb-1">通話件数</p>
-                                        <p className="text-2xl font-black text-gray-900 dark:text-gray-100">{totalCalls}件</p>
+                                        <p className="text-xl sm:text-2xl font-black text-gray-900 dark:text-gray-100">{totalCalls}件</p>
                                         <p className="text-[10px] text-gray-400 mt-1">稼働スタッフ {activeStaffCount}名</p>
                                     </div>
                                 </section>
 
                                 {/* 売上推移チャート */}
-                                <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col gap-4">
+                                <section className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col gap-3 sm:gap-4">
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b dark:border-gray-700 border-gray-100 pb-2 gap-2">
-                                        <h2 className="font-bold text-gray-800 dark:text-gray-200">売上推移（直近{trendMonths}ヶ月）</h2>
+                                        <h2 className="font-bold text-sm sm:text-base text-gray-800 dark:text-gray-200">売上推移（直近{trendMonths}ヶ月）</h2>
                                         <div className="flex items-center gap-2 flex-wrap">
                                             {/* 6ヶ月/12ヶ月トグル */}
                                             <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
@@ -878,7 +919,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             <span>オーナー取り分</span>
                                         </div>
                                     </div>
-                                    <div className={`flex items-end justify-between ${trendMonths === 12 ? 'gap-0.5' : 'gap-1 sm:gap-4'} h-48 mt-2`}>
+                                    <div className={`flex items-end justify-between ${trendMonths === 12 ? 'gap-0.5' : 'gap-1 sm:gap-4'} h-36 sm:h-48 mt-2`}>
                                         {trendData.map((data, idx) => (
                                             <div key={idx} className="flex flex-col items-center flex-1 gap-1">
                                                 <div className={`w-full flex justify-center items-end h-36 relative group ${trendMonths === 12 ? 'gap-[1px]' : 'gap-1'}`}>
@@ -924,7 +965,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 <span>オーナー取り分</span>
                                             </div>
                                         </div>
-                                        <div className="flex items-end justify-between gap-2 sm:gap-6 h-48 mt-2">
+                                        <div className="flex items-end justify-between gap-2 sm:gap-6 h-36 sm:h-48 mt-2">
                                             {yearlyStats.map((ys, idx) => (
                                                 <div key={idx} className="flex flex-col items-center flex-1 gap-1">
                                                     <div className="w-full flex justify-center items-end h-36 relative group gap-1">
@@ -955,11 +996,12 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 )}
 
                                 {/* スタッフ別実績（ダッシュボード用） */}
-                                <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col overflow-hidden mt-6">
-                                    <h2 className="font-bold text-gray-800 dark:text-gray-200 border-b dark:border-gray-700 border-gray-100 dark:border-gray-700 pb-2 mb-3 flex items-center gap-2">
+                                <section className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col overflow-hidden mt-6">
+                                    <h2 className="font-bold text-gray-800 dark:text-gray-200 border-b dark:border-gray-700 border-gray-100 pb-2 mb-3 flex items-center gap-2">
                                         👥 スタッフ別売上サマリー
                                     </h2>
-                                    <div className="overflow-x-auto relative">
+                                    {/* PC用テーブル */}
+                                    <div className="overflow-x-auto relative hidden md:block">
                                         <table className="w-full text-sm text-left">
                                             <thead>
                                                 <tr className="text-gray-500 font-medium border-b border-gray-100 dark:border-gray-700">
@@ -984,6 +1026,32 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 )}
                                             </tbody>
                                         </table>
+                                    </div>
+                                    {/* モバイル用カード */}
+                                    <div className="md:hidden space-y-3">
+                                        {staffStats.length === 0 ? (
+                                            <p className="text-center py-6 text-gray-400 dark:text-gray-500">データがありません</p>
+                                        ) : (
+                                            staffStats.map(s => (
+                                                <div key={s.name} className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3 border border-gray-100 dark:border-gray-700">
+                                                    <p className="font-bold text-gray-800 dark:text-gray-200 mb-2">{s.name}</p>
+                                                    <div className="grid grid-cols-3 gap-2 text-xs">
+                                                        <div>
+                                                            <p className="text-gray-500">売上</p>
+                                                            <p className="font-bold text-gray-900 dark:text-gray-100">¥{s.sales.toLocaleString()}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-gray-500">スタッフ</p>
+                                                            <p className="font-bold text-gray-900 dark:text-gray-100">¥{s.share.toLocaleString()}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-gray-500">オーナー</p>
+                                                            <p className="font-bold text-gray-900 dark:text-gray-100">¥{(isOwnerStaff(s.name) ? s.sales : (s.sales - s.share)).toLocaleString()}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
                                     </div>
                                 </section>
                             </>
@@ -1013,24 +1081,103 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 </section>
 
                                 <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border overflow-hidden">
-                                    <div className="px-6 py-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
+                                    <div className="px-4 sm:px-6 py-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
                                         <h2 className="font-semibold text-gray-800 dark:text-gray-200">業務報告一覧</h2>
                                         <span className="text-xs text-gray-500 dark:text-gray-400">※チェックで入金確認</span>
                                     </div>
-                                    <div className="overflow-x-auto relative">
 
-                                        {/* ローディング表示とエラー表示 */}
-                                        {isLoading && (
-                                            <div className="absolute inset-0 bg-white dark:bg-gray-800/70 flex justify-center items-center z-10 backdrop-blur-sm">
-                                                <span className="text-gray-500 dark:text-gray-400 font-medium animate-pulse">データを取得中...</span>
-                                            </div>
-                                        )}
-                                        {errorText && (
-                                            <div className="p-4 bg-red-50 text-red-600 text-sm border-b dark:border-gray-700 font-medium">
-                                                {errorText}
-                                            </div>
-                                        )}
+                                    {/* ローディング表示とエラー表示 */}
+                                    {isLoading && (
+                                        <div className="flex justify-center items-center py-8">
+                                            <span className="text-gray-500 dark:text-gray-400 font-medium animate-pulse">データを取得中...</span>
+                                        </div>
+                                    )}
+                                    {errorText && (
+                                        <div className="p-4 bg-red-50 text-red-600 text-sm border-b dark:border-gray-700 font-medium">
+                                            {errorText}
+                                        </div>
+                                    )}
 
+                                    {/* モバイル用カードリスト */}
+                                    <div className="md:hidden p-2 space-y-2">
+                                        {(() => {
+                                            const filteredReports = showUnpaidOnly ? reports.filter(r => !r.isPaid || recentlyPaidIds.has(r.id)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : monthReports;
+                                            return filteredReports.length === 0 && !isLoading && !errorText ? (
+                                                <p className="text-center py-6 text-gray-400 dark:text-gray-500 text-sm">
+                                                    {showUnpaidOnly ? '未入金の報告データがありません' : '当月の報告データがありません'}
+                                                </p>
+                                            ) : filteredReports.map((report) => {
+                                                const isUrgent = !report.isPaid && report.daysPending >= 3;
+                                                return (
+                                                    <div key={report.id} className={`rounded-lg border p-2.5 space-y-1.5 ${isUrgent ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700'}`}>
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                                <button
+                                                                    onClick={() => togglePaidStatus(report.id, report.isPaid)}
+                                                                    className={`w-5 h-5 shrink-0 flex items-center justify-center rounded transition-colors border shadow-sm ${report.isPaid ? 'bg-[#4cd9c0] border-transparent text-white' : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600'}`}
+                                                                >
+                                                                    {report.isPaid && <span className="text-xs">✓</span>}
+                                                                </button>
+                                                                <span className="font-bold text-sm text-gray-900 dark:text-gray-100 truncate">{report.customerName}</span>
+                                                                {isUrgent && <span className="text-[9px] px-1 py-0.5 rounded bg-red-500 text-white font-bold shrink-0">催促要</span>}
+                                                            </div>
+                                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${report.isPaid ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                                                                {report.isPaid ? '入金済' : '未入金'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
+                                                            <div className="flex items-center gap-2">
+                                                                <span>{new Date(report.date).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}</span>
+                                                                <span>{report.staff}</span>
+                                                                {report.services.split(', ').map(s => {
+                                                                    const parsedService = parseServiceName(s);
+                                                                    let bgClass = "bg-blue-50 text-blue-600";
+                                                                    if (s.includes('占い')) bgClass = "bg-pink-50 text-pink-600";
+                                                                    if (s.includes('性的')) bgClass = "bg-yellow-50 text-yellow-700";
+                                                                    return <span key={s} className={`text-[9px] px-1.5 py-0.5 rounded ${bgClass}`}>{parsedService}</span>;
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-2 text-sm">
+                                                                <span className="font-bold text-gray-900 dark:text-gray-100">¥{report.totalSales.toLocaleString()}</span>
+                                                                {report.depositUsed > 0 && <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">デポ -¥{report.depositUsed.toLocaleString()}</span>}
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setEditingReportId(report.id);
+                                                                        setEditReportData({ customerName: report.customerName, customerPhone: report.customerPhone, totalSales: report.totalSales });
+                                                                    }}
+                                                                    className="px-2.5 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded text-xs font-bold"
+                                                                >編集</button>
+                                                                <button
+                                                                    onClick={async () => {
+                                                                        if (!confirm('この報告を削除しますか？')) return;
+                                                                        setIsSaving(true);
+                                                                        try {
+                                                                            const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteReport', id: report.id }) });
+                                                                            const json = await res.json();
+                                                                            if (json.success) {
+                                                                                setReports(prev => prev.filter(r => r.id !== report.id));
+                                                                                if (json.customerName && json.newBalance !== undefined) setDeposits(prev => ({ ...prev, [json.customerName]: json.newBalance }));
+                                                                                showToast('報告を削除しました');
+                                                                            } else { alert('エラー: ' + (json.message || '削除に失敗しました')); }
+                                                                        } catch (e) { alert('エラーが発生しました'); }
+                                                                        finally { setIsSaving(false); }
+                                                                    }}
+                                                                    className="px-2.5 py-1 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded text-xs font-bold"
+                                                                >削除</button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            });
+                                        })()}
+                                    </div>
+
+                                    {/* PC用テーブル */}
+                                    <div className="overflow-x-auto relative hidden md:block">
                                         <table className="w-full text-sm text-left">
                                             <thead className="bg-transparent border-b dark:border-gray-700">
                                                 <tr className="text-gray-600 dark:text-gray-400">
@@ -1255,36 +1402,109 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         </table>
                                     </div>
                                 </section>
+
+                                {/* モバイル用：業務報告の編集モーダル */}
+                                {editingReportId && (
+                                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 md:hidden" onClick={() => setEditingReportId(null)}>
+                                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-[95vw] max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+                                            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">業務報告の編集</h3>
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">お客様名</label>
+                                                    <input
+                                                        type="text"
+                                                        value={editReportData.customerName}
+                                                        onChange={(e) => setEditReportData({ ...editReportData, customerName: e.target.value })}
+                                                        className="w-full border border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">電話番号</label>
+                                                    <input
+                                                        type="tel"
+                                                        value={editReportData.customerPhone}
+                                                        onChange={(e) => setEditReportData({ ...editReportData, customerPhone: e.target.value })}
+                                                        className="w-full border border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
+                                                        placeholder="090-1234-5678"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">売上額</label>
+                                                    <input
+                                                        type="number"
+                                                        value={editReportData.totalSales}
+                                                        onChange={(e) => setEditReportData({ ...editReportData, totalSales: Number(e.target.value) })}
+                                                        className="w-full border border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-3 mt-6">
+                                                <button
+                                                    onClick={() => setEditingReportId(null)}
+                                                    className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-bold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                                                >キャンセル</button>
+                                                <button
+                                                    onClick={async () => {
+                                                        setIsSaving(true);
+                                                        try {
+                                                            const res = await fetch(GAS_URL, {
+                                                                method: 'POST',
+                                                                body: JSON.stringify({
+                                                                    action: 'editReport',
+                                                                    id: editingReportId,
+                                                                    customerName: editReportData.customerName,
+                                                                    customerPhone: normalizePhone(editReportData.customerPhone),
+                                                                    totalSales: editReportData.totalSales
+                                                                })
+                                                            });
+                                                            const json = await res.json();
+                                                            if (json.success) {
+                                                                setEditingReportId(null);
+                                                                setReports(prev => prev.map(r => r.id === editingReportId ? { ...r, customerName: editReportData.customerName, customerPhone: editReportData.customerPhone, totalSales: editReportData.totalSales } : r));
+                                                                if (json.customerName && json.newBalance !== undefined) setDeposits(prev => ({ ...prev, [json.customerName]: json.newBalance }));
+                                                                showToast('報告を更新しました');
+                                                            } else { alert('エラー: ' + (json.message || '更新に失敗しました')); }
+                                                        } catch (e) { alert('エラーが発生しました'); }
+                                                        finally { setIsSaving(false); }
+                                                    }}
+                                                    className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors"
+                                                >保存</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </>
                         )}
 
                         {/* スタッフ管理 (新規追加・給与明細等) */}
                         {activeTab === 'staff' && (
                             <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border overflow-hidden">
-                                <div className="px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 border-b dark:border-gray-800 bg-white dark:bg-[#111111]">
-                                    <div className="flex items-center gap-4">
-                                        <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">スタッフ管理</h2>
-                                        <button
-                                            onClick={() => setShowAddStaffModal(true)}
-                                            className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 font-bold px-4 py-1.5 rounded-lg text-sm hover:bg-gray-800 dark:hover:bg-white transition-colors shadow-sm whitespace-nowrap"
-                                        >
-                                            ＋ スタッフを追加する
-                                        </button>
-                                        <input
-                                            type="month"
-                                            value={selectedMonth}
-                                            onChange={(e) => setSelectedMonth(e.target.value)}
-                                            className="border-none bg-gray-100 dark:bg-gray-800 rounded-lg pl-3 pr-2 py-1.5 text-sm font-medium text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-700 transition-all cursor-pointer"
-                                        />
+                                <div className="px-4 py-3 flex flex-col gap-3 border-b dark:border-gray-800 bg-white dark:bg-[#111111]">
+                                    <div className="flex items-center justify-between">
+                                        <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 whitespace-nowrap">スタッフ管理</h2>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setShowAddStaffModal(true)}
+                                                className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 font-bold px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm hover:bg-gray-800 dark:hover:bg-white transition-colors shadow-sm whitespace-nowrap"
+                                            >
+                                                ＋ 追加
+                                            </button>
+                                            <input
+                                                type="month"
+                                                value={selectedMonth}
+                                                onChange={(e) => setSelectedMonth(e.target.value)}
+                                                className="border-none bg-gray-100 dark:bg-gray-800 rounded-lg pl-2 sm:pl-3 pr-1 sm:pr-2 py-1.5 text-xs sm:text-sm font-medium text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-700 transition-all cursor-pointer"
+                                            />
+                                        </div>
                                     </div>
 
-                                    <div className="flex flex-wrap items-center gap-3">
-                                        <div className="relative">
+                                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                                        <div className="relative flex-1 min-w-[120px]">
                                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
                                             <input
                                                 type="text"
                                                 placeholder="名前で検索"
-                                                className="border border-gray-200 dark:border-gray-700 pl-8 pr-4 py-1.5 text-sm rounded-lg bg-gray-50 dark:bg-gray-900/50 text-gray-800 dark:text-gray-200 w-48 focus:w-64 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all"
+                                                className="border border-gray-200 dark:border-gray-700 pl-8 pr-4 py-1.5 text-sm rounded-lg bg-gray-50 dark:bg-gray-900/50 text-gray-800 dark:text-gray-200 w-full focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all"
                                                 value={staffSearchQuery}
                                                 onChange={(e) => setStaffSearchQuery(e.target.value)}
                                             />
@@ -1301,7 +1521,65 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         </select>
                                     </div>
                                 </div>
-                                <div className="overflow-x-auto relative p-4">
+                                {/* モバイル用カード */}
+                                <div className="md:hidden p-3 space-y-3">
+                                    {staffStats.length === 0 ? (
+                                        <p className="text-center py-8 text-gray-400 dark:text-gray-500">データがありません</p>
+                                    ) : staffStats.map((s) => {
+                                        const callCount = monthReports.filter(r => r.staff === s.name).length;
+                                        const svcs = (staffServices[s.name] || '').split(',').map(ss => ss.trim()).filter(Boolean);
+                                        return (
+                                            <div key={s.name} className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border border-gray-100 dark:border-gray-700 space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <p className="font-bold text-gray-900 dark:text-gray-100">{s.name}</p>
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400">{staffEmails[s.name] || '未登録'}</p>
+                                                    </div>
+                                                    <span className="text-xs text-gray-500">{callCount}件</span>
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-2 text-xs">
+                                                    <div>
+                                                        <p className="text-gray-500">売上</p>
+                                                        <p className="font-bold text-gray-900 dark:text-gray-100">¥{s.sales.toLocaleString()}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-gray-500">取り分</p>
+                                                        <p className="font-bold text-gray-900 dark:text-gray-100">¥{s.share.toLocaleString()}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-gray-500">累計</p>
+                                                        <p className="font-bold text-gray-900 dark:text-gray-100">¥{s.totalShare.toLocaleString()}</p>
+                                                    </div>
+                                                </div>
+                                                {svcs.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {svcs.map(serviceName => {
+                                                            let bgClass = "bg-blue-50 text-blue-700 border-blue-200";
+                                                            if (serviceName.includes('占い')) bgClass = "bg-pink-50 text-pink-700 border-pink-200";
+                                                            if (serviceName.includes('傾聴')) bgClass = "bg-green-50 text-green-700 border-green-200";
+                                                            if (serviceName.includes('性的')) bgClass = "bg-yellow-50 text-yellow-700 border-yellow-200";
+                                                            return <span key={serviceName} className={`text-[10px] px-2 py-0.5 rounded border ${bgClass} font-medium`}>{serviceName}</span>;
+                                                        })}
+                                                    </div>
+                                                )}
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => setShowStaffDetailFor(s.name)} className="flex-1 px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-700 rounded-lg text-xs font-bold">👁️ 詳細</button>
+                                                    <button onClick={() => setSelectedPdfStaff(s.name)} className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-bold">📄 PDF</button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditingStaffName(s.name);
+                                                            setEditStaffData({ name: s.name, password: staffPasswords[s.name] || '', email: staffEmails[s.name] || '', services: (staffServices[s.name] || '').split(',').map(ss => ss.trim()).filter(Boolean) });
+                                                        }}
+                                                        className="px-3 py-2 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-bold"
+                                                    >⚙️</button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* PC用テーブル */}
+                                <div className="overflow-x-auto relative p-4 hidden md:block">
                                     <table className="w-full text-sm text-left border rounded-lg overflow-hidden">
                                         <thead className="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-b dark:border-gray-700">
                                             <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -1321,19 +1599,15 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 </tr>
                                             )}
                                             {staffStats.map((s) => {
-                                                // 今月の通話件数を計算
                                                 const monthStaffReports = monthReports.filter(r => r.staff === s.name);
                                                 const callCount = monthStaffReports.length;
-
-                                                // サービス別内訳を計算
                                                 const serviceBreakdown = new Map<string, number>();
                                                 monthStaffReports.forEach(r => {
                                                     r.services.split(', ').forEach(service => {
-                                                        const serviceName = parseServiceName(service).split(' ')[0]; // "占い 40分" → "占い"
+                                                        const serviceName = parseServiceName(service).split(' ')[0];
                                                         serviceBreakdown.set(serviceName, (serviceBreakdown.get(serviceName) || 0) + r.staffShare);
                                                     });
                                                 });
-
                                                 return (
                                                     <tr key={s.name} className="hover:bg-gray-50/50 dark:bg-gray-800/50 transition-colors">
                                                         <td className="px-4 py-3">
@@ -1411,7 +1685,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 {/* スタッフ編集モーダル */}
                                 {editingStaffName && (
                                     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setEditingStaffName(null)}>
-                                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+                                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-[95vw] sm:w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                                             <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">スタッフ情報の編集</h3>
                                             <div className="space-y-3">
                                                 <div>
@@ -1540,7 +1814,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 {/* スタッフ追加モーダル */}
                                 {showAddStaffModal && (
                                     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowAddStaffModal(false)}>
-                                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+                                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-[95vw] sm:w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                                             <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">新しいスタッフを追加</h3>
                                             <div className="space-y-3">
                                                 <div>
@@ -1706,7 +1980,57 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         </div>
                                     </div>
                                 </div>
-                                <div className="overflow-x-auto relative p-4">
+                                {/* モバイル用カード */}
+                                <div className="md:hidden p-3 space-y-3">
+                                    {customerList.length === 0 ? (
+                                        <p className="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">データがありません。上の「＋ 追加する」ボタンから顧客を追加してください。</p>
+                                    ) : customerList.map(({ name: customerName, phone, registeredDate, callCount, monthlyAmount, totalPaid, balance }) => {
+                                        const isBlacklisted = phone && phone !== '登録なし' && blacklistedPhones.some(bl => normalizePhone(bl) === normalizePhone(phone));
+                                        return (
+                                            <div key={customerName} className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border border-gray-100 dark:border-gray-700 space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-gray-900 dark:text-gray-100">{customerName}</span>
+                                                        {isBlacklisted && <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold border border-red-200">NG</span>}
+                                                    </div>
+                                                    <span className={`font-bold text-sm ${balance > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`}>¥{balance.toLocaleString()}</span>
+                                                </div>
+                                                <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                                                    <span>{phone && phone !== '登録なし' ? formatPhone(phone) : phone}</span>
+                                                    <span>{callCount}回</span>
+                                                    <span>{new Date(registeredDate).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}</span>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                                    <div>
+                                                        <p className="text-gray-500">今月利用額</p>
+                                                        <p className="font-bold text-gray-900 dark:text-gray-100">¥{monthlyAmount.toLocaleString()}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-gray-500">累計利用額</p>
+                                                        <p className="font-bold text-gray-900 dark:text-gray-100">¥{totalPaid.toLocaleString()}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => { setChargeTarget(customerName); setChargeTargetPhone(phone); setShowChargeModal(true); }}
+                                                        className="flex-1 px-3 py-2 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-700 rounded-lg text-xs font-bold"
+                                                    >💰 チャージ</button>
+                                                    <button
+                                                        onClick={async () => { setIsSaving(true); try { await fetchDepositLogs(); setShowHistoryForCustomer(customerName); } finally { setIsSaving(false); } }}
+                                                        className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-bold"
+                                                    >📄 履歴</button>
+                                                    <button
+                                                        onClick={() => { setEditingCustomerName(customerName); setEditCustomerData({ customerName, customerPhone: phone === '登録なし' ? '' : phone, customerPassword: customerPasswords[customerName] || '' }); }}
+                                                        className="px-3 py-2 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-bold"
+                                                    >⚙️</button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* PC用テーブル */}
+                                <div className="overflow-x-auto relative p-4 hidden md:block">
                                     <table className="w-full text-sm text-left border rounded-lg overflow-hidden">
                                         <thead className="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-b dark:border-gray-700">
                                             <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -1775,9 +2099,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     onClick={async () => {
                                                                         setIsSaving(true);
                                                                         try {
-                                                                            // 両方のデータが揃うまで待機
                                                                             await fetchDepositLogs();
-                                                                            // reportsは既に取得済みなので、両方揃った状態でモーダルを開く
                                                                             setShowHistoryForCustomer(customerName);
                                                                         } finally {
                                                                             setIsSaving(false);
@@ -1806,7 +2128,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 {/* 顧客編集モーダル */}
                                 {editingCustomerName && (
                                     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setEditingCustomerName(null)}>
-                                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+                                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-[95vw] sm:w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                                             <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">顧客情報の編集</h3>
                                             <div className="space-y-3">
                                                 <div>
@@ -2117,8 +2439,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                     )}
                     {/* スタッフ詳細モーダル */}
                     {showStaffDetailFor && (
-                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60] PrintHidden pt-20">
-                            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col mt-10">
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-2 sm:p-4 z-[60] PrintHidden pt-16 sm:pt-20">
+                            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-[98vw] sm:w-full max-h-[85vh] flex flex-col mt-4 sm:mt-10">
                                 <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900 rounded-t-xl">
                                     <h3 className="font-bold text-lg text-gray-800 dark:text-gray-200">{showStaffDetailFor} さんの {selectedMonth.replace('-', '年')}月 実績詳細</h3>
                                     <button onClick={() => setShowStaffDetailFor(null)} className="text-gray-400 dark:text-gray-500 hover:text-gray-800 dark:text-gray-200 text-xl font-bold">✕</button>
@@ -2156,8 +2478,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
 
                     {/* お客様履歴モーダル（デポジット + 業務報告） */}
                     {showHistoryForCustomer && (
-                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60] PrintHidden pt-20">
-                            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-4xl w-full max-h-[85vh] flex flex-col mt-4">
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-2 sm:p-4 z-[60] PrintHidden pt-16 sm:pt-20">
+                            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-4xl w-[98vw] sm:w-full max-h-[85vh] flex flex-col mt-2 sm:mt-4">
                                 <div className="p-4 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-900 rounded-t-xl">
                                     <div className="flex justify-between items-center mb-3">
                                         <h3 className="font-bold text-lg text-gray-800 dark:text-gray-200">{showHistoryForCustomer} 様の ご利用履歴</h3>
@@ -2172,7 +2494,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         </button>
                                     </div>
                                 </div>
-                                <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8 bg-gray-50/30">
+                                <div className="flex-1 overflow-y-auto p-3 sm:p-6 flex flex-col gap-6 sm:gap-8 bg-gray-50/30">
 
                                     {/* 📒 通帳タブ */}
                                     {historyTabMode === 'ledger' && (() => {
@@ -2217,7 +2539,118 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         });
                                         return (
                                             <div>
-                                                <div className="bg-white dark:bg-gray-800 rounded border shadow-sm overflow-hidden">
+                                                {/* モバイル用カードリスト */}
+                                                <div className="md:hidden space-y-2">
+                                                    {entriesWithBalance.length === 0 && (
+                                                        <p className="text-center py-8 text-gray-400">履歴がありません</p>
+                                                    )}
+                                                    {entriesWithBalance.map((entry, i) => (
+                                                        <div key={entry.id + '-' + i} className={`rounded-lg border p-2.5 space-y-1 ${entry.type === 'usage' ? 'bg-gray-50/50 dark:bg-gray-900/30 border-gray-100 dark:border-gray-700' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}>
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-[10px] text-gray-400">{formatJSTDate(entry.date, true)}</span>
+                                                                    {entry.type === 'usage' ? (
+                                                                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap ${entry.isPaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{entry.isPaid ? '利用(済)' : '利用(未払)'}</span>
+                                                                    ) : (
+                                                                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap ${entry.amount >= 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>{entry.label}</span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    {entry.type === 'usage' && entry.reportId && (
+                                                                        <>
+                                                                            <button disabled={isSaving} onClick={() => {
+                                                                                const newAmount = prompt(`売上額を変更（現在: ¥${entry.totalSales.toLocaleString()}）`, String(entry.totalSales));
+                                                                                if (newAmount === null) return;
+                                                                                const val = Number(newAmount);
+                                                                                if (isNaN(val) || val < 0) { alert('有効な金額を入力してください'); return; }
+                                                                                (async () => {
+                                                                                    setIsSaving(true); setSavingMessage('編集中...');
+                                                                                    try {
+                                                                                        const rep = reports.find(r => r.id === entry.reportId);
+                                                                                        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'editReport', id: entry.reportId, customerName: customer, customerPhone: rep?.customerPhone || entry.customerPhone, totalSales: val }) });
+                                                                                        const json = await res.json();
+                                                                                        if (json.success) {
+                                                                                            setReports(prev => prev.map(r => r.id === entry.reportId ? { ...r, totalSales: val } : r));
+                                                                                            if (json.customerName && json.newBalance !== undefined) setDeposits(prev => ({ ...prev, [json.customerName]: json.newBalance }));
+                                                                                            const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`); const histJson = await histRes.json(); if (histJson.success) setDepositLogs(histJson.history);
+                                                                                            showToast(`売上を ¥${val.toLocaleString()} に変更しました`);
+                                                                                        } else { alert('エラー: ' + (json.message || '')); }
+                                                                                    } catch (e) { alert('エラーが発生しました'); } finally { setIsSaving(false); setSavingMessage(null); }
+                                                                                })();
+                                                                            }} className="text-blue-500 text-xs font-bold">✏️</button>
+                                                                            <button disabled={isSaving} onClick={async () => {
+                                                                                if (!confirm(`この利用履歴を削除しますか？`)) return;
+                                                                                setIsSaving(true); setSavingMessage('削除中...');
+                                                                                try {
+                                                                                    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteReport', id: entry.reportId }) });
+                                                                                    const json = await res.json();
+                                                                                    if (json.success) {
+                                                                                        setReports(prev => prev.filter(r => r.id !== entry.reportId));
+                                                                                        if (json.customerName && json.newBalance !== undefined) setDeposits(prev => ({ ...prev, [json.customerName]: json.newBalance }));
+                                                                                        const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`); const histJson = await histRes.json(); if (histJson.success) setDepositLogs(histJson.history);
+                                                                                        showToast('削除しました');
+                                                                                    } else { alert('エラー: ' + (json.message || '')); }
+                                                                                } catch (e) { alert('エラーが発生しました'); } finally { setIsSaving(false); setSavingMessage(null); }
+                                                                            }} className="text-red-500 text-xs font-bold">🗑️</button>
+                                                                        </>
+                                                                    )}
+                                                                    {entry.type === 'deposit' && (
+                                                                        <>
+                                                                            <button disabled={isSaving} onClick={() => {
+                                                                                const newAmount = prompt(`金額を変更（現在: ¥${entry.amount.toLocaleString()}）`, String(entry.amount));
+                                                                                if (newAmount === null) return;
+                                                                                const val = Number(newAmount);
+                                                                                if (isNaN(val)) { alert('有効な金額を入力してください'); return; }
+                                                                                (async () => {
+                                                                                    setIsSaving(true); setSavingMessage('編集中...');
+                                                                                    try {
+                                                                                        const log = depositLogs.filter(l => l.customerName === customer)[depositEntries.findIndex(d => d.id === entry.id)];
+                                                                                        if (!log) { alert('該当する履歴が見つかりません'); return; }
+                                                                                        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'editDepositHistory', date: log.date, customerName: log.customerName, customerPhone: customerPhoneForHistory, oldAmount: log.amount, newAmount: val, type: log.type }) });
+                                                                                        const resJson = await res.json();
+                                                                                        if (resJson.success) {
+                                                                                            const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`); const histJson = await histRes.json(); if (histJson.success) setDepositLogs(histJson.history);
+                                                                                            if (resJson.newBalance !== undefined) setDeposits(prev => ({ ...prev, [customer]: resJson.newBalance }));
+                                                                                            showToast(`金額を ¥${val.toLocaleString()} に変更しました`);
+                                                                                        } else { alert('エラー: ' + (resJson.message || '')); }
+                                                                                    } catch (e) { alert('エラーが発生しました'); } finally { setIsSaving(false); setSavingMessage(null); }
+                                                                                })();
+                                                                            }} className="text-blue-500 text-xs font-bold">✏️</button>
+                                                                            <button disabled={isSaving} onClick={async () => {
+                                                                                if (!confirm(`このデポジット履歴を削除しますか？`)) return;
+                                                                                setIsSaving(true); setSavingMessage('削除中...');
+                                                                                try {
+                                                                                    const log = depositLogs.filter(l => l.customerName === customer)[depositEntries.findIndex(d => d.id === entry.id)];
+                                                                                    if (!log) { alert('該当する履歴が見つかりません'); return; }
+                                                                                    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteDepositHistory', date: log.date, customerName: log.customerName, customerPhone: customerPhoneForHistory, amount: log.amount, type: log.type }) });
+                                                                                    const resJson = await res.json();
+                                                                                    if (resJson.success) {
+                                                                                        const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`); const histJson = await histRes.json(); if (histJson.success) setDepositLogs(histJson.history);
+                                                                                        if (resJson.newBalance !== undefined) setDeposits(prev => ({ ...prev, [customer]: resJson.newBalance }));
+                                                                                        showToast('削除しました');
+                                                                                    } else { alert('削除に失敗: ' + (resJson.message || '')); }
+                                                                                } catch (e) { alert('エラーが発生しました'); } finally { setIsSaving(false); setSavingMessage(null); }
+                                                                            }} className="text-red-500 text-xs font-bold">🗑️</button>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center justify-between">
+                                                                {entry.type === 'usage' && <span className="text-[10px] text-gray-500 truncate max-w-[60%]">{entry.label}</span>}
+                                                                {entry.type === 'deposit' && <span className="text-[10px] text-gray-400" />}
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className={`text-sm font-bold ${entry.amount >= 0 ? 'text-indigo-600' : 'text-orange-600'}`}>
+                                                                        {entry.amount >= 0 ? '+' : ''}{entry.amount.toLocaleString()}
+                                                                    </span>
+                                                                    {entry.type === 'deposit' && <span className="text-xs font-bold text-gray-800 dark:text-gray-200">残 ¥{entry.balance.toLocaleString()}</span>}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                {/* PC用テーブル */}
+                                                <div className="bg-white dark:bg-gray-800 rounded border shadow-sm overflow-hidden hidden md:block">
                                                     <table className="w-full text-sm text-left">
                                                         <thead className="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-b dark:border-gray-700">
                                                             <tr>
@@ -2238,9 +2671,9 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     <td className="px-3 py-2 text-xs text-gray-500">{formatJSTDate(entry.date, true)}</td>
                                                                     <td className="px-3 py-2">
                                                                         {entry.type === 'usage' ? (
-                                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.isPaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{entry.isPaid ? '利用(済)' : '利用(未払)'}</span>
+                                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${entry.isPaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{entry.isPaid ? '利用(済)' : '利用(未払)'}</span>
                                                                         ) : (
-                                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.amount >= 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>{entry.label}</span>
+                                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${entry.amount >= 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>{entry.label}</span>
                                                                         )}
                                                                     </td>
                                                                     <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400 max-w-[200px] truncate">{entry.type === 'usage' ? entry.label : ''}</td>
@@ -2384,8 +2817,52 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
 
                                     {/* 利用・売上履歴 (業務報告から抽出) */}
                                     <div>
-                                        <h4 className="font-bold text-gray-700 dark:text-gray-300 mb-3 border-b-2 border-gray-200 dark:border-gray-700 pb-1 inline-block">📞 過去のご利用・通話</h4>
-                                        <div className="bg-white dark:bg-gray-800 rounded border shadow-sm overflow-hidden">
+                                        <h4 className="font-bold text-gray-700 dark:text-gray-300 mb-3 border-b-2 border-gray-200 dark:border-gray-700 pb-1 inline-block text-sm sm:text-base">📞 過去のご利用・通話</h4>
+                                        {/* モバイル用カード */}
+                                        <div className="md:hidden space-y-2">
+                                            {(() => {
+                                                const filtered = reports.filter(r => r.customerName === showHistoryForCustomer).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                                                if (filtered.length === 0) return <p className="text-center py-6 text-gray-400 dark:text-gray-500 text-sm bg-white dark:bg-gray-800 rounded border">通話のご利用履歴がありません</p>;
+                                                return filtered.map(r => {
+                                                    const cleanServices = r.services.replace(/\s*->\s*計算\d+分/g, '').replace(/\((\d+)分\)/g, ' $1分');
+                                                    return (
+                                                        <div key={r.id} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 p-2.5 space-y-1">
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-2 text-[11px] text-gray-500">
+                                                                    <span>{formatJSTDate(r.date, true)}</span>
+                                                                    <span className="font-medium text-gray-800 dark:text-gray-200">{r.staff}</span>
+                                                                </div>
+                                                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${r.isPaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                                    {r.isPaid ? '入金済' : '未入金'}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-[11px] text-gray-500 dark:text-gray-400">{cleanServices}</span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-bold text-sm text-gray-800 dark:text-gray-200">¥{r.totalSales.toLocaleString()}</span>
+                                                                    <button
+                                                                        disabled={isSaving}
+                                                                        onClick={async () => {
+                                                                            if (!confirm(`この利用履歴を削除しますか？\n\n${formatJSTDate(r.date, true)} / ¥${r.totalSales.toLocaleString()}`)) return;
+                                                                            setIsSaving(true); setSavingMessage('履歴を削除中...');
+                                                                            try {
+                                                                                const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteReport', id: r.id }) });
+                                                                                const json = await res.json();
+                                                                                if (json.success) { setReports(prev => prev.filter(rep => rep.id !== r.id)); if (json.customerName && json.newBalance !== undefined) setDeposits(prev => ({ ...prev, [json.customerName]: json.newBalance })); showToast('利用履歴を削除しました'); }
+                                                                                else { alert('エラー: ' + (json.message || '削除に失敗しました')); }
+                                                                            } catch (e) { alert('エラーが発生しました'); } finally { setIsSaving(false); setSavingMessage(null); }
+                                                                        }}
+                                                                        className="text-red-500 text-xs font-bold disabled:opacity-50"
+                                                                    >🗑️</button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                });
+                                            })()}
+                                        </div>
+                                        {/* PC用テーブル */}
+                                        <div className="bg-white dark:bg-gray-800 rounded border shadow-sm overflow-hidden hidden md:block">
                                             <table className="w-full text-sm text-left">
                                                 <thead className="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-b dark:border-gray-700">
                                                     <tr>
@@ -2401,7 +2878,6 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     {reports.filter(r => r.customerName === showHistoryForCustomer)
                                                         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                                                         .map(r => {
-                                                            // サービス表示から「-> 計算XX分」を削除
                                                             const cleanServices = r.services.replace(/\s*->\s*計算\d+分/g, '').replace(/\((\d+)分\)/g, ' $1分');
                                                             return (
                                                                 <tr key={r.id} className="border-b dark:border-gray-700 hover:bg-gray-50/50 dark:bg-gray-800/50">
@@ -2419,42 +2895,22 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                             disabled={isSaving}
                                                                             onClick={async () => {
                                                                                 if (!confirm(`この利用履歴を削除しますか？\n\n${formatJSTDate(r.date, true)} / ¥${r.totalSales.toLocaleString()}\n\n※デポジットで支払い済みの場合、残高に自動で返還されます。`)) return;
-                                                                                setIsSaving(true);
-                                                                                setSavingMessage('履歴を削除中...');
+                                                                                setIsSaving(true); setSavingMessage('履歴を削除中...');
                                                                                 try {
-                                                                                    const res = await fetch(GAS_URL, {
-                                                                                        method: 'POST',
-                                                                                        body: JSON.stringify({ action: 'deleteReport', id: r.id })
-                                                                                    });
+                                                                                    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteReport', id: r.id }) });
                                                                                     const json = await res.json();
-                                                                                    if (json.success) {
-                                                                                        setReports(prev => prev.filter(rep => rep.id !== r.id));
-                                                                                        if (json.customerName && json.newBalance !== undefined) {
-                                                                                            setDeposits(prev => ({ ...prev, [json.customerName]: json.newBalance }));
-                                                                                        }
-                                                                                        showToast('利用履歴を削除しました');
-                                                                                    } else {
-                                                                                        alert('エラー: ' + (json.message || '削除に失敗しました'));
-                                                                                    }
-                                                                                } catch (e) {
-                                                                                    alert('エラーが発生しました');
-                                                                                } finally {
-                                                                                    setIsSaving(false);
-                                                                                    setSavingMessage(null);
-                                                                                }
+                                                                                    if (json.success) { setReports(prev => prev.filter(rep => rep.id !== r.id)); if (json.customerName && json.newBalance !== undefined) setDeposits(prev => ({ ...prev, [json.customerName]: json.newBalance })); showToast('利用履歴を削除しました'); }
+                                                                                    else { alert('エラー: ' + (json.message || '削除に失敗しました')); }
+                                                                                } catch (e) { alert('エラーが発生しました'); } finally { setIsSaving(false); setSavingMessage(null); }
                                                                             }}
                                                                             className="text-red-500 hover:text-red-700 text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                        >
-                                                                            🗑️ 削除
-                                                                        </button>
+                                                                        >🗑️ 削除</button>
                                                                     </td>
                                                                 </tr>
                                                             );
                                                         })}
                                                     {reports.filter(r => r.customerName === showHistoryForCustomer).length === 0 && (
-                                                        <tr>
-                                                            <td colSpan={6} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500">通話のご利用履歴がありません</td>
-                                                        </tr>
+                                                        <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500">通話のご利用履歴がありません</td></tr>
                                                     )}
                                                 </tbody>
                                             </table>
@@ -2463,8 +2919,48 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
 
                                     {/* デポジット履歴 */}
                                     <div>
-                                        <h4 className="font-bold text-gray-700 dark:text-gray-300 mb-3 border-b-2 border-gray-200 dark:border-gray-700 pb-1 inline-block">💰 デポジット（前払い）履歴</h4>
-                                        <div className="bg-white dark:bg-gray-800 rounded border shadow-sm overflow-hidden">
+                                        <h4 className="font-bold text-gray-700 dark:text-gray-300 mb-3 border-b-2 border-gray-200 dark:border-gray-700 pb-1 inline-block text-sm sm:text-base">💰 デポジット（前払い）履歴</h4>
+                                        {/* モバイル用カード */}
+                                        <div className="md:hidden space-y-2">
+                                            {(() => {
+                                                const filtered = depositLogs.filter(log => log.customerName === showHistoryForCustomer);
+                                                if (filtered.length === 0) return <p className="text-center py-6 text-gray-400 dark:text-gray-500 text-sm bg-white dark:bg-gray-800 rounded border">デポジットの履歴がありません</p>;
+                                                return filtered.map((log, i) => (
+                                                    <div key={i} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 p-2.5 space-y-1">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] text-gray-400">{formatJSTDate(log.date, true)}</span>
+                                                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap ${log.amount >= 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>{log.type}</span>
+                                                            </div>
+                                                            <button
+                                                                disabled={isSaving}
+                                                                onClick={async () => {
+                                                                    if (!confirm('この履歴を削除しますか？')) return;
+                                                                    setIsSaving(true); setSavingMessage('履歴を削除中...');
+                                                                    try {
+                                                                        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteDepositHistory', date: log.date, customerName: log.customerName, amount: log.amount, type: log.type }) });
+                                                                        const resJson = await res.json();
+                                                                        if (resJson.success) {
+                                                                            setDepositLogs(prev => prev.filter((_, idx) => { const flt = prev.filter(l => l.customerName === showHistoryForCustomer); return idx !== prev.indexOf(flt[i]); }));
+                                                                            if (resJson.newBalance !== undefined && showHistoryForCustomer) setDeposits(prev => ({ ...prev, [showHistoryForCustomer]: resJson.newBalance }));
+                                                                        } else { alert('削除に失敗: ' + (resJson.message || '')); }
+                                                                    } catch (e) { alert('エラーが発生しました'); } finally { setIsSaving(false); setSavingMessage(null); }
+                                                                }}
+                                                                className="text-red-500 text-xs font-bold disabled:opacity-50"
+                                                            >🗑️</button>
+                                                        </div>
+                                                        <div className="flex items-center justify-between">
+                                                            <span className={`text-sm font-bold ${log.amount >= 0 ? 'text-indigo-600' : 'text-orange-600'}`}>
+                                                                {log.amount >= 0 ? '+' : ''}¥{log.amount.toLocaleString()}
+                                                            </span>
+                                                            <span className="text-xs font-bold text-gray-800 dark:text-gray-200">残高 ¥{log.balance.toLocaleString()}</span>
+                                                        </div>
+                                                    </div>
+                                                ));
+                                            })()}
+                                        </div>
+                                        {/* PC用テーブル */}
+                                        <div className="bg-white dark:bg-gray-800 rounded border shadow-sm overflow-hidden hidden md:block">
                                             <table className="w-full text-sm text-left">
                                                 <thead className="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-b dark:border-gray-700">
                                                     <tr>
@@ -2480,9 +2976,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         <tr key={i} className="border-b dark:border-gray-700 hover:bg-gray-50/50 dark:bg-gray-800/50">
                                                             <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{formatJSTDate(log.date, true)}</td>
                                                             <td className="px-4 py-3 text-center">
-                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${log.amount >= 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>
-                                                                    {log.type}
-                                                                </span>
+                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${log.amount >= 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>{log.type}</span>
                                                             </td>
                                                             <td className={`px-4 py-3 text-right font-bold ${log.amount >= 0 ? 'text-indigo-600' : 'text-orange-600'}`}>
                                                                 {log.amount >= 0 ? '+' : ''}¥{log.amount.toLocaleString()}
@@ -2493,50 +2987,23 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     disabled={isSaving}
                                                                     onClick={async () => {
                                                                         if (!confirm('この履歴を削除しますか？\n※残高の調整は手動で行ってください')) return;
-                                                                        setIsSaving(true);
-                                                                        setSavingMessage('履歴を削除中...');
+                                                                        setIsSaving(true); setSavingMessage('履歴を削除中...');
                                                                         try {
-                                                                            const res = await fetch(GAS_URL, {
-                                                                                method: 'POST',
-                                                                                body: JSON.stringify({
-                                                                                    action: 'deleteDepositHistory',
-                                                                                    date: log.date,
-                                                                                    customerName: log.customerName,
-                                                                                    amount: log.amount,
-                                                                                    type: log.type
-                                                                                })
-                                                                            });
+                                                                            const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteDepositHistory', date: log.date, customerName: log.customerName, amount: log.amount, type: log.type }) });
                                                                             const resJson = await res.json();
                                                                             if (resJson.success) {
-                                                                                setDepositLogs(prev => prev.filter((_, idx) => {
-                                                                                    const filtered = prev.filter(l => l.customerName === showHistoryForCustomer);
-                                                                                    const originalIdx = prev.indexOf(filtered[i]);
-                                                                                    return idx !== originalIdx;
-                                                                                }));
-                                                                                if (resJson.newBalance !== undefined && showHistoryForCustomer) {
-                                                                                    setDeposits(prev => ({ ...prev, [showHistoryForCustomer]: resJson.newBalance }));
-                                                                                }
-                                                                            } else {
-                                                                                alert('削除に失敗しました: ' + (resJson.message || ''));
-                                                                            }
-                                                                        } catch (e) {
-                                                                            alert('エラーが発生しました');
-                                                                        } finally {
-                                                                            setIsSaving(false);
-                                                                            setSavingMessage(null);
-                                                                        }
+                                                                                setDepositLogs(prev => prev.filter((_, idx) => { const flt = prev.filter(l => l.customerName === showHistoryForCustomer); return idx !== prev.indexOf(flt[i]); }));
+                                                                                if (resJson.newBalance !== undefined && showHistoryForCustomer) setDeposits(prev => ({ ...prev, [showHistoryForCustomer]: resJson.newBalance }));
+                                                                            } else { alert('削除に失敗しました: ' + (resJson.message || '')); }
+                                                                        } catch (e) { alert('エラーが発生しました'); } finally { setIsSaving(false); setSavingMessage(null); }
                                                                     }}
                                                                     className="text-red-500 hover:text-red-700 text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                >
-                                                                    🗑️ 削除
-                                                                </button>
+                                                                >🗑️ 削除</button>
                                                             </td>
                                                         </tr>
                                                     ))}
                                                     {depositLogs.filter(log => log.customerName === showHistoryForCustomer).length === 0 && (
-                                                        <tr>
-                                                            <td colSpan={5} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500">デポジットの履歴がありません</td>
-                                                        </tr>
+                                                        <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500">デポジットの履歴がありません</td></tr>
                                                     )}
                                                 </tbody>
                                             </table>
@@ -2581,7 +3048,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
             {/* 顧客追加モーダル */}
             {showAddCustomerModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowAddCustomerModal(false)}>
-                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-[95vw] sm:w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">新しい顧客を追加</h3>
                         <div className="space-y-3">
                             <div>
@@ -2663,7 +3130,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
             {/* チャージモーダル */}
             {showChargeModal && chargeTarget && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => { setShowChargeModal(false); setChargeTarget(null); setChargeTargetPhone(null); }}>
-                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-[95vw] sm:w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">{chargeTarget}さんへチャージ</h3>
                         <div className="space-y-3">
                             <div>
