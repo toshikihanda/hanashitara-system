@@ -2663,6 +2663,9 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     if (!newCustomerData.name || !newCustomerData.phone) {
                                         return alert('お客様名と電話番号は必須です');
                                     }
+                                    if (normalizePhone(newCustomerData.phone).length !== 11) {
+                                        return alert('電話番号は11桁（ハイフンなし）で入力してください。');
+                                    }
                                     setIsSaving(true);
                                     try {
                                         const normalizedPhone = normalizePhone(newCustomerData.phone);

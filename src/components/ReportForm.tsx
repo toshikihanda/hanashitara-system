@@ -199,6 +199,13 @@ export default function ReportForm() {
         setIsSubmitting(true);
 
         try {
+            // 電話番号が11桁でなければ送信不可
+            if (normalizedPhone.length !== 11) {
+                alert('電話番号は11桁（ハイフンなし）で入力してください。');
+                setIsSubmitting(false);
+                return;
+            }
+
             // 新規顧客の場合、名前が未入力なら警告
             if (isNewCustomer && !customerName.trim()) {
                 alert('新規のお客様を登録するには、お客様名の入力が必要です。');
