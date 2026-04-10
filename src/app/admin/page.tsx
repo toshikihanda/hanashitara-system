@@ -2200,6 +2200,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         const customer = showHistoryForCustomer!;
                                         // 顧客の電話番号を取得（★ API呼び出し時に使用）
                                         const customerPhoneForHistory = reports.find(r => r.customerName === customer)?.customerPhone || customerList.find(c => c.name === customer)?.phone || '';
+                                        const normalizedPhoneForHistory = normalizePhone(customerPhoneForHistory);
                                         // 通話履歴（参考表示用・残高計算には含めない）
                                         const usageEntries = reports.filter(r => r.customerName === customer).map(r => ({
                                             date: r.date,
@@ -2212,8 +2213,13 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             totalSales: r.totalSales,
                                             customerPhone: r.customerPhone,
                                         }));
-                                        // デポジット履歴（GASが記録した符号・残高をそのまま使用）
-                                        const depositEntries = depositLogs.filter(log => log.customerName === customer).map((log, i) => ({
+                                        // デポジット履歴（電話番号で照合、フォールバックとして名前照合）
+                                        const depositEntries = depositLogs.filter(log => {
+                                            if (normalizedPhoneForHistory && log.customerPhone) {
+                                                return normalizePhone(log.customerPhone) === normalizedPhoneForHistory;
+                                            }
+                                            return log.customerName === customer;
+                                        }).map((log, i) => ({
                                             date: log.date,
                                             type: 'deposit' as const,
                                             label: log.type,
@@ -2222,8 +2228,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             id: `dep-${i}`,
                                             reportId: '',
                                             totalSales: 0,
-                                            customerPhone: '',
-                                            gasBalance: log.balance, // GASが記録した正確な残高
+                                            customerPhone: log.customerPhone || '',
+                                            gasBalance: log.balance,
                                         }));
                                         // 結合して日付昇順ソート
                                         const allEntries = [...usageEntries, ...depositEntries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -2343,7 +2349,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                                         setIsSaving(true);
                                                                                         setSavingMessage('編集中...');
                                                                                         try {
-                                                                                            const log = depositLogs.filter(l => l.customerName === customer)[depositEntries.findIndex(d => d.id === entry.id)];
+                                                                                            const log = depositLogs.filter(l => { if (normalizedPhoneForHistory && l.customerPhone) return normalizePhone(l.customerPhone) === normalizedPhoneForHistory; return l.customerName === customer; })[depositEntries.findIndex(d => d.id === entry.id)];
                                                                                             if (!log) { alert('該当する履歴が見つかりません'); return; }
                                                                                             const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'editDepositHistory', date: log.date, customerName: log.customerName, customerPhone: customerPhoneForHistory, oldAmount: log.amount, newAmount: val, type: log.type }) });
                                                                                             const resJson = await res.json();
@@ -2369,7 +2375,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                                     setIsSaving(true);
                                                                                     setSavingMessage('削除中...');
                                                                                     try {
-                                                                                        const log = depositLogs.filter(l => l.customerName === customer)[depositEntries.findIndex(d => d.id === entry.id)];
+                                                                                        const log = depositLogs.filter(l => { if (normalizedPhoneForHistory && l.customerPhone) return normalizePhone(l.customerPhone) === normalizedPhoneForHistory; return l.customerName === customer; })[depositEntries.findIndex(d => d.id === entry.id)];
                                                                                         if (!log) { alert('該当する履歴が見つかりません'); return; }
                                                                                         const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteDepositHistory', date: log.date, customerName: log.customerName, customerPhone: customerPhoneForHistory, amount: log.amount, type: log.type }) });
                                                                                         const resJson = await res.json();
@@ -2401,7 +2407,15 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     })()}
 
                                     {/* 個別履歴タブ */}
-                                    {historyTabMode === 'detail' && <>
+                                    {historyTabMode === 'detail' && (() => {
+                                        const detailCustomer = showHistoryForCustomer!;
+                                        const detailPhone = reports.find(r => r.customerName === detailCustomer)?.customerPhone || customerList.find(c => c.name === detailCustomer)?.phone || '';
+                                        const normalizedDetailPhone = normalizePhone(detailPhone);
+                                        const filterDepositLogsByCustomer = (log: any) => {
+                                            if (normalizedDetailPhone && log.customerPhone) return normalizePhone(log.customerPhone) === normalizedDetailPhone;
+                                            return log.customerName === detailCustomer;
+                                        };
+                                        return <>
 
                                     {/* 利用・売上履歴 (業務報告から抽出) */}
                                     <div>
@@ -2497,7 +2511,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {depositLogs.filter(log => log.customerName === showHistoryForCustomer).map((log, i) => (
+                                                    {depositLogs.filter(filterDepositLogsByCustomer).map((log, i) => (
                                                         <tr key={i} className="border-b dark:border-gray-700 hover:bg-gray-50/50 dark:bg-gray-800/50">
                                                             <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{formatJSTDate(log.date, true)}</td>
                                                             <td className="px-4 py-3 text-center">
@@ -2523,6 +2537,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                                     action: 'deleteDepositHistory',
                                                                                     date: log.date,
                                                                                     customerName: log.customerName,
+                                                                                    customerPhone: log.customerPhone || detailPhone,
                                                                                     amount: log.amount,
                                                                                     type: log.type
                                                                                 })
@@ -2530,7 +2545,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                             const resJson = await res.json();
                                                                             if (resJson.success) {
                                                                                 setDepositLogs(prev => prev.filter((_, idx) => {
-                                                                                    const filtered = prev.filter(l => l.customerName === showHistoryForCustomer);
+                                                                                    const filtered = prev.filter(filterDepositLogsByCustomer);
                                                                                     const originalIdx = prev.indexOf(filtered[i]);
                                                                                     return idx !== originalIdx;
                                                                                 }));
@@ -2554,7 +2569,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                             </td>
                                                         </tr>
                                                     ))}
-                                                    {depositLogs.filter(log => log.customerName === showHistoryForCustomer).length === 0 && (
+                                                    {depositLogs.filter(filterDepositLogsByCustomer).length === 0 && (
                                                         <tr>
                                                             <td colSpan={5} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500">デポジットの履歴がありません</td>
                                                         </tr>
@@ -2590,7 +2605,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         })()}
                                     </div>
 
-                                    </>}
+                                    </>; })()}
 
                                 </div>
                             </div>
@@ -2738,7 +2753,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 action: 'updateDeposit',
                                                 type: 'charge',
                                                 customerName: chargeTarget,
-                                                customerPhone: chargeTargetPhone ? normalizePhone(chargeTargetPhone) : '',
+                                                customerPhone: normalizePhone(chargeTargetPhone || customerPhones[chargeTarget!] || customerList.find(c => c.name === chargeTarget)?.phone || ''),
                                                 amount: totalAmount,
                                                 rawAmount: Number(chargeData.amount),
                                                 bonusRate: Number(chargeData.bonusRate)
