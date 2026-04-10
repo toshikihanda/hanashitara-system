@@ -82,15 +82,34 @@ export default function ReportForm() {
         phone => normalizePhone(phone) === normalizedPhone
     );
 
-    // 電話番号変更時のハンドラ（顧客名自動補完）
+    // 「もしかして」候補（1文字違いの既存顧客）
+    const [similarCustomer, setSimilarCustomer] = useState<{ phone: string, name: string } | null>(null);
+
+    // 1文字違い判定（11桁中10桁一致 = 1文字だけ異なる）
+    const findSimilarPhone = (inputPhone: string): { phone: string, name: string } | null => {
+        const normalized = normalizePhone(inputPhone);
+        if (normalized.length < 10) return null;
+        for (const [phone, name] of Object.entries(customersMap)) {
+            const existing = normalizePhone(phone);
+            if (existing === normalized) continue; // 完全一致はスキップ
+            if (existing.length !== normalized.length) continue;
+            let diffCount = 0;
+            for (let i = 0; i < existing.length; i++) {
+                if (existing[i] !== normalized[i]) diffCount++;
+                if (diffCount > 1) break;
+            }
+            if (diffCount === 1) return { phone: formatPhone(existing), name };
+        }
+        return null;
+    };
+
+    // 電話番号変更時のハンドラ（顧客名自動補完 + もしかして判定）
     const handlePhoneNumberChange = (value: string) => {
         setPhoneNumber(value);
 
-        // 電話番号から顧客名を検索（ハイフンを削除して照合）
         const normalizedInput = normalizePhone(value);
         let foundName = '';
 
-        // customersMapの各エントリーを確認
         for (const [phone, name] of Object.entries(customersMap)) {
             if (normalizePhone(phone) === normalizedInput) {
                 foundName = name;
@@ -98,12 +117,28 @@ export default function ReportForm() {
             }
         }
 
-        // 見つかった顧客名を自動設定（既存顧客の場合のみ）
         if (foundName) {
             setCustomerName(foundName);
-        } else if (normalizePhone(value).length >= 10) {
-            // 新規顧客の場合は名前をクリア（手入力させる）
+            setSimilarCustomer(null);
+        } else if (normalizedInput.length >= 10) {
             setCustomerName('');
+            setSimilarCustomer(findSimilarPhone(value));
+        } else {
+            setSimilarCustomer(null);
+        }
+    };
+
+    // 「もしかして」の候補を採用する
+    const applySuggestion = (suggestedPhone: string) => {
+        const normalized = normalizePhone(suggestedPhone);
+        setPhoneNumber(formatPhone(normalized));
+        setSimilarCustomer(null);
+        // 顧客名を自動設定
+        for (const [phone, name] of Object.entries(customersMap)) {
+            if (normalizePhone(phone) === normalized) {
+                setCustomerName(name);
+                break;
+            }
         }
     };
 
@@ -314,7 +349,7 @@ export default function ReportForm() {
                         <input
                             type="tel"
                             required
-                            className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow ${isBlacklisted ? 'border-red-400 bg-red-50' : 'border-gray-200 dark:border-gray-700'}`}
+                            className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow ${isBlacklisted ? 'border-red-400 bg-red-50' : isNewCustomer && !similarCustomer ? 'border-amber-400 bg-amber-50/50' : 'border-gray-200 dark:border-gray-700'}`}
                             placeholder="090-1234-5678"
                             value={phoneNumber}
                             onChange={(e) => handlePhoneNumberChange(e.target.value)}
@@ -324,9 +359,21 @@ export default function ReportForm() {
                                 ⚠️ この電話番号のお客様はブラックリストに登録されています！<br />通話をお断りするなどの対応をご検討ください。
                             </p>
                         )}
-                        {isNewCustomer && !isBlacklisted && (
-                            <p className="mt-2 text-sm font-medium text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-200">
-                                ✅ 新規のお客様です。報告送信時にシステムへ自動登録されます。
+                        {similarCustomer && !isBlacklisted && (
+                            <div className="mt-2 text-sm bg-blue-50 p-3 rounded-lg border border-blue-200">
+                                <p className="font-medium text-blue-800 mb-1.5">もしかして：{similarCustomer.phone}（{similarCustomer.name} 様）の間違いですか？</p>
+                                <button
+                                    type="button"
+                                    onClick={() => applySuggestion(similarCustomer.phone)}
+                                    className="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-colors"
+                                >
+                                    この番号に修正する
+                                </button>
+                            </div>
+                        )}
+                        {isNewCustomer && !isBlacklisted && !similarCustomer && (
+                            <p className="mt-2 text-sm font-medium text-amber-700 bg-amber-50 p-2 rounded border border-amber-300">
+                                ⚠️ 新規のお客様として登録されます。番号に間違いがないか確認してください。
                             </p>
                         )}
                     </div>
