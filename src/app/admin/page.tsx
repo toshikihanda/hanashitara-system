@@ -2310,6 +2310,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             id: r.id,
                                             reportId: r.id,
                                             totalSales: r.totalSales,
+                                            depositUsed: r.depositUsed || 0,
                                             customerPhone: r.customerPhone,
                                             paymentMethod: r.depositUsed > 0 ? (r.billingAmount > 0 ? `デポジット¥${r.depositUsed.toLocaleString()}+請求¥${r.billingAmount.toLocaleString()}` : 'デポジット充当') : (r.isPaid ? '直接入金' : '未払い'),
                                         }));
@@ -2334,12 +2335,23 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             gasBalance: log.balance,
                                             paymentMethod: '',
                                         }));
+                                        // デポジット履歴の「利用(自動引落)」「利用(一部引落)」は 業務報告 の利用行と
+                                        // 同じ取引を重複記録しているため、残高が飛ぶ原因になる。通帳からは除外する。
+                                        const deduplicatedDepositEntries = depositEntries.filter(log => {
+                                            const t = String(log.label || '');
+                                            return !t.startsWith('利用(自動引落)') && !t.startsWith('利用(一部引落)');
+                                        });
                                         // 日付昇順ソート＋残高計算
-                                        const allEntries = [...usageEntries, ...depositEntries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                                        //  - デポジット系（チャージ・残高調整・返還等）: GAS記録の残高を採用（権威値）
+                                        //  - 利用行（業務報告）: 直前の残高から depositUsed を差し引く（銀行台帳風に連続表示）
+                                        const allEntries = [...usageEntries, ...deduplicatedDepositEntries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                                         let lastDepositBalance = 0;
                                         const entriesWithBalance = allEntries.map(entry => {
                                             if (entry.type === 'deposit' && 'gasBalance' in entry) {
                                                 lastDepositBalance = (entry as any).gasBalance;
+                                            } else if (entry.type === 'usage' && 'depositUsed' in entry) {
+                                                const used = Number((entry as any).depositUsed) || 0;
+                                                if (used > 0) lastDepositBalance -= used;
                                             }
                                             return { ...entry, balance: lastDepositBalance };
                                         });
