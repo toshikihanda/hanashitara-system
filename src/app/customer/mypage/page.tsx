@@ -5,15 +5,22 @@ import { useRouter } from 'next/navigation';
 
 interface HistoryItem {
     date: string;
-    type: 'usage' | 'charge';
+    type: 'usage' | 'charge' | 'deposit_op';
     // 利用時
     staffName?: string;
     amount?: number;
     serviceSummary?: string;
-    // チャージ時
+    isPaid?: boolean;
+    depositUsed?: number;
+    billingAmount?: number;
+    // チャージ・デポジット操作時
     chargeAmount?: number;
     bonusRate?: number;
     totalCharged?: number;
+    depositType?: string;
+    depositBalance?: number;
+    // 通帳用残高
+    runningBalance?: number;
 }
 
 export default function CustomerMyPage() {
@@ -38,7 +45,6 @@ export default function CustomerMyPage() {
                 setHistory(data.history ?? []);
                 if (data.customerName) setCustomerName(data.customerName);
             } else {
-                // セッションが無効な場合はログインに戻す
                 sessionStorage.clear();
                 router.push('/customer/login');
             }
@@ -68,6 +74,7 @@ export default function CustomerMyPage() {
 
     const filteredHistory = history.filter((item) => {
         if (activeFilter === 'all') return true;
+        if (activeFilter === 'charge') return item.type === 'charge' || item.type === 'deposit_op';
         return item.type === activeFilter;
     });
 
@@ -79,6 +86,51 @@ export default function CustomerMyPage() {
         } catch {
             return dateStr;
         }
+    };
+
+    // 入金額（正の金額）を取得
+    const getCreditAmount = (item: HistoryItem): number => {
+        if (item.type === 'charge' || item.type === 'deposit_op') {
+            const amt = item.chargeAmount ?? item.totalCharged ?? 0;
+            return amt > 0 ? amt : 0;
+        }
+        return 0;
+    };
+
+    // 利用額（負の金額の絶対値）を取得
+    const getDebitAmount = (item: HistoryItem): number => {
+        if (item.type === 'usage') {
+            return item.amount ?? 0;
+        }
+        if (item.type === 'charge' || item.type === 'deposit_op') {
+            const amt = item.chargeAmount ?? 0;
+            return amt < 0 ? Math.abs(amt) : 0;
+        }
+        return 0;
+    };
+
+    // 項目名を取得
+    const getItemLabel = (item: HistoryItem): string => {
+        if (item.type === 'usage') {
+            return item.staffName ? `${item.staffName}との通話` : '利用';
+        }
+        if (item.depositType) {
+            return item.depositType;
+        }
+        return 'デポジットチャージ';
+    };
+
+    // 決済方法ラベル
+    const getPaymentLabel = (item: HistoryItem): string | null => {
+        if (item.type !== 'usage') return null;
+        if ((item.depositUsed ?? 0) > 0) {
+            if ((item.billingAmount ?? 0) > 0) {
+                return `デポジット¥${(item.depositUsed ?? 0).toLocaleString()} + 請求¥${(item.billingAmount ?? 0).toLocaleString()}`;
+            }
+            return 'デポジット充当';
+        }
+        if (item.isPaid) return '入金済';
+        return '未入金';
     };
 
     if (isLoading) {
@@ -116,7 +168,7 @@ export default function CustomerMyPage() {
                 {/* 残高カード */}
                 <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] shadow-sm p-5">
                     <p className="text-xs text-[var(--muted)] mb-1">デポジット残高</p>
-                    <p className="text-3xl font-bold text-[var(--foreground)] tracking-tight">
+                    <p className={`text-3xl font-bold tracking-tight ${(balance ?? 0) < 0 ? 'text-red-500' : 'text-[var(--foreground)]'}`}>
                         ¥{(balance ?? 0).toLocaleString()}
                     </p>
                 </div>
@@ -126,7 +178,7 @@ export default function CustomerMyPage() {
                     {([
                         { key: 'all', label: 'すべて' },
                         { key: 'usage', label: '利用' },
-                        { key: 'charge', label: 'チャージ' },
+                        { key: 'charge', label: 'チャ���ジ' },
                     ] as const).map(({ key, label }) => (
                         <button
                             key={key}
@@ -142,66 +194,81 @@ export default function CustomerMyPage() {
                     ))}
                 </div>
 
-                {/* 履歴リスト */}
-                <div className="space-y-2.5">
+                {/* 通帳形式の履歴テ���ブル */}
+                <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] shadow-sm overflow-hidden">
                     {filteredHistory.length === 0 ? (
-                        <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-8 text-center">
+                        <div className="p-8 text-center">
                             <p className="text-sm text-[var(--muted)]">履歴がありません</p>
                         </div>
                     ) : (
-                        filteredHistory.map((item, idx) => (
-                            <div
-                                key={idx}
-                                className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-4 flex items-center justify-between"
-                            >
-                                <div className="flex items-center gap-3 min-w-0">
-                                    {/* アイコン */}
-                                    <div
-                                        className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm ${
-                                            item.type === 'charge'
-                                                ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'
-                                                : 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                                        }`}
-                                    >
-                                        {item.type === 'charge' ? '+' : '-'}
-                                    </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead className="border-b border-[var(--border)] bg-gray-50/50 dark:bg-gray-900/30">
+                                    <tr>
+                                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-[var(--muted)]">日付</th>
+                                        <th className="text-left px-2 py-2.5 text-[11px] font-semibold text-[var(--muted)]">項目</th>
+                                        <th className="text-right px-2 py-2.5 text-[11px] font-semibold text-blue-500">入金</th>
+                                        <th className="text-right px-2 py-2.5 text-[11px] font-semibold text-red-400">利用</th>
+                                        <th className="text-right px-3 py-2.5 text-[11px] font-semibold text-[var(--muted)]">残高</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredHistory.map((item, idx) => {
+                                        const credit = getCreditAmount(item);
+                                        const debit = getDebitAmount(item);
+                                        const itemBalance = item.runningBalance ?? 0;
+                                        const paymentLabel = getPaymentLabel(item);
 
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-medium text-[var(--foreground)] truncate">
-                                            {item.type === 'charge'
-                                                ? 'デポジットチャージ'
-                                                : item.staffName
-                                                    ? `${item.staffName}との通話`
-                                                    : '利用'}
-                                        </p>
-                                        <p className="text-[11px] text-[var(--muted)]">
-                                            {formatDate(item.date)}
-                                            {item.type === 'charge' && item.bonusRate
-                                                ? ` ・還元${item.bonusRate}%`
-                                                : ''}
-                                            {item.type === 'usage' && item.serviceSummary
-                                                ? ` ・${item.serviceSummary}`
-                                                : ''}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* 金額 */}
-                                <p
-                                    className={`text-sm font-semibold flex-shrink-0 ml-3 ${
-                                        item.type === 'charge'
-                                            ? 'text-green-600 dark:text-green-400'
-                                            : 'text-[var(--foreground)]'
-                                    }`}
-                                >
-                                    {item.type === 'charge'
-                                        ? `+¥${(item.totalCharged ?? item.chargeAmount ?? 0).toLocaleString()}`
-                                        : `-¥${(item.amount ?? 0).toLocaleString()}`}
-                                </p>
-                            </div>
-                        ))
+                                        return (
+                                            <tr
+                                                key={idx}
+                                                className={`border-b border-[var(--border)] last:border-b-0 ${
+                                                    item.type !== 'usage' ? 'bg-blue-50/20 dark:bg-indigo-900/5' : ''
+                                                }`}
+                                            >
+                                                <td className="px-3 py-2.5 text-[11px] text-[var(--muted)] whitespace-nowrap align-top">
+                                                    {formatDate(item.date)}
+                                                </td>
+                                                <td className="px-2 py-2.5 align-top">
+                                                    <p className="text-xs font-medium text-[var(--foreground)] leading-tight">
+                                                        {getItemLabel(item)}
+                                                    </p>
+                                                    {item.type === 'usage' && item.serviceSummary && (
+                                                        <p className="text-[10px] text-[var(--muted)] mt-0.5 leading-tight">{item.serviceSummary}</p>
+                                                    )}
+                                                    {paymentLabel && (
+                                                        <span className={`inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium ${
+                                                            item.isPaid || (item.depositUsed ?? 0) > 0
+                                                                ? 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400'
+                                                                : 'bg-red-50 text-red-500 dark:bg-red-900/20 dark:text-red-400'
+                                                        }`}>
+                                                            {paymentLabel}
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-2 py-2.5 text-right font-semibold text-blue-600 dark:text-blue-400 align-top whitespace-nowrap">
+                                                    {credit > 0 ? `+¥${credit.toLocaleString()}` : ''}
+                                                </td>
+                                                <td className="px-2 py-2.5 text-right font-semibold text-red-500 align-top whitespace-nowrap">
+                                                    {debit > 0 ? `-¥${debit.toLocaleString()}` : ''}
+                                                </td>
+                                                <td className={`px-3 py-2.5 text-right font-bold align-top whitespace-nowrap ${
+                                                    itemBalance < 0 ? 'text-red-500' : 'text-[var(--foreground)]'
+                                                }`}>
+                                                    ¥{itemBalance.toLocaleString()}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
                     )}
                 </div>
+
+                <p className="text-[10px] text-[var(--muted)] text-center">
+                    残高はデポジット（前払い）の推移を表示しています
+                </p>
             </main>
         </div>
     );
