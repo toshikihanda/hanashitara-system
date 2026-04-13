@@ -2305,8 +2305,11 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             }
                                             return log.customerName === customer;
                                         });
+                                        // 「未払い充当」行は帳簿残高ではチャージ行に含まれているため非表示にして二重計算を防ぐ
+                                        //（該当の業務報告行は自動で「入金済」に変わるので、支払いの流れは個別履歴タブで追える）
+                                        const withoutSettlement = filteredLogs.filter(log => String(log.type || '').indexOf('未払い充当') !== 0);
                                         // GASは最新→古い順に返すので挿入順（古い→新しい）に戻す
-                                        const chronological = [...filteredLogs].reverse();
+                                        const chronological = [...withoutSettlement].reverse();
                                         // バックフィル行は残高が不正確なため、カラム F(GAS balance) が 0 の過去分行は前の残高を引き継ぐ
                                         let runningBalance = 0;
                                         const entriesWithBalance = chronological.map((log: any, i: number) => {
