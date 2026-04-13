@@ -45,6 +45,98 @@ function getCustomerBalanceByPhone(ss, phone) {
   return 0;
 }
 
+// 業務報告から未記録のデポジット履歴を補填する一回限りのマイグレーション関数
+// Apps Script エディタから直接実行する：実行メニュー → 関数選択 backfillDepositHistoryFromReports → 実行
+// べき等（何度実行しても同じ結果）。reportIdで紐付け済みの報告はスキップ。
+function backfillDepositHistoryFromReports() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const reportSheet = ss.getSheetByName('業務報告');
+  if (!reportSheet) return { error: '業務報告シートが見つかりません' };
+  let histSheet = ss.getSheetByName('デポジット履歴');
+  if (!histSheet) {
+    histSheet = ss.insertSheet('デポジット履歴');
+    histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
+  }
+  // ヘッダーの関連ID列が無ければ追加
+  const headerRow = histSheet.getRange(1, 1, 1, Math.max(7, histSheet.getLastColumn())).getValues()[0];
+  if (!headerRow[6]) histSheet.getRange(1, 7).setValue('関連ID');
+
+  // 既存履歴の走査
+  const histValues = histSheet.getDataRange().getValues();
+  const existingReportIds = new Set();
+  // 紐付け先候補マップ: key = phone|amount|type (既存の利用系行)
+  const candidateByKey = new Map();
+  for (let i = 1; i < histValues.length; i++) {
+    const rid = String(histValues[i][6] || '').trim();
+    if (rid) existingReportIds.add(rid);
+    const phone = normalizePhoneGAS(histValues[i][2]);
+    const amount = Number(histValues[i][3]);
+    const type = String(histValues[i][4] || '');
+    if (phone && type.indexOf('利用') === 0) {
+      const key = phone + '|' + amount + '|' + type;
+      if (!candidateByKey.has(key)) candidateByKey.set(key, []);
+      candidateByKey.get(key).push(i + 1); // 1-based 行番号
+    }
+  }
+
+  const repValues = reportSheet.getDataRange().getValues();
+  let added = 0, linked = 0, skipped = 0;
+  for (let i = 1; i < repValues.length; i++) {
+    const reportId = String(repValues[i][0] || '').trim();
+    if (!reportId) { skipped++; continue; }
+    if (existingReportIds.has(reportId)) { skipped++; continue; }
+
+    const reportDate = repValues[i][1];
+    const customerName = String(repValues[i][4] || '').trim();
+    const phone = normalizePhoneGAS(repValues[i][3]);
+    const sales = Number(repValues[i][6]) || 0;
+    const paidStatus = String(repValues[i][8] || '').trim();
+    const depositUsed = Number(repValues[i][10]) || 0;
+    const billingAmount = Number(repValues[i][11]) || 0;
+
+    let histDate = reportDate;
+    if (reportDate instanceof Date) {
+      histDate = Utilities.formatDate(reportDate, "JST", "yyyy/MM/dd HH:mm:ss");
+    }
+
+    // 紐付け試行：デポジットを使っていたケースは既存の「利用(自動引落)」または「利用(一部引落)」行に後付けで reportId を書き込む
+    let linkedRow = -1;
+    if (depositUsed > 0) {
+      const keyAuto = phone + '|' + (-depositUsed) + '|利用(自動引落)';
+      const keyPartial = phone + '|' + (-depositUsed) + '|利用(一部引落)';
+      const cands = candidateByKey.get(keyAuto) || candidateByKey.get(keyPartial) || [];
+      if (cands.length > 0) linkedRow = cands.shift();
+    }
+    if (linkedRow > 0) {
+      histSheet.getRange(linkedRow, 7).setValue(reportId);
+      existingReportIds.add(reportId);
+      linked++;
+      continue;
+    }
+
+    // 紐付けできなければ新規行を作成。種別名で「過去分」であることを明示
+    let typeLabel = '';
+    let amount = 0;
+    if (depositUsed > 0 && billingAmount === 0) {
+      typeLabel = '利用(過去分・デポジット引落・要確認)';
+      amount = -depositUsed;
+    } else if (depositUsed > 0 && billingAmount > 0) {
+      typeLabel = '利用(過去分・一部デポジット・要確認)';
+      amount = -depositUsed;
+    } else if (paidStatus === '入金済') {
+      typeLabel = '利用(過去分・直接入金)';
+      amount = 0;
+    } else {
+      typeLabel = '利用(過去分・未払い)';
+      amount = 0;
+    }
+    histSheet.appendRow([histDate, customerName, "'" + phone, amount, typeLabel, 0, reportId]);
+    added++;
+  }
+
+  return { added: added, linked: linked, skipped: skipped };
+}
+
 // 後方互換のため旧名でも呼べるようにする（内部では電話番号を使う）
 function getCustomerBalance(ss, customerName) {
   // 名前で検索（後方互換）
@@ -169,9 +261,9 @@ function doPost(e) {
               let histSheet = ss.getSheetByName('デポジット履歴');
               if (!histSheet) {
                 histSheet = ss.insertSheet('デポジット履歴');
-                histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高']);
+                histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
               }
-              histSheet.appendRow([nowJST(), customerName, "'" + normalizePhoneGAS(customerPhone), -sales, '利用(自動引落)', newBal]);
+              histSheet.appendRow([nowJST(), customerName, "'" + normalizePhoneGAS(customerPhone), -sales, '利用(自動引落)', newBal, newId]);
             } else if (currentDeposit > 0) {
               // デポジットで一部カバーできる場合
               depositSheet.getRange(i + 1, 3).setValue(0);
@@ -181,21 +273,36 @@ function doPost(e) {
               let histSheet = ss.getSheetByName('デポジット履歴');
               if (!histSheet) {
                 histSheet = ss.insertSheet('デポジット履歴');
-                histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高']);
+                histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
               }
-              histSheet.appendRow([nowJST(), customerName, "'" + normalizePhoneGAS(customerPhone), -currentDeposit, '利用(一部引落)', 0]);
+              histSheet.appendRow([nowJST(), customerName, "'" + normalizePhoneGAS(customerPhone), -currentDeposit, '利用(一部引落)', 0, newId]);
             } else {
+              // デポジット不使用（未払いケース）: 履歴に利用(未払い)を記録
               depositUsed = 0;
               billingAmount = sales;
+              let histSheet = ss.getSheetByName('デポジット履歴');
+              if (!histSheet) {
+                histSheet = ss.insertSheet('デポジット履歴');
+                histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
+              }
+              histSheet.appendRow([nowJST(), customerName, "'" + normalizePhoneGAS(customerPhone), 0, '利用(未払い)', currentDeposit, newId]);
             }
             break;
           }
         }
         if (!customerFound) {
+          // 前払い管理に顧客レコードなし（初回利用など）: 利用(未払い)として履歴に記録
           depositUsed = 0;
           billingAmount = sales;
+          let histSheet = ss.getSheetByName('デポジット履歴');
+          if (!histSheet) {
+            histSheet = ss.insertSheet('デポジット履歴');
+            histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
+          }
+          histSheet.appendRow([nowJST(), customerName, "'" + normalizePhoneGAS(customerPhone), 0, '利用(未払い)', 0, newId]);
         }
       } else {
+        // 売上0またはphone未設定: 履歴記録は行わない（要件上このケースは少ない）
         depositUsed = 0;
         billingAmount = sales;
       }
@@ -334,7 +441,7 @@ function doPost(e) {
                     sheet.getRange(i + 1, 11).setValue(newDepositUsed);
                     sheet.getRange(i + 1, 12).setValue(newSales - newDepositUsed);
                     if (histSheet && additionalDeduct > 0) {
-                      histSheet.appendRow([nowJST(), customerName, "'" + editPhone, -additionalDeduct, '報告編集(追加引落)', newBal]);
+                      histSheet.appendRow([nowJST(), customerName, "'" + editPhone, -additionalDeduct, '報告編集(追加引落)', newBal, data.id]);
                     }
                   } else {
                     const diff = oldSales - newSales;
@@ -345,7 +452,7 @@ function doPost(e) {
                     sheet.getRange(i + 1, 11).setValue(newDepositUsed);
                     sheet.getRange(i + 1, 12).setValue(newSales - newDepositUsed);
                     if (histSheet && refund > 0) {
-                      histSheet.appendRow([nowJST(), customerName, "'" + editPhone, refund, '報告編集(返還)', newBal]);
+                      histSheet.appendRow([nowJST(), customerName, "'" + editPhone, refund, '報告編集(返還)', newBal, data.id]);
                     }
                   }
                   break;
@@ -364,7 +471,7 @@ function doPost(e) {
               const editLabel = oldSales !== newSales
                 ? '報告編集(¥' + oldSales.toLocaleString() + '→¥' + newSales.toLocaleString() + ')'
                 : '報告編集(顧客情報の変更)';
-              editHistSheet.appendRow([nowJST(), customerName, "'" + editPhone, 0, editLabel, currentBal]);
+              editHistSheet.appendRow([nowJST(), customerName, "'" + editPhone, 0, editLabel, currentBal, data.id]);
             }
           }
 
@@ -415,12 +522,12 @@ function doPost(e) {
                 let histSheet = ss.getSheetByName('デポジット履歴');
                 if (!histSheet) {
                   histSheet = ss.insertSheet('デポジット履歴');
-                  histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高']);
+                  histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
                 }
                 // 現在のデポジット残高を取得（残高自体は変動しない。参照用として記録）
                 const currentBal = paidPhone ? getCustomerBalanceByPhone(ss, paidPhone) : getCustomerBalance(ss, customerName);
                 const directAmount = billingAmount > 0 ? billingAmount : totalSales;
-                histSheet.appendRow([nowJST(), customerName, "'" + paidPhone, 0, '直接入金確認(¥' + directAmount.toLocaleString() + ')', currentBal]);
+                histSheet.appendRow([nowJST(), customerName, "'" + paidPhone, 0, '直接入金確認(¥' + directAmount.toLocaleString() + ')', currentBal, targetId]);
               } catch (histErr) { /* 履歴書き込み失敗でもメイン処理を続行 */ }
             }
 
@@ -698,7 +805,7 @@ function doPost(e) {
             if (historySheet) {
               const newBal = getCustomerBalanceByPhone(ss, delPhone);
               const deletedSales = Number(values[i][6]) || 0;
-              historySheet.appendRow([nowJST(), customerName, "'" + delPhone, depositUsed, '報告削除による返還(¥' + deletedSales.toLocaleString() + 'の報告)', newBal]);
+              historySheet.appendRow([nowJST(), customerName, "'" + delPhone, depositUsed, '報告削除による返還(¥' + deletedSales.toLocaleString() + 'の報告)', newBal, data.id]);
             }
           } else {
             // デポジット不使用の報告でも、利用履歴に削除の痕跡を残す（0円通知行）
@@ -707,7 +814,7 @@ function doPost(e) {
               const currentBal = getCustomerBalanceByPhone(ss, delPhone);
               const deletedSales = Number(values[i][6]) || 0;
               const deleteLabel = '報告削除(¥' + deletedSales.toLocaleString() + 'の報告)';
-              historySheet.appendRow([nowJST(), customerName, "'" + delPhone, 0, deleteLabel, currentBal]);
+              historySheet.appendRow([nowJST(), customerName, "'" + delPhone, 0, deleteLabel, currentBal, data.id]);
             }
           }
 
@@ -737,7 +844,7 @@ function doPost(e) {
       let historySheet = ss.getSheetByName("デポジット履歴");
       if (!historySheet) {
         historySheet = ss.insertSheet("デポジット履歴");
-        historySheet.appendRow(["日時", "お客様名", "電話番号", "増減額", "種別", "残高"]);
+        historySheet.appendRow(["日時", "お客様名", "電話番号", "増減額", "種別", "残高", "関連ID"]);
       }
 
       if (!sheet) {
@@ -839,11 +946,11 @@ function doPost(e) {
       if (isCharge && totalSettled > 0) {
         // チャージ＋自動精算があった場合：チャージ時点の残高と精算後の残高を分けて記録
         const balBeforeSettle = currentBalance + amount; // チャージ直後（精算前）の仮残高
-        historySheet.appendRow([nowJST(), customerName, "'" + chargePhone, amount, typeLabel, balBeforeSettle]);
-        historySheet.appendRow([nowJST(), customerName, "'" + chargePhone, -totalSettled, '未払い充当', newBalance]);
+        historySheet.appendRow([nowJST(), customerName, "'" + chargePhone, amount, typeLabel, balBeforeSettle, '']);
+        historySheet.appendRow([nowJST(), customerName, "'" + chargePhone, -totalSettled, '未払い充当', newBalance, '']);
       } else {
         // チャージのみ or 利用のみの場合
-        historySheet.appendRow([nowJST(), customerName, "'" + chargePhone, isCharge ? amount : -Math.abs(amount), typeLabel, newBalance]);
+        historySheet.appendRow([nowJST(), customerName, "'" + chargePhone, isCharge ? amount : -Math.abs(amount), typeLabel, newBalance, '']);
       }
 
       if (lock) lock.releaseLock();
@@ -861,7 +968,7 @@ function doPost(e) {
       let historySheet = ss.getSheetByName("デポジット履歴");
       if (!historySheet) {
         historySheet = ss.insertSheet("デポジット履歴");
-        historySheet.appendRow(["日時", "お客様名", "電話番号", "増減額", "種別", "残高"]);
+        historySheet.appendRow(["日時", "お客様名", "電話番号", "増減額", "種別", "残高", "関連ID"]);
       }
       if (!sheet) {
         if (lock) lock.releaseLock();
@@ -891,7 +998,7 @@ function doPost(e) {
       }
 
       const diff = newBalance - oldBalance;
-      historySheet.appendRow([nowJST(), customerName, "'" + fixPhone, diff, '残高調整', newBalance]);
+      historySheet.appendRow([nowJST(), customerName, "'" + fixPhone, diff, '残高調整', newBalance, '']);
 
       if (lock) lock.releaseLock();
       return output.setContent(JSON.stringify({ success: true, newBalance: newBalance }));
@@ -1457,7 +1564,8 @@ function doGet(e) {
             customerPhone: String(row[2] || '').replace(/^'/, ''),
             amount: Number(row[3]) || 0,
             type: row[4],
-            balance: Number(row[5]) || 0
+            balance: Number(row[5]) || 0,
+            reportId: String(row[6] || '') // G列: 関連ID（紐付く業務報告ID）
           });
         });
       }
