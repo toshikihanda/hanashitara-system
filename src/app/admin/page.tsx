@@ -2293,77 +2293,94 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8 bg-gray-50/30">
 
-                                    {/* 📒 通帳タブ（台帳形式） */}
+                                    {/* 📒 通帳タブ（台帳形式・デポジット履歴を唯一の台帳として使う） */}
                                     {historyTabMode === 'ledger' && (() => {
                                         const customer = showHistoryForCustomer!;
                                         const customerPhoneForHistory = reports.find(r => r.customerName === customer)?.customerPhone || customerList.find(c => c.name === customer)?.phone || '';
                                         const normalizedPhoneForHistory = normalizePhone(customerPhoneForHistory);
-                                        // 利用履歴（業務報告から）
-                                        const usageEntries = reports.filter(r => r.customerName === customer).map(r => ({
-                                            date: r.date,
-                                            type: 'usage' as const,
-                                            label: `${r.staff} / ${r.services.replace(/\s*->\s*計算\d+分/g, '').replace(/\((\d+)分\)/g, ' $1分')}`,
-                                            amount: -r.totalSales,
-                                            creditAmount: 0,
-                                            debitAmount: r.totalSales,
-                                            isPaid: r.isPaid,
-                                            id: r.id,
-                                            reportId: r.id,
-                                            totalSales: r.totalSales,
-                                            depositUsed: r.depositUsed || 0,
-                                            customerPhone: r.customerPhone,
-                                            paymentMethod: r.depositUsed > 0 ? (r.billingAmount > 0 ? `デポジット¥${r.depositUsed.toLocaleString()}+請求¥${r.billingAmount.toLocaleString()}` : 'デポジット充当') : (r.isPaid ? '直接入金' : '未払い'),
-                                        }));
-                                        // デポジット履歴（電話番号で照合）
-                                        const depositEntries = depositLogs.filter(log => {
+                                        // デポジット履歴のみを参照（業務報告との重複を排除）
+                                        const filteredLogs = depositLogs.filter(log => {
                                             if (normalizedPhoneForHistory && log.customerPhone) {
                                                 return normalizePhone(log.customerPhone) === normalizedPhoneForHistory;
                                             }
                                             return log.customerName === customer;
-                                        }).map((log, i) => ({
-                                            date: log.date,
-                                            type: 'deposit' as const,
-                                            label: log.type,
-                                            amount: log.amount,
-                                            creditAmount: log.amount > 0 ? log.amount : 0,
-                                            debitAmount: log.amount < 0 ? Math.abs(log.amount) : 0,
-                                            isPaid: true,
-                                            id: `dep-${i}`,
-                                            reportId: '',
-                                            totalSales: 0,
-                                            customerPhone: log.customerPhone || '',
-                                            gasBalance: log.balance,
-                                            paymentMethod: '',
-                                        }));
-                                        // デポジット履歴の「利用(自動引落)」「利用(一部引落)」は 業務報告 の利用行と
-                                        // 同じ取引を重複記録しているため、残高が飛ぶ原因になる。通帳からは除外する。
-                                        const deduplicatedDepositEntries = depositEntries.filter(log => {
-                                            const t = String(log.label || '');
-                                            return !t.startsWith('利用(自動引落)') && !t.startsWith('利用(一部引落)');
                                         });
-                                        // GASは履歴を最新→古い順に返すため、同一タイムスタンプのチャージ＋未払い充当のペアが
-                                        // 逆順で並んでしまう。記録順（古い→新しい）に戻してから結合する。
-                                        const depositsInInsertionOrder = [...deduplicatedDepositEntries].reverse();
-                                        // 日付昇順ソート＋残高計算
-                                        //  - デポジット系（チャージ・残高調整・返還等）: GAS記録の残高を採用（権威値）
-                                        //  - 利用行（業務報告）: 直前の残高から depositUsed を差し引く（銀行台帳風に連続表示）
-                                        //  - 同一タイムスタンプは挿入順を保つため安定ソートにする
-                                        const allEntries = [...usageEntries, ...depositsInInsertionOrder]
-                                            .map((e, i) => ({ e, i }))
-                                            .sort((a, b) => {
-                                                const diff = new Date(a.e.date).getTime() - new Date(b.e.date).getTime();
-                                                return diff !== 0 ? diff : a.i - b.i;
-                                            })
-                                            .map(x => x.e);
-                                        let lastDepositBalance = 0;
-                                        const entriesWithBalance = allEntries.map(entry => {
-                                            if (entry.type === 'deposit' && 'gasBalance' in entry) {
-                                                lastDepositBalance = (entry as any).gasBalance;
-                                            } else if (entry.type === 'usage' && 'depositUsed' in entry) {
-                                                const used = Number((entry as any).depositUsed) || 0;
-                                                if (used > 0) lastDepositBalance -= used;
+                                        // GASは最新→古い順に返すので挿入順（古い→新しい）に戻す
+                                        const chronological = [...filteredLogs].reverse();
+                                        // バックフィル行は残高が不正確なため、カラム F(GAS balance) が 0 の過去分行は前の残高を引き継ぐ
+                                        let runningBalance = 0;
+                                        const entriesWithBalance = chronological.map((log: any, i: number) => {
+                                            const type = String(log.type || '');
+                                            const amount = Number(log.amount) || 0;
+                                            const isUsage = type.indexOf('利用') === 0;
+                                            const isBackfill = type.indexOf('過去分') >= 0;
+                                            const needsReview = type.indexOf('要確認') >= 0;
+                                            // 残高: バックフィル行以外は GAS 記録の残高を権威値として採用。バックフィル行は前回残高を引き継ぎつつ amount を加減
+                                            if (isBackfill) {
+                                                runningBalance = runningBalance + amount;
+                                            } else {
+                                                runningBalance = Number(log.balance) || 0;
                                             }
-                                            return { ...entry, balance: lastDepositBalance };
+                                            // 支払手段バッジ
+                                            let paymentMethod = '';
+                                            let paymentColor = '';
+                                            if (type.indexOf('自動引落') >= 0 || (type.indexOf('デポジット引落') >= 0 && type.indexOf('一部') < 0)) {
+                                                paymentMethod = 'デポジット';
+                                                paymentColor = 'bg-purple-50 text-purple-700 border-purple-200';
+                                            } else if (type.indexOf('一部引落') >= 0 || type.indexOf('一部デポジット') >= 0) {
+                                                paymentMethod = '一部デポジット';
+                                                paymentColor = 'bg-amber-50 text-amber-700 border-amber-200';
+                                            } else if (type.indexOf('直接入金') >= 0) {
+                                                paymentMethod = '直接入金';
+                                                paymentColor = 'bg-sky-50 text-sky-700 border-sky-200';
+                                            } else if (type.indexOf('未払い') >= 0) {
+                                                paymentMethod = '未払い';
+                                                paymentColor = 'bg-red-50 text-red-700 border-red-200';
+                                            }
+                                            // 関連する業務報告を reportId で引き当てる（利用行のラベル・編集・削除に使用）
+                                            const reportId = String(log.reportId || '');
+                                            const relatedReport = reportId ? reports.find(r => r.id === reportId) : null;
+                                            let label: string;
+                                            let totalSales = 0;
+                                            let depositUsed = 0;
+                                            let isPaid = true;
+                                            if (isUsage) {
+                                                if (relatedReport) {
+                                                    label = `${relatedReport.staff} / ${relatedReport.services.replace(/\s*->\s*計算\d+分/g, '').replace(/\((\d+)分\)/g, ' $1分')}`;
+                                                    totalSales = relatedReport.totalSales;
+                                                    depositUsed = relatedReport.depositUsed || 0;
+                                                    isPaid = relatedReport.isPaid;
+                                                } else {
+                                                    label = type;
+                                                    totalSales = Math.abs(amount);
+                                                    isPaid = type.indexOf('自動引落') >= 0 || type.indexOf('一部引落') >= 0 || type.indexOf('直接入金') >= 0;
+                                                }
+                                            } else {
+                                                label = type;
+                                            }
+                                            return {
+                                                date: log.date,
+                                                type: isUsage ? ('usage' as const) : ('deposit' as const),
+                                                rawType: type,
+                                                label,
+                                                amount,
+                                                creditAmount: amount > 0 ? amount : 0,
+                                                debitAmount: isUsage
+                                                    ? (totalSales > 0 ? totalSales : (amount < 0 ? Math.abs(amount) : 0))
+                                                    : (amount < 0 ? Math.abs(amount) : 0),
+                                                isPaid,
+                                                id: reportId ? `rep-${reportId}-${i}` : `dep-${i}`,
+                                                reportId,
+                                                totalSales,
+                                                depositUsed,
+                                                customerPhone: log.customerPhone || '',
+                                                gasBalance: Number(log.balance) || 0,
+                                                balance: runningBalance,
+                                                paymentMethod,
+                                                paymentMethodColor: paymentColor,
+                                                isBackfill,
+                                                needsReview,
+                                            };
                                         });
 
                                         // 編集・削除ハンドラー
@@ -2409,9 +2426,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             (async () => {
                                                 setIsSaving(true); setSavingMessage('編集中...');
                                                 try {
-                                                    const log = depositLogs.filter(l => { if (normalizedPhoneForHistory && l.customerPhone) return normalizePhone(l.customerPhone) === normalizedPhoneForHistory; return l.customerName === customer; })[depositEntries.findIndex(d => d.id === entry.id)];
-                                                    if (!log) { alert('該当する履歴が見つかりません'); return; }
-                                                    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'editDepositHistory', date: log.date, customerName: log.customerName, customerPhone: customerPhoneForHistory, oldAmount: log.amount, newAmount: val, type: log.type }) });
+                                                    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'editDepositHistory', date: entry.date, customerName: customer, customerPhone: customerPhoneForHistory, oldAmount: entry.amount, newAmount: val, type: (entry as any).rawType || entry.label }) });
                                                     const resJson = await res.json();
                                                     if (resJson.success) {
                                                         const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`); const histJson = await histRes.json(); if (histJson.success) setDepositLogs(histJson.history);
@@ -2425,9 +2440,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             if (!confirm(`このデポジット履歴を削除しますか？\n\n${entry.label}: ¥${entry.amount.toLocaleString()}\n\n※残高は自動で調整されます。`)) return;
                                             setIsSaving(true); setSavingMessage('削除中...');
                                             try {
-                                                const log = depositLogs.filter(l => { if (normalizedPhoneForHistory && l.customerPhone) return normalizePhone(l.customerPhone) === normalizedPhoneForHistory; return l.customerName === customer; })[depositEntries.findIndex(d => d.id === entry.id)];
-                                                if (!log) { alert('該当する履歴が見つかりません'); return; }
-                                                const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteDepositHistory', date: log.date, customerName: log.customerName, customerPhone: customerPhoneForHistory, amount: log.amount, type: log.type }) });
+                                                const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteDepositHistory', date: entry.date, customerName: customer, customerPhone: customerPhoneForHistory, amount: entry.amount, type: (entry as any).rawType || entry.label }) });
                                                 const resJson = await res.json();
                                                 if (resJson.success) {
                                                     const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`); const histJson = await histRes.json(); if (histJson.success) setDepositLogs(histJson.history);
@@ -2455,24 +2468,32 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                             {entriesWithBalance.length === 0 && (
                                                                 <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">履歴がありません</td></tr>
                                                             )}
-                                                            {entriesWithBalance.map((entry, i) => (
-                                                                <tr key={entry.id + '-' + i} className={`border-b dark:border-gray-700 hover:bg-gray-50/50 transition-colors ${entry.type === 'deposit' ? 'bg-blue-50/20 dark:bg-indigo-900/5' : ''}`}>
+                                                            {entriesWithBalance.map((entry, i) => {
+                                                                const needsReview = (entry as any).needsReview as boolean;
+                                                                const isBackfill = (entry as any).isBackfill as boolean;
+                                                                const rowCls = needsReview
+                                                                    ? 'bg-yellow-50 dark:bg-yellow-900/10 border-l-4 border-l-yellow-400'
+                                                                    : isBackfill
+                                                                        ? 'bg-gray-50/50 dark:bg-gray-900/20'
+                                                                        : (entry.type === 'deposit' ? 'bg-blue-50/20 dark:bg-indigo-900/5' : '');
+                                                                return (
+                                                                <tr key={entry.id + '-' + i} className={`border-b dark:border-gray-700 hover:bg-gray-50/50 transition-colors ${rowCls}`}>
                                                                     <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{formatJSTDate(entry.date, true)}</td>
                                                                     <td className="px-3 py-2">
                                                                         {entry.type === 'usage' ? (
                                                                             <div className="flex items-center gap-1.5 flex-wrap">
                                                                                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.isPaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{entry.isPaid ? '利用(済)' : '利用(未払)'}</span>
-                                                                                {(() => {
-                                                                                    const pm = (entry as any).paymentMethod as string;
-                                                                                    if (!pm || pm === '未払い') return null;
-                                                                                    // 支払い手段の短縮ラベル
-                                                                                    let label = pm;
-                                                                                    let cls = 'bg-indigo-50 text-indigo-700 border-indigo-200';
-                                                                                    if (pm === 'デポジット充当') { label = 'デポジット'; cls = 'bg-purple-50 text-purple-700 border-purple-200'; }
-                                                                                    else if (pm.startsWith('デポジット¥')) { label = 'デポ+直接入金'; cls = 'bg-amber-50 text-amber-700 border-amber-200'; }
-                                                                                    else if (pm === '直接入金') { label = '直接入金'; cls = 'bg-sky-50 text-sky-700 border-sky-200'; }
-                                                                                    return <span title={pm} className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${cls}`}>{label}</span>;
-                                                                                })()}
+                                                                                {(entry as any).paymentMethod && (
+                                                                                    <span title={(entry as any).rawType} className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${(entry as any).paymentMethodColor}`}>
+                                                                                        {(entry as any).paymentMethod}
+                                                                                    </span>
+                                                                                )}
+                                                                                {needsReview && (
+                                                                                    <span title="過去分の自動補填行です。業務報告と履歴の紐付けを確認してください。" className="px-1.5 py-0.5 rounded text-[10px] font-bold border bg-yellow-100 text-yellow-700 border-yellow-300">⚠ 要確認</span>
+                                                                                )}
+                                                                                {isBackfill && !needsReview && (
+                                                                                    <span title="過去データから自動補填された行です" className="px-1.5 py-0.5 rounded text-[9px] font-bold border bg-gray-100 text-gray-500 border-gray-300">過去分</span>
+                                                                                )}
                                                                             </div>
                                                                         ) : (
                                                                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.amount >= 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>{entry.label}</span>
@@ -2502,7 +2523,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                         )}
                                                                     </td>
                                                                 </tr>
-                                                            ))}
+                                                                );
+                                                            })}
                                                         </tbody>
                                                     </table>
                                                 </div>
