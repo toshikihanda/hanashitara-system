@@ -1894,9 +1894,9 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     onClick={async () => {
                                                                         setIsSaving(true);
                                                                         try {
-                                                                            // 両方のデータが揃うまで待機
-                                                                            await fetchDepositLogs();
-                                                                            // reportsは既に取得済みなので、両方揃った状態でモーダルを開く
+                                                                            // ⭐ reports と depositLogs を必ず同時に最新化してからモーダルを開く
+                                                                            // (これをやらないと新しい利用が relatedReport で見つからず通帳に金額が出ない)
+                                                                            await Promise.all([fetchDepositLogs(), fetchReports(false)]);
                                                                             setShowHistoryForCustomer(customerName);
                                                                         } finally {
                                                                             setIsSaving(false);
