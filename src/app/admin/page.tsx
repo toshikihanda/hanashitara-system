@@ -2315,11 +2315,25 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             const isUsage = type.indexOf('利用') === 0;
                                             const isBackfill = type.indexOf('過去分') >= 0;
                                             const needsReview = type.indexOf('要確認') >= 0;
-                                            // 残高: バックフィル行以外は GAS 記録の残高を権威値として採用。バックフィル行は前回残高を引き継ぎつつ amount を加減
-                                            if (isBackfill) {
-                                                runningBalance = runningBalance + amount;
+                                            // 関連する業務報告を reportId で引き当て（帳簿残高計算に使用）
+                                            const relatedReportForCalc = log.reportId ? reports.find(r => r.id === log.reportId) : null;
+                                            // 帳簿残高の計算（銀行口座風: 正=デポジット残高、負=未払い残高）
+                                            //  - チャージ系(チャージ/残高調整/報告削除による返還/報告編集の返還等): GAS amount をそのまま加算
+                                            //  - 利用(自動引落): GAS amount(=-売上) をそのまま加算
+                                            //  - 利用(一部引落): 売上額満額を引く（デポ枯渇で負になる）
+                                            //  - 利用(未払い): 売上額満額を引く
+                                            //  - 直接入金確認: 請求額を加算（未払い帳消し）
+                                            //  - 未払い充当: GAS amount(負) を加算
+                                            //  - 利用(過去分): amount をそのまま加算（過去データは不正確な場合あり）
+                                            if (type.indexOf('利用(一部引落)') === 0 && relatedReportForCalc) {
+                                                runningBalance -= relatedReportForCalc.totalSales;
+                                            } else if (type.indexOf('利用(未払い)') === 0 && relatedReportForCalc) {
+                                                runningBalance -= relatedReportForCalc.totalSales;
+                                            } else if (type.indexOf('直接入金確認') === 0 && relatedReportForCalc) {
+                                                const billed = Number(relatedReportForCalc.billingAmount) || (relatedReportForCalc.totalSales - (relatedReportForCalc.depositUsed || 0));
+                                                runningBalance += billed;
                                             } else {
-                                                runningBalance = Number(log.balance) || 0;
+                                                runningBalance += amount;
                                             }
                                             // 支払手段バッジ
                                             let paymentMethod = '';
@@ -2358,16 +2372,29 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             } else {
                                                 label = type;
                                             }
+                                            // 表示用の入金/利用金額: 帳簿残高の変化と一致させる
+                                            let creditAmount = 0;
+                                            let debitAmount = 0;
+                                            if (type.indexOf('直接入金確認') === 0 && relatedReportForCalc) {
+                                                const billed = Number(relatedReportForCalc.billingAmount) || (relatedReportForCalc.totalSales - (relatedReportForCalc.depositUsed || 0));
+                                                creditAmount = billed;
+                                            } else if (type.indexOf('利用(一部引落)') === 0 && relatedReportForCalc) {
+                                                debitAmount = relatedReportForCalc.totalSales;
+                                            } else if (type.indexOf('利用(未払い)') === 0 && relatedReportForCalc) {
+                                                debitAmount = relatedReportForCalc.totalSales;
+                                            } else if (amount > 0) {
+                                                creditAmount = amount;
+                                            } else if (amount < 0) {
+                                                debitAmount = Math.abs(amount);
+                                            }
                                             return {
                                                 date: log.date,
                                                 type: isUsage ? ('usage' as const) : ('deposit' as const),
                                                 rawType: type,
                                                 label,
                                                 amount,
-                                                creditAmount: amount > 0 ? amount : 0,
-                                                debitAmount: isUsage
-                                                    ? (totalSales > 0 ? totalSales : (amount < 0 ? Math.abs(amount) : 0))
-                                                    : (amount < 0 ? Math.abs(amount) : 0),
+                                                creditAmount,
+                                                debitAmount,
                                                 isPaid,
                                                 id: reportId ? `rep-${reportId}-${i}` : `dep-${i}`,
                                                 reportId,
@@ -2528,7 +2555,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         </tbody>
                                                     </table>
                                                 </div>
-                                                <p className="text-[11px] text-gray-400 mt-2">※ 残高はデポジット（前払い）残高の推移を表示しています。利用行の残高は直前のデポジット操作時の確定値です。</p>
+                                                <p className="text-[11px] text-gray-400 mt-2">※ 残高は帳簿残高（お客様との取引残高）です。<span className="text-indigo-600">正の値はデポジット残高</span>、<span className="text-red-600">負の値は未払い残高</span>を表します。最下行が現在の残高です。</p>
                                             </div>
                                         );
                                     })()}
