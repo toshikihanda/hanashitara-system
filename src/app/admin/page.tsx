@@ -2341,10 +2341,20 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             const t = String(log.label || '');
                                             return !t.startsWith('利用(自動引落)') && !t.startsWith('利用(一部引落)');
                                         });
+                                        // GASは履歴を最新→古い順に返すため、同一タイムスタンプのチャージ＋未払い充当のペアが
+                                        // 逆順で並んでしまう。記録順（古い→新しい）に戻してから結合する。
+                                        const depositsInInsertionOrder = [...deduplicatedDepositEntries].reverse();
                                         // 日付昇順ソート＋残高計算
                                         //  - デポジット系（チャージ・残高調整・返還等）: GAS記録の残高を採用（権威値）
                                         //  - 利用行（業務報告）: 直前の残高から depositUsed を差し引く（銀行台帳風に連続表示）
-                                        const allEntries = [...usageEntries, ...deduplicatedDepositEntries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                                        //  - 同一タイムスタンプは挿入順を保つため安定ソートにする
+                                        const allEntries = [...usageEntries, ...depositsInInsertionOrder]
+                                            .map((e, i) => ({ e, i }))
+                                            .sort((a, b) => {
+                                                const diff = new Date(a.e.date).getTime() - new Date(b.e.date).getTime();
+                                                return diff !== 0 ? diff : a.i - b.i;
+                                            })
+                                            .map(x => x.e);
                                         let lastDepositBalance = 0;
                                         const entriesWithBalance = allEntries.map(entry => {
                                             if (entry.type === 'deposit' && 'gasBalance' in entry) {
