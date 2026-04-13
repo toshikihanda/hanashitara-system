@@ -2305,11 +2305,9 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             }
                                             return log.customerName === customer;
                                         });
-                                        // 「未払い充当」行は帳簿残高ではチャージ行に含まれているため非表示にして二重計算を防ぐ
-                                        //（該当の業務報告行は自動で「入金済」に変わるので、支払いの流れは個別履歴タブで追える）
-                                        const withoutSettlement = filteredLogs.filter(log => String(log.type || '').indexOf('未払い充当') !== 0);
                                         // GASは最新→古い順に返すので挿入順（古い→新しい）に戻す
-                                        const chronological = [...withoutSettlement].reverse();
+                                        // 「未払い充当」行は表示するが帳簿残高には影響させない（チャージ行に既に含まれている）
+                                        const chronological = [...filteredLogs].reverse();
                                         // バックフィル行は残高が不正確なため、カラム F(GAS balance) が 0 の過去分行は前の残高を引き継ぐ
                                         let runningBalance = 0;
                                         const entriesWithBalance = chronological.map((log: any, i: number) => {
@@ -2335,6 +2333,9 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             } else if (type.indexOf('直接入金確認') === 0 && relatedReportForCalc) {
                                                 const billed = Number(relatedReportForCalc.billingAmount) || (relatedReportForCalc.totalSales - (relatedReportForCalc.depositUsed || 0));
                                                 runningBalance += billed;
+                                            } else if (type.indexOf('未払い充当') === 0) {
+                                                // 帳簿残高には影響させない（同時刻のチャージ行に既に含まれているため）
+                                                // 表示のみ（情報行）
                                             } else {
                                                 runningBalance += amount;
                                             }
@@ -2501,16 +2502,31 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                             {entriesWithBalance.map((entry, i) => {
                                                                 const needsReview = (entry as any).needsReview as boolean;
                                                                 const isBackfill = (entry as any).isBackfill as boolean;
+                                                                const rawType = String((entry as any).rawType || '');
+                                                                const isSettlement = rawType.indexOf('未払い充当') === 0;
+                                                                // 精算情報行用に関連業務報告のラベルを構築
+                                                                const settledReport = isSettlement && entry.reportId ? reports.find(r => r.id === entry.reportId) : null;
                                                                 const rowCls = needsReview
                                                                     ? 'bg-yellow-50 dark:bg-yellow-900/10 border-l-4 border-l-yellow-400'
-                                                                    : isBackfill
-                                                                        ? 'bg-gray-50/50 dark:bg-gray-900/20'
-                                                                        : (entry.type === 'deposit' ? 'bg-blue-50/20 dark:bg-indigo-900/5' : '');
+                                                                    : isSettlement
+                                                                        ? 'bg-emerald-50/40 dark:bg-emerald-900/10'
+                                                                        : isBackfill
+                                                                            ? 'bg-gray-50/50 dark:bg-gray-900/20'
+                                                                            : (entry.type === 'deposit' ? 'bg-blue-50/20 dark:bg-indigo-900/5' : '');
                                                                 return (
                                                                 <tr key={entry.id + '-' + i} className={`border-b dark:border-gray-700 hover:bg-gray-50/50 transition-colors ${rowCls}`}>
                                                                     <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{formatJSTDate(entry.date, true)}</td>
                                                                     <td className="px-3 py-2">
-                                                                        {entry.type === 'usage' ? (
+                                                                        {isSettlement ? (
+                                                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">💚 精算</span>
+                                                                                <span className="text-[11px] text-gray-600 dark:text-gray-400">
+                                                                                    {settledReport
+                                                                                        ? `${formatJSTDate(settledReport.date, true)}の利用 ¥${Math.abs(entry.amount).toLocaleString()} を精算`
+                                                                                        : `過去未払い ¥${Math.abs(entry.amount).toLocaleString()} を精算`}
+                                                                                </span>
+                                                                            </div>
+                                                                        ) : entry.type === 'usage' ? (
                                                                             <div className="flex items-center gap-1.5 flex-wrap">
                                                                                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.isPaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{entry.isPaid ? '利用(済)' : '利用(未払)'}</span>
                                                                                 {(entry as any).paymentMethod && (
@@ -2530,22 +2546,24 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                         )}
                                                                     </td>
                                                                     <td className="px-3 py-2 text-right font-bold text-blue-600">
-                                                                        {entry.creditAmount > 0 ? `+¥${entry.creditAmount.toLocaleString()}` : ''}
+                                                                        {!isSettlement && entry.creditAmount > 0 ? `+¥${entry.creditAmount.toLocaleString()}` : ''}
                                                                     </td>
                                                                     <td className="px-3 py-2 text-right font-bold text-red-500">
-                                                                        {entry.debitAmount > 0 ? `-¥${entry.debitAmount.toLocaleString()}` : ''}
+                                                                        {isSettlement
+                                                                            ? <span className="text-[11px] text-emerald-600 italic">(チャージから充当)</span>
+                                                                            : entry.debitAmount > 0 ? `-¥${entry.debitAmount.toLocaleString()}` : ''}
                                                                     </td>
                                                                     <td className={`px-3 py-2 text-right font-bold ${entry.balance < 0 ? 'text-red-600' : 'text-gray-800 dark:text-gray-200'}`}>
                                                                         ¥{entry.balance.toLocaleString()}
                                                                     </td>
                                                                     <td className="px-3 py-2 text-center whitespace-nowrap">
-                                                                        {entry.type === 'usage' && entry.reportId && (
+                                                                        {!isSettlement && entry.type === 'usage' && entry.reportId && (
                                                                             <div className="flex items-center justify-center gap-1">
                                                                                 <button disabled={isSaving} onClick={() => handleEditUsage(entry)} className="text-blue-500 hover:text-blue-700 text-xs font-bold disabled:opacity-50">✏️</button>
                                                                                 <button disabled={isSaving} onClick={() => handleDeleteUsage(entry)} className="text-red-500 hover:text-red-700 text-xs font-bold disabled:opacity-50">🗑️</button>
                                                                             </div>
                                                                         )}
-                                                                        {entry.type === 'deposit' && (
+                                                                        {!isSettlement && entry.type === 'deposit' && (
                                                                             <div className="flex items-center justify-center gap-1">
                                                                                 <button disabled={isSaving} onClick={() => handleEditDeposit(entry)} className="text-blue-500 hover:text-blue-700 text-xs font-bold disabled:opacity-50">✏️</button>
                                                                                 <button disabled={isSaving} onClick={() => handleDeleteDeposit(entry)} className="text-red-500 hover:text-red-700 text-xs font-bold disabled:opacity-50">🗑️</button>
