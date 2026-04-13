@@ -893,6 +893,7 @@ function doPost(e) {
 
           for (const unpaid of unpaidRows) {
             if (remainingCharge <= 0) break;
+            const reportIdForSettle = String(repValues[unpaid.originalIndex][0] || '');
             if (remainingCharge >= unpaid.billing) {
               // 全額充当
               remainingCharge -= unpaid.billing;
@@ -903,7 +904,7 @@ function doPost(e) {
               const oldDepUsed = Number(repValues[unpaid.originalIndex][10]) || 0;
               reportSheet.getRange(unpaid.rowIndex, 11).setValue(oldDepUsed + unpaid.billing);
               reportSheet.getRange(unpaid.rowIndex, 12).setValue(0); // 請求額を0に
-              settledReports.push({ date: unpaid.date, amount: unpaid.billing });
+              settledReports.push({ date: unpaid.date, amount: unpaid.billing, reportId: reportIdForSettle });
             } else {
               // 一部充当（残りのチャージ額で部分的に支払い）
               const partialPay = remainingCharge;
@@ -912,7 +913,7 @@ function doPost(e) {
               reportSheet.getRange(unpaid.rowIndex, 11).setValue(oldDepUsed2 + partialPay);
               reportSheet.getRange(unpaid.rowIndex, 12).setValue(unpaid.billing - partialPay);
               remainingCharge = 0;
-              settledReports.push({ date: unpaid.date, amount: partialPay, partial: true });
+              settledReports.push({ date: unpaid.date, amount: partialPay, partial: true, reportId: reportIdForSettle });
             }
           }
         }
@@ -944,10 +945,13 @@ function doPost(e) {
       // ★ Bug#4修正: 履歴に正確な残高を記録
       const typeLabel = isCharge ? 'チャージ' : '利用';
       if (isCharge && totalSettled > 0) {
-        // チャージ＋自動精算があった場合：チャージ時点の残高と精算後の残高を分けて記録
+        // チャージ＋自動精算があった場合：精算した利用ごとに1行ずつ「未払い充当」行を記録（reportId 付き）
+        // → 通帳上で「どの利用が・いつチャージで充当されたか」が分かるようにするため
         const balBeforeSettle = currentBalance + amount; // チャージ直後（精算前）の仮残高
         historySheet.appendRow([nowJST(), customerName, "'" + chargePhone, amount, typeLabel, balBeforeSettle, '']);
-        historySheet.appendRow([nowJST(), customerName, "'" + chargePhone, -totalSettled, '未払い充当', newBalance, '']);
+        for (const s of settledReports) {
+          historySheet.appendRow([nowJST(), customerName, "'" + chargePhone, -Number(s.amount || 0), '未払い充当', newBalance, String(s.reportId || '')]);
+        }
       } else {
         // チャージのみ or 利用のみの場合
         historySheet.appendRow([nowJST(), customerName, "'" + chargePhone, isCharge ? amount : -Math.abs(amount), typeLabel, newBalance, '']);
