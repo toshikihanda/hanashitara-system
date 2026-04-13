@@ -2460,7 +2460,20 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{formatJSTDate(entry.date, true)}</td>
                                                                     <td className="px-3 py-2">
                                                                         {entry.type === 'usage' ? (
-                                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.isPaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{entry.isPaid ? '利用(済)' : '利用(未払)'}</span>
+                                                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.isPaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{entry.isPaid ? '利用(済)' : '利用(未払)'}</span>
+                                                                                {(() => {
+                                                                                    const pm = (entry as any).paymentMethod as string;
+                                                                                    if (!pm || pm === '未払い') return null;
+                                                                                    // 支払い手段の短縮ラベル
+                                                                                    let label = pm;
+                                                                                    let cls = 'bg-indigo-50 text-indigo-700 border-indigo-200';
+                                                                                    if (pm === 'デポジット充当') { label = 'デポジット'; cls = 'bg-purple-50 text-purple-700 border-purple-200'; }
+                                                                                    else if (pm.startsWith('デポジット¥')) { label = 'デポ+直接入金'; cls = 'bg-amber-50 text-amber-700 border-amber-200'; }
+                                                                                    else if (pm === '直接入金') { label = '直接入金'; cls = 'bg-sky-50 text-sky-700 border-sky-200'; }
+                                                                                    return <span title={pm} className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${cls}`}>{label}</span>;
+                                                                                })()}
+                                                                            </div>
                                                                         ) : (
                                                                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.amount >= 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>{entry.label}</span>
                                                                         )}
