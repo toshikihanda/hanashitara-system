@@ -2708,7 +2708,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {depositLogs.filter(filterDepositLogsByCustomer).map((log, i) => (
+                                                    {depositLogs.filter(filterDepositLogsByCustomer).slice().sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map((log, i) => (
                                                         <tr key={i} className="border-b dark:border-gray-700 hover:bg-gray-50/50 dark:bg-gray-800/50">
                                                             <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{formatJSTDate(log.date, true)}</td>
                                                             <td className="px-4 py-3 text-center">
