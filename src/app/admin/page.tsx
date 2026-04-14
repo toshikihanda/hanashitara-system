@@ -2306,39 +2306,51 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             return log.customerName === customer;
                                         });
                                         // GASは最新→古い順に返すので挿入順（古い→新しい）に戻す
-                                        // 「未払い充当」行は表示するが帳簿残高には影響させない（チャージ行に既に含まれている）
                                         const chronological = [...filteredLogs].reverse();
-                                        // バックフィル行は残高が不正確なため、カラム F(GAS balance) が 0 の過去分行は前の残高を引き継ぐ
-                                        let runningBalance = 0;
+                                        // ⭐ 逆算方式: 最下行(最新)の残高 = 現在のデポジット残高(権威値) に固定し、
+                                        //   そこから1行ずつ上に遡って「その時点の残高」を推定する。
+                                        //   こうすれば通帳最下行が必ずダッシュボード残高と一致し、過去履歴の欠損に依存しなくなる。
+                                        const currentDepositBalance = Number(deposits[customer] ?? 0);
+                                        // 各行の「この行のイベントが帳簿残高にもたらす変化量(effect)」を計算
+                                        //  - チャージ系: +amount (そのまま)
+                                        //  - 利用(自動引落): +amount (負の値)
+                                        //  - 利用(一部引落): -totalSales (売上満額引き)
+                                        //  - 利用(未払い): -totalSales
+                                        //  - 直接入金確認: +billingAmount (未払い帳消し)
+                                        //  - 未払い充当: 0 (情報行。チャージ行に既に含まれる)
+                                        //  - 残高調整/報告削除による返還/報告編集(追加/返還): +amount
+                                        //  - 利用(過去分): +amount (バックフィル分、amount 自体が -depositUsed や 0)
+                                        const computeEffect = (log: any) => {
+                                            const t = String(log.type || '');
+                                            const a = Number(log.amount) || 0;
+                                            const rep = log.reportId ? reports.find((r: any) => r.id === log.reportId) : null;
+                                            if (t.indexOf('未払い充当') === 0) return 0;
+                                            if (t.indexOf('利用(一部引落)') === 0 && rep) return -rep.totalSales;
+                                            if (t.indexOf('利用(未払い)') === 0 && rep) return -rep.totalSales;
+                                            if (t.indexOf('直接入金確認') === 0 && rep) {
+                                                const billed = Number(rep.billingAmount) || (rep.totalSales - (rep.depositUsed || 0));
+                                                return billed;
+                                            }
+                                            return a;
+                                        };
+                                        // 逆算: 最下行から上へ。rowN.balance = currentDeposit, rowN-1.balance = rowN.balance - rowN.effect
+                                        const perRowBalance: number[] = new Array(chronological.length);
+                                        {
+                                            let bal = currentDepositBalance;
+                                            for (let i = chronological.length - 1; i >= 0; i--) {
+                                                perRowBalance[i] = bal;
+                                                const effect = computeEffect(chronological[i]);
+                                                bal -= effect;
+                                            }
+                                        }
                                         const entriesWithBalance = chronological.map((log: any, i: number) => {
                                             const type = String(log.type || '');
                                             const amount = Number(log.amount) || 0;
                                             const isUsage = type.indexOf('利用') === 0;
                                             const isBackfill = type.indexOf('過去分') >= 0;
                                             const needsReview = type.indexOf('要確認') >= 0;
-                                            // 関連する業務報告を reportId で引き当て（帳簿残高計算に使用）
                                             const relatedReportForCalc = log.reportId ? reports.find(r => r.id === log.reportId) : null;
-                                            // 帳簿残高の計算（銀行口座風: 正=デポジット残高、負=未払い残高）
-                                            //  - チャージ系(チャージ/残高調整/報告削除による返還/報告編集の返還等): GAS amount をそのまま加算
-                                            //  - 利用(自動引落): GAS amount(=-売上) をそのまま加算
-                                            //  - 利用(一部引落): 売上額満額を引く（デポ枯渇で負になる）
-                                            //  - 利用(未払い): 売上額満額を引く
-                                            //  - 直接入金確認: 請求額を加算（未払い帳消し）
-                                            //  - 未払い充当: GAS amount(負) を加算
-                                            //  - 利用(過去分): amount をそのまま加算（過去データは不正確な場合あり）
-                                            if (type.indexOf('利用(一部引落)') === 0 && relatedReportForCalc) {
-                                                runningBalance -= relatedReportForCalc.totalSales;
-                                            } else if (type.indexOf('利用(未払い)') === 0 && relatedReportForCalc) {
-                                                runningBalance -= relatedReportForCalc.totalSales;
-                                            } else if (type.indexOf('直接入金確認') === 0 && relatedReportForCalc) {
-                                                const billed = Number(relatedReportForCalc.billingAmount) || (relatedReportForCalc.totalSales - (relatedReportForCalc.depositUsed || 0));
-                                                runningBalance += billed;
-                                            } else if (type.indexOf('未払い充当') === 0) {
-                                                // 帳簿残高には影響させない（同時刻のチャージ行に既に含まれているため）
-                                                // 表示のみ（情報行）
-                                            } else {
-                                                runningBalance += amount;
-                                            }
+                                            const runningBalance = perRowBalance[i];
                                             // 支払手段バッジ
                                             let paymentMethod = '';
                                             let paymentColor = '';
