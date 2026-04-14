@@ -3050,7 +3050,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         {/* モバイル用カード */}
                                         <div className="md:hidden space-y-2">
                                             {(() => {
-                                                const filtered = depositLogs.filter(log => log.customerName === showHistoryForCustomer);
+                                                const filtered = depositLogs.filter(log => log.customerName === showHistoryForCustomer)
+                                                    .slice().sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                                                 if (filtered.length === 0) return <p className="text-center py-6 text-gray-400 dark:text-gray-500 text-sm bg-white dark:bg-gray-800 rounded border">デポジットの履歴がありません</p>;
                                                 return filtered.map((log, i) => (
                                                     <div key={i} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 p-2.5 space-y-1">
@@ -3099,7 +3100,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {depositLogs.filter(filterDepositLogsByCustomer).map((log, i) => (
+                                                    {depositLogs.filter(filterDepositLogsByCustomer).slice().sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map((log, i) => (
                                                         <tr key={i} className="border-b dark:border-gray-700 hover:bg-gray-50/50 dark:bg-gray-800/50">
                                                             <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{formatJSTDate(log.date, true)}</td>
                                                             <td className="px-4 py-3 text-center">
