@@ -2305,8 +2305,18 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             }
                                             return log.customerName === customer;
                                         });
-                                        // GASは最新→古い順に返すので挿入順（古い→新しい）に戻す
-                                        const chronological = [...filteredLogs].reverse();
+                                        // 日付で昇順ソート（古い→新しい）。バックフィル行が後から挿入されていても
+                                        // 実際の取引日時で並ぶようにするため。同一日時は挿入順を保つ(安定ソート)。
+                                        const chronological = [...filteredLogs]
+                                            .map((log, origIdx) => ({ log, origIdx }))
+                                            .sort((a, b) => {
+                                                const da = new Date(a.log.date).getTime();
+                                                const db = new Date(b.log.date).getTime();
+                                                if (da !== db) return da - db;
+                                                // 同じ日時の場合: GASはreverse済みなので元のorigIdxが大きいほど古い挿入 → 先に配置
+                                                return b.origIdx - a.origIdx;
+                                            })
+                                            .map(x => x.log);
                                         // ⭐ 逆算方式: 最下行(最新)の残高 = 現在のデポジット残高(権威値) に固定し、
                                         //   そこから1行ずつ上に遡って「その時点の残高」を推定する。
                                         //   こうすれば通帳最下行が必ずダッシュボード残高と一致し、過去履歴の欠損に依存しなくなる。
@@ -2621,7 +2631,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 </thead>
                                                 <tbody>
                                                     {reports.filter(r => r.customerName === showHistoryForCustomer)
-                                                        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                                        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
                                                         .map(r => {
                                                             // サービス表示から「-> 計算XX分」を削除
                                                             const cleanServices = r.services.replace(/\s*->\s*計算\d+分/g, '').replace(/\((\d+)分\)/g, ' $1分');
@@ -2772,7 +2782,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         {(() => {
                                             const memoReports = reports
                                                 .filter(r => r.customerName === showHistoryForCustomer && r.memo && r.memo.trim())
-                                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                                                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                                             if (memoReports.length === 0) {
                                                 return <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center bg-white dark:bg-gray-800 rounded border">メモの記録がありません</p>;
                                             }
