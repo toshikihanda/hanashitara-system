@@ -696,6 +696,7 @@ function doPost(e) {
         const oldPhone = normalizePhoneGAS(data.oldPhone || '');
         const newName = String(data.newName || '').trim();
         const phone = normalizePhoneGAS(data.phone || '');
+        let foundCustomer = false;
         if (!newName) {
           return output.setContent(JSON.stringify({ success: false, message: 'お客様名は必須です' }));
         }
@@ -717,12 +718,17 @@ function doPost(e) {
           }
           for (let i = 1; i < values.length; i++) {
             if (matchCustomerRow(values[i][0], values[i][1])) {
+               foundCustomer = true;
                custSheet.getRange(i + 1, 1).setValue(newName);
                custSheet.getRange(i + 1, 2).setValue(phone ? `'${phone}` : '');
                if (data.password !== undefined) custSheet.getRange(i + 1, 4).setValue(data.password);
                break;
             }
           }
+        }
+
+        if (!foundCustomer) {
+          return output.setContent(JSON.stringify({ success: false, message: '更新対象の顧客が見つかりませんでした。最新の一覧に更新してからもう一度お試しください。' }));
         }
 
         // 2. 前払い管理の更新

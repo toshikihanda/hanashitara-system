@@ -2551,7 +2551,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         // ⭐ 逆算方式: 最下行(最新)の残高 = 現在のデポジット残高(権威値) に固定し、
                                         //   そこから1行ずつ上に遡って「その時点の残高」を推定する。
                                         //   こうすれば通帳最下行が必ずダッシュボード残高と一致し、過去履歴の欠損に依存しなくなる。
-                                        const currentDepositBalance = Number(deposits[customer] ?? 0);
+                                        const currentDepositBalance = getCustomerBalance(customer, customerPhoneForHistory);
                                         // 各行の「この行のイベントが帳簿残高にもたらす変化量(effect)」を計算
                                         //  - チャージ系: +amount (そのまま)
                                         //  - 利用(自動引落): +amount (負の値)
