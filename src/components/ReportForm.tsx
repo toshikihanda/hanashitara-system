@@ -37,7 +37,11 @@ export default function ReportForm() {
 
     // 電話番号を正規化（ハイフンを削除）
     const normalizePhone = (phone: string) => {
-        return phone.replace(/-/g, '');
+        let normalized = String(phone || '').replace(/^'/, '').replace(/[-\s()（）]/g, '');
+        if (normalized && !normalized.startsWith('0')) {
+            normalized = '0' + normalized;
+        }
+        return normalized;
     };
 
     // 電話番号を表示用にフォーマット（XXX-XXXX-XXXX形式に変換）
@@ -49,6 +53,17 @@ export default function ReportForm() {
             return `${normalized.slice(0, 3)}-${normalized.slice(3, 6)}-${normalized.slice(6)}`;
         }
         return phone; // そのまま返す
+    };
+
+    // 入力電話番号に一致する既存顧客名を返す（完全一致のみ）
+    const findCustomerNameByPhone = (phone: string) => {
+        const normalizedInput = normalizePhone(phone);
+        for (const [registeredPhone, name] of Object.entries(customersMap)) {
+            if (normalizePhone(registeredPhone) === normalizedInput) {
+                return name;
+            }
+        }
+        return '';
     };
 
     useEffect(() => {
@@ -78,6 +93,8 @@ export default function ReportForm() {
 
     // 新規顧客判定（十分な桁数があり、かつ既存顧客に一致しない場合）
     const normalizedPhone = normalizePhone(phoneNumber);
+    const matchedCustomerName = findCustomerNameByPhone(phoneNumber);
+    const isCustomerNameLocked = !!matchedCustomerName;
     const isNewCustomer = normalizedPhone.length >= 10 && !Object.keys(customersMap).some(
         phone => normalizePhone(phone) === normalizedPhone
     );
@@ -108,14 +125,7 @@ export default function ReportForm() {
         setPhoneNumber(value);
 
         const normalizedInput = normalizePhone(value);
-        let foundName = '';
-
-        for (const [phone, name] of Object.entries(customersMap)) {
-            if (normalizePhone(phone) === normalizedInput) {
-                foundName = name;
-                break;
-            }
-        }
+        const foundName = findCustomerNameByPhone(value);
 
         if (foundName) {
             setCustomerName(foundName);
@@ -127,6 +137,13 @@ export default function ReportForm() {
             setSimilarCustomer(null);
         }
     };
+
+    // 既存顧客の電話番号に一致している間は、顧客名を常にマスター値へ固定する
+    useEffect(() => {
+        if (matchedCustomerName && customerName !== matchedCustomerName) {
+            setCustomerName(matchedCustomerName);
+        }
+    }, [matchedCustomerName, customerName]);
 
     // 「もしかして」の候補を採用する
     const applySuggestion = (suggestedPhone: string) => {
@@ -390,11 +407,17 @@ export default function ReportForm() {
                         </label>
                         <input
                             type="text"
-                            className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
+                            className={`w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow ${isCustomerNameLocked ? 'bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400 cursor-not-allowed' : ''}`}
                             placeholder="鈴木 サトシ"
                             value={customerName}
                             onChange={(e) => setCustomerName(e.target.value)}
+                            readOnly={isCustomerNameLocked}
                         />
+                        {isCustomerNameLocked && (
+                            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                ※この電話番号は既存顧客に一致しているため、お客様名は変更できません。
+                            </p>
+                        )}
                     </div>
                 </div>
 

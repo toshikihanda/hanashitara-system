@@ -47,6 +47,7 @@ export default function AdminDashboard() {
     const [selectedPdfStaff, setSelectedPdfStaff] = useState<string | null>(null);
     // 前払いデポジット状態と顧客電話番号
     const [deposits, setDeposits] = useState<Record<string, number>>({});
+    const [depositsByPhone, setDepositsByPhone] = useState<Record<string, number>>({});
     const [customerPhones, setCustomerPhones] = useState<Record<string, string>>({});
     // スタッフのメアド保持用・対応サービス保持用・パスワード保持用
     const [staffEmails, setStaffEmails] = useState<Record<string, string>>({});
@@ -54,6 +55,7 @@ export default function AdminDashboard() {
     const [staffPasswords, setStaffPasswords] = useState<Record<string, string>>({});
     // 顧客パスワード保持用（マイページログイン用）
     const [customerPasswords, setCustomerPasswords] = useState<Record<string, string>>({});
+    const [customerPasswordsByPhone, setCustomerPasswordsByPhone] = useState<Record<string, string>>({});
     // 顧客登録日保持用（電話番号キー）
     const [customerRegisterDatesByPhone, setCustomerRegisterDatesByPhone] = useState<Record<string, string>>({});
     // 顧客リスト(name→正規化済み電話番号) の権威マップ。前払い管理/業務報告と食い違う場合の照合用
@@ -78,6 +80,7 @@ export default function AdminDashboard() {
     // 履歴モーダル・スタッフ詳細用
     const [depositLogs, setDepositLogs] = useState<any[]>([]);
     const [showHistoryForCustomer, setShowHistoryForCustomer] = useState<string | null>(null);
+    const [showHistoryForCustomerPhone, setShowHistoryForCustomerPhone] = useState<string | null>(null);
     const [showStaffDetailFor, setShowStaffDetailFor] = useState<string | null>(null);
     const [historyTabMode, setHistoryTabMode] = useState<'detail' | 'ledger'>('detail');
 
@@ -89,6 +92,7 @@ export default function AdminDashboard() {
     const [editStaffData, setEditStaffData] = useState<{ name: string, password: string, email: string, services: string[] }>({ name: '', password: '', email: '', services: [] });
 
     const [editingCustomerName, setEditingCustomerName] = useState<string | null>(null);
+    const [editingCustomerOriginalPhone, setEditingCustomerOriginalPhone] = useState<string | null>(null);
     const [editCustomerData, setEditCustomerData] = useState<{ customerName: string, customerPhone: string, customerPassword: string }>({ customerName: '', customerPhone: '', customerPassword: '' });
     const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -148,6 +152,28 @@ export default function AdminDashboard() {
         return p;
     };
 
+    // 残高参照は電話番号を主キーにする（取得できない場合のみ名前にフォールバック）
+    const getCustomerBalance = (name?: string | null, phone?: string | null) => {
+        const normalizedPhone = normalizePhone(String(phone || ''));
+        if (normalizedPhone && depositsByPhone[normalizedPhone] !== undefined) {
+            return depositsByPhone[normalizedPhone];
+        }
+        const safeName = String(name || '').trim();
+        if (safeName && deposits[safeName] !== undefined) {
+            return deposits[safeName];
+        }
+        return 0;
+    };
+
+    const getCustomerPassword = (name?: string | null, phone?: string | null) => {
+        const normalizedPhone = normalizePhone(String(phone || ''));
+        if (normalizedPhone && customerPasswordsByPhone[normalizedPhone] !== undefined) {
+            return customerPasswordsByPhone[normalizedPhone];
+        }
+        const safeName = String(name || '').trim();
+        return safeName ? (customerPasswords[safeName] || '') : '';
+    };
+
     // 電話番号を表示用にフォーマット（XXX-XXXX-XXXX形式に変換）
     const formatPhone = (phone: string) => {
         const normalized = normalizePhone(phone);
@@ -179,6 +205,7 @@ export default function AdminDashboard() {
         const interval = setInterval(() => {
             fetchReports(false); // ローディング表示なしで更新
             fetchDeposits();
+            fetchCustomerInfo();
         }, 30000); // 30秒ごと
 
         return () => clearInterval(interval);
@@ -191,6 +218,7 @@ export default function AdminDashboard() {
                 // ページが表示されたときにデータを更新
                 fetchReports(false);
                 fetchDeposits();
+                fetchCustomerInfo();
             }
         };
 
@@ -237,21 +265,41 @@ export default function AdminDashboard() {
             if (json.success) {
                 setDeposits(json.deposits || {});
                 const safePhones: Record<string, string> = {};
+                const safeDepositsByPhone: Record<string, number> = {};
                 const safePasswords: Record<string, string> = {};
+                const safePasswordsByPhone: Record<string, string> = {};
                 const safeRegisterDates: Record<string, string> = {};
                 
                 for (const [k, v] of Object.entries(json.phones || {})) {
                     safePhones[String(k).trim()] = String(v).trim().replace(/^'/, '');
                 }
+                for (const [k, v] of Object.entries(json.depositsByPhone || {})) {
+                    safeDepositsByPhone[normalizePhone(String(k).trim())] = Number(v) || 0;
+                }
                 for (const [k, v] of Object.entries(json.passwords || {})) {
                     safePasswords[String(k).trim()] = String(v);
+                }
+                for (const [k, v] of Object.entries(json.passwordsByPhone || {})) {
+                    safePasswordsByPhone[normalizePhone(String(k).trim())] = String(v);
                 }
                 for (const [k, v] of Object.entries(json.registerDatesByPhone || {})) {
                     safeRegisterDates[String(k).trim()] = String(v);
                 }
 
+                // 旧レスポンス互換: depositsByPhone が無い場合は name→phone から補完
+                if (Object.keys(safeDepositsByPhone).length === 0) {
+                    for (const [name, balance] of Object.entries(json.deposits || {})) {
+                        const phone = normalizePhone(safePhones[String(name).trim()] || '');
+                        if (phone && safeDepositsByPhone[phone] === undefined) {
+                            safeDepositsByPhone[phone] = Number(balance) || 0;
+                        }
+                    }
+                }
+
                 setCustomerPhones(safePhones);
+                setDepositsByPhone(safeDepositsByPhone);
                 setCustomerPasswords(safePasswords);
+                setCustomerPasswordsByPhone(safePasswordsByPhone);
                 setCustomerRegisterDatesByPhone(safeRegisterDates);
             }
         } catch (err) {
@@ -366,7 +414,8 @@ export default function AdminDashboard() {
                 fetchReports(false),
                 fetchBlacklist(),
                 fetchDeposits(),
-                fetchStaffList()
+                fetchStaffList(),
+                fetchCustomerInfo()
             ]);
         } finally {
             setIsRefreshing(false);
@@ -731,15 +780,96 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         });
     });
 
+    // 顧客リスト（CSV）にのみ存在する顧客（利用履歴なし・デポジット未作成）も一覧に出す
+    Object.entries(listPhoneByName).forEach(([name, authoritativePhone]) => {
+        const cName = String(name || '').trim();
+        if (!cName) return;
+        const phoneKey = normalizePhone(authoritativePhone || '');
+        const key = phoneKey || cName;
+
+        const existingByKey = customerMap.get(key);
+        if (existingByKey && existingByKey.name === cName) return;
+
+        // 同一電話番号で別名が来るケース（過去の表記ゆれ等）では名前側キーで保持して欠落を防ぐ
+        const effectiveKey = existingByKey && existingByKey.name !== cName ? `${cName}::${phoneKey || 'no-phone'}` : key;
+        if (customerMap.has(effectiveKey)) return;
+
+        const existing = Array.from(customerMap.values()).find(c => c.name === cName);
+        const listRegDate = customerRegisterDatesByPhone[phoneKey] || '';
+
+        // 既存エントリが同名で存在する場合は、情報だけ補完して重複作成を避ける
+        if (existing) {
+            if (!existing.phoneKey && phoneKey) {
+                existing.phoneKey = phoneKey;
+            }
+            if (!existing.phoneDisplay && phoneKey) {
+                existing.phoneDisplay = phoneKey;
+            }
+            if (listRegDate) {
+                existing.registeredDate = listRegDate;
+            }
+            return;
+        }
+
+        customerMap.set(effectiveKey, {
+            name: cName,
+            phoneKey,
+            phoneDisplay: phoneKey,
+            totalPaid: 0,
+            registeredDate: listRegDate || new Date().toISOString()
+        });
+    });
+
+    // 顧客リスト（顧客パスワード情報）由来の全顧客を最終救済として追加
+    // fetchCustomerInfo が一時失敗しても、顧客シートに存在する顧客が一覧から欠落しないようにする
+    Object.keys(customerPasswords).forEach(name => {
+        const cName = String(name || '').trim();
+        if (!cName) return;
+
+        const fallbackPhone = normalizePhone(listPhoneByName[cName] || customerPhones[cName] || '');
+        const key = fallbackPhone || cName;
+        const existingByKey = customerMap.get(key);
+        if (existingByKey && existingByKey.name === cName) return;
+
+        const effectiveKey = existingByKey && existingByKey.name !== cName ? `${cName}::${fallbackPhone || 'no-phone'}` : key;
+        if (customerMap.has(effectiveKey)) return;
+
+        const existing = Array.from(customerMap.values()).find(c => c.name === cName);
+        const regDateByPhone = fallbackPhone ? (customerRegisterDatesByPhone[fallbackPhone] || '') : '';
+
+        if (existing) {
+            if (!existing.phoneKey && fallbackPhone) existing.phoneKey = fallbackPhone;
+            if (!existing.phoneDisplay && fallbackPhone) existing.phoneDisplay = fallbackPhone;
+            if (regDateByPhone) existing.registeredDate = regDateByPhone;
+            return;
+        }
+
+        customerMap.set(effectiveKey, {
+            name: cName,
+            phoneKey: fallbackPhone,
+            phoneDisplay: fallbackPhone,
+            totalPaid: 0,
+            registeredDate: regDateByPhone || new Date().toISOString()
+        });
+    });
+
     // 登録日ベースでお客様番号（連番）を割り当てるために一時ソート
-    // depositsにもcustomerPhonesにも存在しない顧客は削除済みとみなして除外
+    // deposits / 前払い管理 / 顧客リスト のいずれにも存在しない顧客は削除済みとみなして除外
     const allCustomers = Array.from(customerMap.values())
-        .filter(c => deposits[c.name] !== undefined || customerPhones[c.name] !== undefined)
+        .filter(c =>
+            deposits[c.name] !== undefined ||
+            customerPhones[c.name] !== undefined ||
+            listPhoneByName[c.name] !== undefined ||
+            customerPasswords[c.name] !== undefined
+        )
         .sort((a, b) => new Date(a.registeredDate).getTime() - new Date(b.registeredDate).getTime());
 
     const customerList = allCustomers.map((customer, index) => {
-        const balance = deposits[customer.name] || 0;
-        const phone = customer.phoneDisplay || customerPhones[customer.name] || '登録なし';
+        const balance = getCustomerBalance(
+            customer.name,
+            customer.phoneKey || customer.phoneDisplay || customerPhones[customer.name] || listPhoneByName[customer.name] || ''
+        );
+        const phone = customer.phoneDisplay || customerPhones[customer.name] || listPhoneByName[customer.name] || '登録なし';
 
         // 通話回数・今月の利用額は電話番号で絞り込み（同姓同名を正しく分離）
         const matches = (r: ReportData) =>
@@ -1825,7 +1955,72 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         </div>
                                     </div>
                                 </div>
-                                <div className="overflow-x-auto relative p-4">
+                                {/* モバイル用カード */}
+                                <div className="md:hidden p-3 space-y-3">
+                                    {customerList.length === 0 ? (
+                                        <p className="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">データがありません。上の「＋ 追加する」ボタンから顧客を追加してください。</p>
+                                    ) : customerList.map(({ name: customerName, phone, registeredDate, callCount, monthlyAmount, totalPaid, balance }) => {
+                                        const isBlacklisted = phone && phone !== '登録なし' && blacklistedPhones.some(bl => normalizePhone(bl) === normalizePhone(phone));
+                                        return (
+                                            <div key={`${customerName}-${phone}`} className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border border-gray-100 dark:border-gray-700 space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-gray-900 dark:text-gray-100">{customerName}</span>
+                                                        {isBlacklisted && <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold border border-red-200">NG</span>}
+                                                    </div>
+                                                    <span className={`font-bold text-sm ${balance > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`}>¥{balance.toLocaleString()}</span>
+                                                </div>
+                                                <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                                                    <span>{phone && phone !== '登録なし' ? formatPhone(phone) : phone}</span>
+                                                    <span>{callCount}回</span>
+                                                    <span>{new Date(registeredDate).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}</span>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                                    <div>
+                                                        <p className="text-gray-500">今月利用額</p>
+                                                        <p className="font-bold text-gray-900 dark:text-gray-100">¥{monthlyAmount.toLocaleString()}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-gray-500">累計利用額</p>
+                                                        <p className="font-bold text-gray-900 dark:text-gray-100">¥{totalPaid.toLocaleString()}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => { setChargeTarget(customerName); setChargeTargetPhone(phone); setShowChargeModal(true); }}
+                                                        className="flex-1 px-3 py-2 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-700 rounded-lg text-xs font-bold"
+                                                    >💰 チャージ</button>
+                                                    <button
+                                                        onClick={async () => {
+                                                            setIsSaving(true);
+                                                            try {
+                                                                await fetchDepositLogs();
+                                                                const normalizedPhone = normalizePhone(phone === '登録なし' ? '' : phone);
+                                                                setShowHistoryForCustomer(customerName);
+                                                                setShowHistoryForCustomerPhone(normalizedPhone || '');
+                                                            } finally {
+                                                                setIsSaving(false);
+                                                            }
+                                                        }}
+                                                        className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-bold"
+                                                    >📄 履歴</button>
+                                                    <button
+                                                        onClick={() => {
+                                                            const normalizedPhone = normalizePhone(phone === '登録なし' ? '' : phone);
+                                                            setEditingCustomerName(customerName);
+                                                            setEditingCustomerOriginalPhone(normalizedPhone || '');
+                                                            setEditCustomerData({ customerName, customerPhone: phone === '登録なし' ? '' : phone, customerPassword: getCustomerPassword(customerName, normalizedPhone || phone) });
+                                                        }}
+                                                        className="px-3 py-2 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-bold"
+                                                    >⚙️</button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* PC用テーブル */}
+                                <div className="overflow-x-auto relative p-4 hidden md:block">
                                     <table className="w-full text-sm text-left border rounded-lg overflow-hidden">
                                         <thead className="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-b dark:border-gray-700">
                                             <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -1894,10 +2089,12 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     onClick={async () => {
                                                                         setIsSaving(true);
                                                                         try {
-                                                                            // ⭐ reports と depositLogs を必ず同時に最新化してからモーダルを開く
-                                                                            // (これをやらないと新しい利用が relatedReport で見つからず通帳に金額が出ない)
+                                                                            const normalizedPhone = normalizePhone(phone === '登録なし' ? '' : phone);
+                                                                            // reports と depositLogs を同時に最新化してから開く
+                                                                            // これで通帳の relatedReport 解決漏れを防ぎつつ、電話番号照合も維持する
                                                                             await Promise.all([fetchDepositLogs(), fetchReports(false)]);
                                                                             setShowHistoryForCustomer(customerName);
+                                                                            setShowHistoryForCustomerPhone(normalizedPhone || '');
                                                                         } finally {
                                                                             setIsSaving(false);
                                                                         }
@@ -1907,8 +2104,10 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                 </button>
                                                                 <button
                                                                     onClick={() => {
+                                                                        const normalizedPhone = normalizePhone(phone === '登録なし' ? '' : phone);
                                                                         setEditingCustomerName(customerName);
-                                                                        setEditCustomerData({ customerName: customerName, customerPhone: phone === '登録なし' ? '' : phone, customerPassword: customerPasswords[customerName] || '' });
+                                                                        setEditingCustomerOriginalPhone(normalizedPhone || '');
+                                                                        setEditCustomerData({ customerName: customerName, customerPhone: phone === '登録なし' ? '' : phone, customerPassword: getCustomerPassword(customerName, normalizedPhone || phone) });
                                                                     }}
                                                                     className="px-2.5 py-1 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded text-xs font-bold hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors whitespace-nowrap">
                                                                     ⚙️ 設定
@@ -1924,8 +2123,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
 
                                 {/* 顧客編集モーダル */}
                                 {editingCustomerName && (
-                                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setEditingCustomerName(null)}>
-                                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+                                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => { setEditingCustomerName(null); setEditingCustomerOriginalPhone(null); }}>
+                                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-[95vw] sm:w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                                             <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">顧客情報の編集</h3>
                                             <div className="space-y-3">
                                                 <div>
@@ -1960,7 +2159,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             {/* デポジット残高の調整セクション */}
                                             <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
                                                 <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">デポジット残高の調整</h4>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">現在の残高: ¥{(deposits[editingCustomerName] || 0).toLocaleString()}</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">現在の残高: ¥{getCustomerBalance(editingCustomerName, editCustomerData.customerPhone).toLocaleString()}</p>
                                                 <div className="flex gap-2">
                                                     <input
                                                         type="number"
@@ -1985,13 +2184,19 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     body: JSON.stringify({
                                                                         action: 'fixDepositBalance',
                                                                         customerName: editingCustomerName,
-                                                                        customerPhone: customerList.find(c => c.name === editingCustomerName)?.phone || '',
+                                                                        customerPhone: normalizePhone(editCustomerData.customerPhone || editingCustomerOriginalPhone || ''),
                                                                         newBalance: newBalance
                                                                     })
                                                                 });
                                                                 const resJson = await res.json();
                                                                 if (resJson.success) {
-                                                                    setDeposits(prev => ({ ...prev, [editingCustomerName!]: resJson.newBalance }));
+                                                                    const normalizedTargetPhone = normalizePhone(editCustomerData.customerPhone || editingCustomerOriginalPhone || '');
+                                                                    if (normalizedTargetPhone) {
+                                                                        setDepositsByPhone(prev => ({ ...prev, [normalizedTargetPhone]: resJson.newBalance }));
+                                                                    }
+                                                                    if (editingCustomerName) {
+                                                                        setDeposits(prev => ({ ...prev, [editingCustomerName]: resJson.newBalance }));
+                                                                    }
                                                                     alert('残高を更新しました');
                                                                     input.value = '';
                                                                 } else {
@@ -2018,6 +2223,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         onClick={async () => {
                                                             await handleAddBlacklist(editCustomerData.customerPhone, editCustomerData.customerName);
                                                             setEditingCustomerName(null);
+                                                            setEditingCustomerOriginalPhone(null);
                                                         }}
                                                         className="w-full px-4 py-2 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-700 rounded-lg font-bold hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
                                                     >
@@ -2030,30 +2236,43 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     disabled={isSaving}
                                                     onClick={async () => {
                                                         const name = editCustomerData.customerName || editingCustomerName;
-                                                        if (!confirm(`「${name}」さんを削除しますか？\n\n以下が削除されます:\n・顧客リストの登録\n・前払い管理の残高\n・デポジット履歴\n\n※業務報告（売上記録）は残ります。`)) return;
-                                                        if (!confirm(`本当に削除してよろしいですか？\nこの操作は取り消せません。`)) return;
+                                                        if (!confirm(`「${name}」さんを一覧から削除してアーカイブしますか？\n\n以下はアーカイブされます:\n・顧客リストの登録\n・前払い管理の残高\n・デポジット履歴\n\n※業務報告（売上記録）は残ります。`)) return;
+                                                        if (!confirm(`本当に実行してよろしいですか？\nアクティブ一覧からは消えますが、アーカイブには残ります。`)) return;
                                                         setIsSaving(true);
                                                         setSavingMessage('顧客情報を削除中...');
                                                         try {
                                                             const res = await fetch(GAS_URL, {
                                                                 method: 'POST',
-                                                                body: JSON.stringify({ action: 'deleteCustomer', customerName: editingCustomerName })
+                                                                body: JSON.stringify({
+                                                                    action: 'deleteCustomer',
+                                                                    customerName: editingCustomerName,
+                                                                    customerPhone: normalizePhone(editingCustomerOriginalPhone || editCustomerData.customerPhone || '')
+                                                                })
                                                             });
                                                             const json = await res.json();
                                                             if (json.success) {
                                                                 const deletedName = editingCustomerName;
+                                                                const deletedPhone = normalizePhone(editingCustomerOriginalPhone || editCustomerData.customerPhone || '');
                                                                 setEditingCustomerName(null);
+                                                                setEditingCustomerOriginalPhone(null);
                                                                 // ローカルステートからも削除
                                                                 setDeposits(prev => { const n = { ...prev }; delete n[deletedName!]; return n; });
+                                                                if (deletedPhone) {
+                                                                    setDepositsByPhone(prev => { const n = { ...prev }; delete n[deletedPhone]; return n; });
+                                                                }
                                                                 setCustomerPhones(prev => { const n = { ...prev }; delete n[deletedName!]; return n; });
                                                                 setCustomerPasswords(prev => { const n = { ...prev }; delete n[deletedName!]; return n; });
+                                                                if (deletedPhone) {
+                                                                    setCustomerPasswordsByPhone(prev => { const n = { ...prev }; delete n[deletedPhone]; return n; });
+                                                                }
                                                                 // 全データ再取得（業務報告の顧客名参照も消すため）
-                                                                fetchReports(false);
-                                                                fetchDeposits();
+                                                                await fetchReports(false);
+                                                                await fetchDeposits();
+                                                                await fetchCustomerInfo();
                                                                 const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`);
                                                                 const histJson = await histRes.json();
                                                                 if (histJson.success) setDepositLogs(histJson.history);
-                                                                showToast(`${deletedName} さんを削除しました`);
+                                                                showToast(`${deletedName} さんをアーカイブしました`);
                                                             } else {
                                                                 alert('エラー: ' + (json.message || '削除に失敗しました'));
                                                             }
@@ -2071,7 +2290,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
 
                                                 <div className="flex gap-3">
                                                     <button
-                                                        onClick={() => setEditingCustomerName(null)}
+                                                        onClick={() => { setEditingCustomerName(null); setEditingCustomerOriginalPhone(null); }}
                                                         className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-bold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
                                                     >
                                                         キャンセル
@@ -2080,20 +2299,31 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         onClick={async () => {
                                                             setIsSaving(true);
                                                             try {
-                                                                setEditingCustomerName(null);
                                                                 const normalizedPhone = normalizePhone(editCustomerData.customerPhone);
-                                                                await fetch(GAS_URL, {
+                                                                const res = await fetch(GAS_URL, {
                                                                     method: 'POST',
                                                                     body: JSON.stringify({
                                                                         action: 'editCustomer',
                                                                         oldName: editingCustomerName,
+                                                                        oldPhone: normalizePhone(editingCustomerOriginalPhone || ''),
                                                                         newName: editCustomerData.customerName,
                                                                         phone: normalizedPhone,
                                                                         password: editCustomerData.customerPassword
                                                                     })
                                                                 });
-                                                                fetchDeposits();
-                                                                fetchReports();
+                                                                const json = await res.json();
+                                                                if (!json.success) {
+                                                                    alert('エラー: ' + (json.message || 'お客様情報の更新に失敗しました。'));
+                                                                    return;
+                                                                }
+                                                                setEditingCustomerName(null);
+                                                                setEditingCustomerOriginalPhone(null);
+                                                                await Promise.all([
+                                                                    fetchDeposits(),
+                                                                    fetchReports(),
+                                                                    fetchCustomerInfo()
+                                                                ]);
+                                                                setEditingCustomerOriginalPhone(null);
                                                                 alert('お客様情報を更新しました。');
                                                             } catch (e) {
                                                                 alert('エラーが発生しました。');
@@ -2280,7 +2510,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 <div className="p-4 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-900 rounded-t-xl">
                                     <div className="flex justify-between items-center mb-3">
                                         <h3 className="font-bold text-lg text-gray-800 dark:text-gray-200">{showHistoryForCustomer} 様の ご利用履歴</h3>
-                                        <button onClick={() => setShowHistoryForCustomer(null)} className="text-gray-400 dark:text-gray-500 hover:text-gray-800 dark:text-gray-200 text-xl font-bold">✕</button>
+                                        <button onClick={() => { setShowHistoryForCustomer(null); setShowHistoryForCustomerPhone(null); }} className="text-gray-400 dark:text-gray-500 hover:text-gray-800 dark:text-gray-200 text-xl font-bold">✕</button>
                                     </div>
                                     <div className="flex gap-1">
                                         <button onClick={() => setHistoryTabMode('detail')} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${historyTabMode === 'detail' ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
@@ -2296,15 +2526,16 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     {/* 📒 通帳タブ（台帳形式・デポジット履歴を唯一の台帳として使う） */}
                                     {historyTabMode === 'ledger' && (() => {
                                         const customer = showHistoryForCustomer!;
-                                        const customerPhoneForHistory = reports.find(r => r.customerName === customer)?.customerPhone || customerList.find(c => c.name === customer)?.phone || '';
+                                        const customerPhoneForHistory = showHistoryForCustomerPhone || customerList.find(c => c.name === customer)?.phone || '';
                                         const normalizedPhoneForHistory = normalizePhone(customerPhoneForHistory);
-                                        // デポジット履歴のみを参照（業務報告との重複を排除）
-                                        const filteredLogs = depositLogs.filter(log => {
-                                            if (normalizedPhoneForHistory && log.customerPhone) {
-                                                return normalizePhone(log.customerPhone) === normalizedPhoneForHistory;
+                                        const filteredCustomerReports = reports.filter(r => normalizedPhoneForHistory ? normalizePhone(r.customerPhone) === normalizedPhoneForHistory : r.customerName === customer);
+                                        const filteredCustomerDepositLogs = depositLogs.filter(log => {
+                                            if (normalizedPhoneForHistory) {
+                                                return normalizePhone(log.customerPhone || '') === normalizedPhoneForHistory;
                                             }
                                             return log.customerName === customer;
                                         });
+                                        const filteredLogs = filteredCustomerDepositLogs;
                                         // 日付で昇順ソート（古い→新しい）。バックフィル行が後から挿入されていても
                                         // 実際の取引日時で並ぶようにするため。同一日時は挿入順を保つ(安定ソート)。
                                         const chronological = [...filteredLogs]
@@ -2428,6 +2659,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 depositUsed,
                                                 customerPhone: log.customerPhone || '',
                                                 gasBalance: Number(log.balance) || 0,
+                                                sourceIndex: i,
                                                 balance: runningBalance,
                                                 paymentMethod,
                                                 paymentMethodColor: paymentColor,
@@ -2450,7 +2682,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     const json = await res.json();
                                                     if (json.success) {
                                                         setReports(prev => prev.map(r => r.id === entry.reportId ? { ...r, totalSales: val } : r));
-                                                        if (json.customerName && json.newBalance !== undefined) setDeposits(prev => ({ ...prev, [json.customerName]: json.newBalance }));
+                                                        await fetchDeposits();
                                                         const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`); const histJson = await histRes.json(); if (histJson.success) setDepositLogs(histJson.history);
                                                         showToast(`売上を ¥${val.toLocaleString()} に変更しました`);
                                                     } else { alert('エラー: ' + (json.message || '')); }
@@ -2465,7 +2697,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 const json = await res.json();
                                                 if (json.success) {
                                                     setReports(prev => prev.filter(r => r.id !== entry.reportId));
-                                                    if (json.customerName && json.newBalance !== undefined) setDeposits(prev => ({ ...prev, [json.customerName]: json.newBalance }));
+                                                    await fetchDeposits();
                                                     const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`); const histJson = await histRes.json(); if (histJson.success) setDepositLogs(histJson.history);
                                                     showToast('削除しました');
                                                 } else { alert('エラー: ' + (json.message || '')); }
@@ -2479,11 +2711,13 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             (async () => {
                                                 setIsSaving(true); setSavingMessage('編集中...');
                                                 try {
-                                                    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'editDepositHistory', date: entry.date, customerName: customer, customerPhone: customerPhoneForHistory, oldAmount: entry.amount, newAmount: val, type: (entry as any).rawType || entry.label }) });
+                                                    const log = filteredCustomerDepositLogs[(entry as any).sourceIndex];
+                                                    if (!log) { alert('該当する履歴が見つかりません'); return; }
+                                                    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'editDepositHistory', date: log.date, customerName: log.customerName, customerPhone: log.customerPhone || customerPhoneForHistory, oldAmount: log.amount, newAmount: val, type: log.type }) });
                                                     const resJson = await res.json();
                                                     if (resJson.success) {
+                                                        await fetchDeposits();
                                                         const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`); const histJson = await histRes.json(); if (histJson.success) setDepositLogs(histJson.history);
-                                                        if (resJson.newBalance !== undefined) setDeposits(prev => ({ ...prev, [customer]: resJson.newBalance }));
                                                         showToast(`金額を ¥${val.toLocaleString()} に変更しました`);
                                                     } else { alert('エラー: ' + (resJson.message || '')); }
                                                 } catch { alert('エラーが発生しました'); } finally { setIsSaving(false); setSavingMessage(null); }
@@ -2493,11 +2727,13 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             if (!confirm(`このデポジット履歴を削除しますか？\n\n${entry.label}: ¥${entry.amount.toLocaleString()}\n\n※残高は自動で調整されます。`)) return;
                                             setIsSaving(true); setSavingMessage('削除中...');
                                             try {
-                                                const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteDepositHistory', date: entry.date, customerName: customer, customerPhone: customerPhoneForHistory, amount: entry.amount, type: (entry as any).rawType || entry.label }) });
+                                                const log = filteredCustomerDepositLogs[(entry as any).sourceIndex];
+                                                if (!log) { alert('該当する履歴が見つかりません'); return; }
+                                                const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteDepositHistory', date: log.date, customerName: log.customerName, customerPhone: log.customerPhone || customerPhoneForHistory, amount: log.amount, type: log.type }) });
                                                 const resJson = await res.json();
                                                 if (resJson.success) {
+                                                    await fetchDeposits();
                                                     const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`); const histJson = await histRes.json(); if (histJson.success) setDepositLogs(histJson.history);
-                                                    if (resJson.newBalance !== undefined) setDeposits(prev => ({ ...prev, [customer]: resJson.newBalance }));
                                                     showToast('削除しました');
                                                 } else { alert('削除に失敗: ' + (resJson.message || '')); }
                                             } catch { alert('エラーが発生しました'); } finally { setIsSaving(false); setSavingMessage(null); }
@@ -2505,7 +2741,118 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
 
                                         return (
                                             <div>
-                                                <div className="bg-white dark:bg-gray-800 rounded border shadow-sm overflow-hidden">
+                                                {/* モバイル用カードリスト */}
+                                                <div className="md:hidden space-y-2">
+                                                    {entriesWithBalance.length === 0 && (
+                                                        <p className="text-center py-8 text-gray-400">履歴がありません</p>
+                                                    )}
+                                                    {entriesWithBalance.map((entry, i) => (
+                                                        <div key={entry.id + '-' + i} className={`rounded-lg border p-2.5 space-y-1 ${entry.type === 'usage' ? 'bg-gray-50/50 dark:bg-gray-900/30 border-gray-100 dark:border-gray-700' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}>
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-[10px] text-gray-400">{formatJSTDate(entry.date, true)}</span>
+                                                                    {entry.type === 'usage' ? (
+                                                                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap ${entry.isPaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{entry.isPaid ? '利用(済)' : '利用(未払)'}</span>
+                                                                    ) : (
+                                                                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap ${entry.amount >= 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>{entry.label}</span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    {entry.type === 'usage' && entry.reportId && (
+                                                                        <>
+                                                                            <button disabled={isSaving} onClick={() => {
+                                                                                const newAmount = prompt(`売上額を変更（現在: ¥${entry.totalSales.toLocaleString()}）`, String(entry.totalSales));
+                                                                                if (newAmount === null) return;
+                                                                                const val = Number(newAmount);
+                                                                                if (isNaN(val) || val < 0) { alert('有効な金額を入力してください'); return; }
+                                                                                (async () => {
+                                                                                    setIsSaving(true); setSavingMessage('編集中...');
+                                                                                    try {
+                                                                                        const rep = reports.find(r => r.id === entry.reportId);
+                                                                                        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'editReport', id: entry.reportId, customerName: customer, customerPhone: rep?.customerPhone || entry.customerPhone, totalSales: val }) });
+                                                                                        const json = await res.json();
+                                                                                        if (json.success) {
+                                                                                            setReports(prev => prev.map(r => r.id === entry.reportId ? { ...r, totalSales: val } : r));
+                                                                                            await fetchDeposits();
+                                                                                            const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`); const histJson = await histRes.json(); if (histJson.success) setDepositLogs(histJson.history);
+                                                                                            showToast(`売上を ¥${val.toLocaleString()} に変更しました`);
+                                                                                        } else { alert('エラー: ' + (json.message || '')); }
+                                                                                    } catch (e) { alert('エラーが発生しました'); } finally { setIsSaving(false); setSavingMessage(null); }
+                                                                                })();
+                                                                            }} className="text-blue-500 text-xs font-bold">✏️</button>
+                                                                            <button disabled={isSaving} onClick={async () => {
+                                                                                if (!confirm(`この利用履歴を削除しますか？`)) return;
+                                                                                setIsSaving(true); setSavingMessage('削除中...');
+                                                                                try {
+                                                                                    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteReport', id: entry.reportId }) });
+                                                                                    const json = await res.json();
+                                                                                    if (json.success) {
+                                                                                        setReports(prev => prev.filter(r => r.id !== entry.reportId));
+                                                                                        await fetchDeposits();
+                                                                                        const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`); const histJson = await histRes.json(); if (histJson.success) setDepositLogs(histJson.history);
+                                                                                        showToast('削除しました');
+                                                                                    } else { alert('エラー: ' + (json.message || '')); }
+                                                                                } catch (e) { alert('エラーが発生しました'); } finally { setIsSaving(false); setSavingMessage(null); }
+                                                                            }} className="text-red-500 text-xs font-bold">🗑️</button>
+                                                                        </>
+                                                                    )}
+                                                                    {entry.type === 'deposit' && (
+                                                                        <>
+                                                                            <button disabled={isSaving} onClick={() => {
+                                                                                const newAmount = prompt(`金額を変更（現在: ¥${entry.amount.toLocaleString()}）`, String(entry.amount));
+                                                                                if (newAmount === null) return;
+                                                                                const val = Number(newAmount);
+                                                                                if (isNaN(val)) { alert('有効な金額を入力してください'); return; }
+                                                                                (async () => {
+                                                                                    setIsSaving(true); setSavingMessage('編集中...');
+                                                                                    try {
+                                                                                        const log = filteredCustomerDepositLogs[(entry as any).sourceIndex];
+                                                                                        if (!log) { alert('該当する履歴が見つかりません'); return; }
+                                                                                        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'editDepositHistory', date: log.date, customerName: log.customerName, customerPhone: log.customerPhone || customerPhoneForHistory, oldAmount: log.amount, newAmount: val, type: log.type }) });
+                                                                                        const resJson = await res.json();
+                                                                                        if (resJson.success) {
+                                                                                            await fetchDeposits();
+                                                                                            const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`); const histJson = await histRes.json(); if (histJson.success) setDepositLogs(histJson.history);
+                                                                                            showToast(`金額を ¥${val.toLocaleString()} に変更しました`);
+                                                                                        } else { alert('エラー: ' + (resJson.message || '')); }
+                                                                                    } catch (e) { alert('エラーが発生しました'); } finally { setIsSaving(false); setSavingMessage(null); }
+                                                                                })();
+                                                                            }} className="text-blue-500 text-xs font-bold">✏️</button>
+                                                                            <button disabled={isSaving} onClick={async () => {
+                                                                                if (!confirm(`このデポジット履歴を削除しますか？`)) return;
+                                                                                setIsSaving(true); setSavingMessage('削除中...');
+                                                                                try {
+                                                                                    const log = filteredCustomerDepositLogs[(entry as any).sourceIndex];
+                                                                                    if (!log) { alert('該当する履歴が見つかりません'); return; }
+                                                                                    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteDepositHistory', date: log.date, customerName: log.customerName, customerPhone: log.customerPhone || customerPhoneForHistory, amount: log.amount, type: log.type }) });
+                                                                                    const resJson = await res.json();
+                                                                                    if (resJson.success) {
+                                                                                        await fetchDeposits();
+                                                                                        const histRes = await fetch(`${GAS_URL}?action=getDepositHistory`); const histJson = await histRes.json(); if (histJson.success) setDepositLogs(histJson.history);
+                                                                                        showToast('削除しました');
+                                                                                    } else { alert('削除に失敗: ' + (resJson.message || '')); }
+                                                                                } catch (e) { alert('エラーが発生しました'); } finally { setIsSaving(false); setSavingMessage(null); }
+                                                                            }} className="text-red-500 text-xs font-bold">🗑️</button>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center justify-between">
+                                                                {entry.type === 'usage' && <span className="text-[10px] text-gray-500 truncate max-w-[60%]">{entry.label}</span>}
+                                                                {entry.type === 'deposit' && <span className="text-[10px] text-gray-400" />}
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className={`text-sm font-bold ${entry.amount >= 0 ? 'text-indigo-600' : 'text-orange-600'}`}>
+                                                                        {entry.amount >= 0 ? '+' : ''}{entry.amount.toLocaleString()}
+                                                                    </span>
+                                                                    {entry.type === 'deposit' && <span className="text-xs font-bold text-gray-800 dark:text-gray-200">残 ¥{entry.balance.toLocaleString()}</span>}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                {/* PC用テーブル */}
+                                                <div className="bg-white dark:bg-gray-800 rounded border shadow-sm overflow-hidden hidden md:block">
                                                     <table className="w-full text-sm text-left">
                                                         <thead className="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-b dark:border-gray-700">
                                                             <tr>
@@ -2606,18 +2953,65 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                     {/* 個別履歴タブ */}
                                     {historyTabMode === 'detail' && (() => {
                                         const detailCustomer = showHistoryForCustomer!;
-                                        const detailPhone = reports.find(r => r.customerName === detailCustomer)?.customerPhone || customerList.find(c => c.name === detailCustomer)?.phone || '';
+                                        const detailPhone = showHistoryForCustomerPhone || customerList.find(c => c.name === detailCustomer)?.phone || '';
                                         const normalizedDetailPhone = normalizePhone(detailPhone);
+                                        const filterReportsByCustomer = (report: ReportData) => normalizedDetailPhone ? normalizePhone(report.customerPhone) === normalizedDetailPhone : report.customerName === detailCustomer;
                                         const filterDepositLogsByCustomer = (log: any) => {
-                                            if (normalizedDetailPhone && log.customerPhone) return normalizePhone(log.customerPhone) === normalizedDetailPhone;
+                                            if (normalizedDetailPhone) return normalizePhone(log.customerPhone || '') === normalizedDetailPhone;
                                             return log.customerName === detailCustomer;
                                         };
+                                        const filteredReports = reports.filter(filterReportsByCustomer).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                                        const filteredDepositLogs = depositLogs.filter(filterDepositLogsByCustomer).slice().sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                                         return <>
 
                                     {/* 利用・売上履歴 (業務報告から抽出) */}
                                     <div>
-                                        <h4 className="font-bold text-gray-700 dark:text-gray-300 mb-3 border-b-2 border-gray-200 dark:border-gray-700 pb-1 inline-block">📞 過去のご利用・通話</h4>
-                                        <div className="bg-white dark:bg-gray-800 rounded border shadow-sm overflow-hidden">
+                                        <h4 className="font-bold text-gray-700 dark:text-gray-300 mb-3 border-b-2 border-gray-200 dark:border-gray-700 pb-1 inline-block text-sm sm:text-base">📞 過去のご利用・通話</h4>
+                                        {/* モバイル用カード */}
+                                        <div className="md:hidden space-y-2">
+                                            {(() => {
+                                                const filtered = filteredReports;
+                                                if (filtered.length === 0) return <p className="text-center py-6 text-gray-400 dark:text-gray-500 text-sm bg-white dark:bg-gray-800 rounded border">通話のご利用履歴がありません</p>;
+                                                return filtered.map(r => {
+                                                    const cleanServices = r.services.replace(/\s*->\s*計算\d+分/g, '').replace(/\((\d+)分\)/g, ' $1分');
+                                                    return (
+                                                        <div key={r.id} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 p-2.5 space-y-1">
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-2 text-[11px] text-gray-500">
+                                                                    <span>{formatJSTDate(r.date, true)}</span>
+                                                                    <span className="font-medium text-gray-800 dark:text-gray-200">{r.staff}</span>
+                                                                </div>
+                                                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${r.isPaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                                    {r.isPaid ? '入金済' : '未入金'}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-[11px] text-gray-500 dark:text-gray-400">{cleanServices}</span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-bold text-sm text-gray-800 dark:text-gray-200">¥{r.totalSales.toLocaleString()}</span>
+                                                                    <button
+                                                                        disabled={isSaving}
+                                                                        onClick={async () => {
+                                                                            if (!confirm(`この利用履歴を削除しますか？\n\n${formatJSTDate(r.date, true)} / ¥${r.totalSales.toLocaleString()}`)) return;
+                                                                            setIsSaving(true); setSavingMessage('履歴を削除中...');
+                                                                            try {
+                                                                                const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteReport', id: r.id }) });
+                                                                                const json = await res.json();
+                                                                                if (json.success) { setReports(prev => prev.filter(rep => rep.id !== r.id)); if (json.customerName && json.newBalance !== undefined) setDeposits(prev => ({ ...prev, [json.customerName]: json.newBalance })); showToast('利用履歴を削除しました'); }
+                                                                                else { alert('エラー: ' + (json.message || '削除に失敗しました')); }
+                                                                            } catch (e) { alert('エラーが発生しました'); } finally { setIsSaving(false); setSavingMessage(null); }
+                                                                        }}
+                                                                        className="text-red-500 text-xs font-bold disabled:opacity-50"
+                                                                    >🗑️</button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                });
+                                            })()}
+                                        </div>
+                                        {/* PC用テーブル */}
+                                        <div className="bg-white dark:bg-gray-800 rounded border shadow-sm overflow-hidden hidden md:block">
                                             <table className="w-full text-sm text-left">
                                                 <thead className="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-b dark:border-gray-700">
                                                     <tr>
@@ -2630,10 +3024,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {reports.filter(r => r.customerName === showHistoryForCustomer)
-                                                        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                                                        .map(r => {
-                                                            // サービス表示から「-> 計算XX分」を削除
+                                                    {filteredReports.map(r => {
                                                             const cleanServices = r.services.replace(/\s*->\s*計算\d+分/g, '').replace(/\((\d+)分\)/g, ' $1分');
                                                             return (
                                                                 <tr key={r.id} className="border-b dark:border-gray-700 hover:bg-gray-50/50 dark:bg-gray-800/50">
@@ -2683,10 +3074,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                 </tr>
                                                             );
                                                         })}
-                                                    {reports.filter(r => r.customerName === showHistoryForCustomer).length === 0 && (
-                                                        <tr>
-                                                            <td colSpan={6} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500">通話のご利用履歴がありません</td>
-                                                        </tr>
+                                                    {filteredReports.length === 0 && (
+                                                        <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500">通話のご利用履歴がありません</td></tr>
                                                     )}
                                                 </tbody>
                                             </table>
@@ -2695,8 +3084,48 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
 
                                     {/* デポジット履歴 */}
                                     <div>
-                                        <h4 className="font-bold text-gray-700 dark:text-gray-300 mb-3 border-b-2 border-gray-200 dark:border-gray-700 pb-1 inline-block">💰 デポジット（前払い）履歴</h4>
-                                        <div className="bg-white dark:bg-gray-800 rounded border shadow-sm overflow-hidden">
+                                        <h4 className="font-bold text-gray-700 dark:text-gray-300 mb-3 border-b-2 border-gray-200 dark:border-gray-700 pb-1 inline-block text-sm sm:text-base">💰 デポジット（前払い）履歴</h4>
+                                        {/* モバイル用カード */}
+                                        <div className="md:hidden space-y-2">
+                                            {(() => {
+                                                const filtered = filteredDepositLogs;
+                                                if (filtered.length === 0) return <p className="text-center py-6 text-gray-400 dark:text-gray-500 text-sm bg-white dark:bg-gray-800 rounded border">デポジットの履歴がありません</p>;
+                                                return filtered.map((log, i) => (
+                                                    <div key={i} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 p-2.5 space-y-1">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] text-gray-400">{formatJSTDate(log.date, true)}</span>
+                                                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap ${log.amount >= 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>{log.type}</span>
+                                                            </div>
+                                                            <button
+                                                                disabled={isSaving}
+                                                                onClick={async () => {
+                                                                    if (!confirm('この履歴を削除しますか？')) return;
+                                                                    setIsSaving(true); setSavingMessage('履歴を削除中...');
+                                                                    try {
+                                                                        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteDepositHistory', date: log.date, customerName: log.customerName, customerPhone: log.customerPhone || detailPhone, amount: log.amount, type: log.type }) });
+                                                                        const resJson = await res.json();
+                                                                        if (resJson.success) {
+                                                                            await fetchDeposits();
+                                                                            await fetchDepositLogs();
+                                                                        } else { alert('削除に失敗: ' + (resJson.message || '')); }
+                                                                    } catch (e) { alert('エラーが発生しました'); } finally { setIsSaving(false); setSavingMessage(null); }
+                                                                }}
+                                                                className="text-red-500 text-xs font-bold disabled:opacity-50"
+                                                            >🗑️</button>
+                                                        </div>
+                                                        <div className="flex items-center justify-between">
+                                                            <span className={`text-sm font-bold ${log.amount >= 0 ? 'text-indigo-600' : 'text-orange-600'}`}>
+                                                                {log.amount >= 0 ? '+' : ''}¥{log.amount.toLocaleString()}
+                                                            </span>
+                                                            <span className="text-xs font-bold text-gray-800 dark:text-gray-200">残高 ¥{log.balance.toLocaleString()}</span>
+                                                        </div>
+                                                    </div>
+                                                ));
+                                            })()}
+                                        </div>
+                                        {/* PC用テーブル */}
+                                        <div className="bg-white dark:bg-gray-800 rounded border shadow-sm overflow-hidden hidden md:block">
                                             <table className="w-full text-sm text-left">
                                                 <thead className="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-b dark:border-gray-700">
                                                     <tr>
@@ -2708,7 +3137,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {depositLogs.filter(filterDepositLogsByCustomer).slice().sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map((log, i) => (
+                                                    {filteredDepositLogs.map((log, i) => (
                                                         <tr key={i} className="border-b dark:border-gray-700 hover:bg-gray-50/50 dark:bg-gray-800/50">
                                                             <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{formatJSTDate(log.date, true)}</td>
                                                             <td className="px-4 py-3 text-center">
@@ -2724,9 +3153,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                 <button
                                                                     disabled={isSaving}
                                                                     onClick={async () => {
-                                                                        if (!confirm('この履歴を削除しますか？\n※残高の調整は手動で行ってください')) return;
-                                                                        setIsSaving(true);
-                                                                        setSavingMessage('履歴を削除中...');
+                                                                        if (!confirm('この履歴を削除しますか？\n※残高は自動で調整されます。')) return;
+                                                                        setIsSaving(true); setSavingMessage('履歴を削除中...');
                                                                         try {
                                                                             const res = await fetch(GAS_URL, {
                                                                                 method: 'POST',
@@ -2741,14 +3169,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                             });
                                                                             const resJson = await res.json();
                                                                             if (resJson.success) {
-                                                                                setDepositLogs(prev => prev.filter((_, idx) => {
-                                                                                    const filtered = prev.filter(filterDepositLogsByCustomer);
-                                                                                    const originalIdx = prev.indexOf(filtered[i]);
-                                                                                    return idx !== originalIdx;
-                                                                                }));
-                                                                                if (resJson.newBalance !== undefined && showHistoryForCustomer) {
-                                                                                    setDeposits(prev => ({ ...prev, [showHistoryForCustomer]: resJson.newBalance }));
-                                                                                }
+                                                                                await fetchDeposits();
+                                                                                await fetchDepositLogs();
                                                                             } else {
                                                                                 alert('削除に失敗しました: ' + (resJson.message || ''));
                                                                             }
@@ -2766,7 +3188,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                             </td>
                                                         </tr>
                                                     ))}
-                                                    {depositLogs.filter(filterDepositLogsByCustomer).length === 0 && (
+                                                    {filteredDepositLogs.length === 0 && (
                                                         <tr>
                                                             <td colSpan={5} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500">デポジットの履歴がありません</td>
                                                         </tr>
@@ -2781,8 +3203,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         <h4 className="font-bold text-gray-700 dark:text-gray-300 mb-3 border-b-2 border-gray-200 dark:border-gray-700 pb-1 inline-block">📝 スタッフメモ履歴</h4>
                                         {(() => {
                                             const memoReports = reports
-                                                .filter(r => r.customerName === showHistoryForCustomer && r.memo && r.memo.trim())
-                                                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                                                .filter(r => filterReportsByCustomer(r) && r.memo && r.memo.trim())
+                                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
                                             if (memoReports.length === 0) {
                                                 return <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center bg-white dark:bg-gray-800 rounded border">メモの記録がありません</p>;
                                             }
