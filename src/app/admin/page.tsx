@@ -111,6 +111,12 @@ export default function AdminDashboard() {
     // トースト通知用ステート
     const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+    // 顧客名一括正規化モーダル用ステート
+    const [showNormalizeModal, setShowNormalizeModal] = useState(false);
+    const [normalizePreview, setNormalizePreview] = useState<Array<{ sheet: string; phone: string; oldName: string; newName: string }>>([]);
+    const [normalizeLoading, setNormalizeLoading] = useState(false);
+    const [normalizeDone, setNormalizeDone] = useState(false);
+
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzhzZLoVQRSYYykqnu88ebBtx79htz-3A7YDa3RgBKbjYJ-ie308nsQXhJflpEnNfuz0g/exec';
 
     // JST日付文字列を安全にフォーマットするヘルパー
@@ -498,6 +504,55 @@ export default function AdminDashboard() {
             setBlacklistedPhones(prev => prev.filter(p => p !== normalizedPhone));
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    // 顧客名の表記ゆれ一括正規化: ドライラン（プレビュー取得）
+    const handleOpenNormalizeModal = async () => {
+        setShowNormalizeModal(true);
+        setNormalizeLoading(true);
+        setNormalizeDone(false);
+        setNormalizePreview([]);
+        try {
+            const res = await fetch(GAS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify({ action: 'normalizeCustomerNames', dryRun: true }),
+            });
+            const result = await res.json();
+            if (!result.success) throw new Error(result.message || 'プレビュー取得に失敗しました');
+            setNormalizePreview(result.changes || []);
+        } catch (err) {
+            console.error('normalize dryRun error:', err);
+            alert('プレビュー取得エラー: ' + (err instanceof Error ? err.message : '通信エラー'));
+            setShowNormalizeModal(false);
+        } finally {
+            setNormalizeLoading(false);
+        }
+    };
+
+    // 顧客名の表記ゆれ一括正規化: 本実行
+    const handleRunNormalize = async () => {
+        if (!window.confirm(`${normalizePreview.length}件の顧客名を顧客リストの正式名称に揃えます。実行しますか？`)) return;
+        setNormalizeLoading(true);
+        try {
+            const res = await fetch(GAS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify({ action: 'normalizeCustomerNames', dryRun: false }),
+            });
+            const result = await res.json();
+            if (!result.success) throw new Error(result.message || '正規化に失敗しました');
+            setNormalizeDone(true);
+            setToastMessage(`${result.totalChanges}件の顧客名を正規化しました`);
+            setTimeout(() => setToastMessage(null), 3000);
+            // 最新データの取得は画面リロードで
+            setTimeout(() => { window.location.reload(); }, 1500);
+        } catch (err) {
+            console.error('normalize run error:', err);
+            alert('正規化エラー: ' + (err instanceof Error ? err.message : '通信エラー'));
+        } finally {
+            setNormalizeLoading(false);
         }
     };
 
@@ -1913,6 +1968,13 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 font-bold px-4 py-1.5 rounded-lg text-sm hover:bg-gray-800 dark:hover:bg-white transition-colors shadow-sm whitespace-nowrap"
                                             >
                                                 ＋ 追加する
+                                            </button>
+                                            <button
+                                                onClick={handleOpenNormalizeModal}
+                                                className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 font-medium px-3 py-1.5 rounded-lg text-xs hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors whitespace-nowrap"
+                                                title="業務報告・デポジット履歴・前払い管理の顧客名を、顧客リスト側の正式名称に一括で揃えます"
+                                            >
+                                                名前の表記ゆれを正規化
                                             </button>
                                         </div>
 
@@ -3434,6 +3496,93 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                 <div className="fixed inset-0 bg-black/50 flex flex-col items-center justify-center z-[100]">
                     <div className="animate-spin rounded-full h-12 w-12 border-4 border-white/20 border-t-white mb-4"></div>
                     <p className="text-white font-bold tracking-wider">{savingMessage || '保存中...'}</p>
+                </div>
+            )}
+
+            {/* 顧客名一括正規化モーダル */}
+            {showNormalizeModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => !normalizeLoading && setShowNormalizeModal(false)}>
+                    <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">顧客名の表記ゆれを正規化</h3>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">顧客リストを基準に、業務報告・デポジット履歴・前払い管理の顧客名を統一します</p>
+                            </div>
+                            <button
+                                onClick={() => !normalizeLoading && setShowNormalizeModal(false)}
+                                disabled={normalizeLoading}
+                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl disabled:opacity-30"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-6">
+                            {normalizeLoading && !normalizeDone && (
+                                <div className="text-center py-10 text-gray-500 dark:text-gray-400 text-sm">
+                                    {normalizePreview.length === 0 ? '変更候補を取得中...' : '正規化を実行中...'}
+                                </div>
+                            )}
+                            {!normalizeLoading && normalizePreview.length === 0 && !normalizeDone && (
+                                <div className="text-center py-10">
+                                    <div className="text-5xl mb-3">✓</div>
+                                    <p className="text-gray-700 dark:text-gray-200 font-medium">表記ゆれは見つかりませんでした</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">すべての顧客名が顧客リストと一致しています</p>
+                                </div>
+                            )}
+                            {!normalizeLoading && normalizePreview.length > 0 && !normalizeDone && (
+                                <div>
+                                    <p className="text-sm text-gray-700 dark:text-gray-200 mb-3">
+                                        <span className="font-bold">{normalizePreview.length}件</span>の表記ゆれが見つかりました。本実行すると以下のように書き換わります。
+                                    </p>
+                                    <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                                        <table className="w-full text-xs">
+                                            <thead className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+                                                <tr>
+                                                    <th className="text-left px-3 py-2 font-medium">シート</th>
+                                                    <th className="text-left px-3 py-2 font-medium">電話番号</th>
+                                                    <th className="text-left px-3 py-2 font-medium">変更前</th>
+                                                    <th className="text-left px-3 py-2 font-medium">変更後</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {normalizePreview.map((c, i) => (
+                                                    <tr key={i} className="border-t border-gray-100 dark:border-gray-800">
+                                                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{c.sheet}</td>
+                                                        <td className="px-3 py-2 font-mono text-gray-700 dark:text-gray-300">{c.phone}</td>
+                                                        <td className="px-3 py-2 text-red-600 dark:text-red-400 line-through">{c.oldName}</td>
+                                                        <td className="px-3 py-2 text-green-700 dark:text-green-400 font-medium">{c.newName}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+                            {normalizeDone && (
+                                <div className="text-center py-10">
+                                    <div className="text-5xl mb-3">✅</div>
+                                    <p className="text-gray-700 dark:text-gray-200 font-medium">正規化を完了しました</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">画面を再読み込みします...</p>
+                                </div>
+                            )}
+                        </div>
+                        {!normalizeLoading && normalizePreview.length > 0 && !normalizeDone && (
+                            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+                                <button
+                                    onClick={() => setShowNormalizeModal(false)}
+                                    className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
+                                >
+                                    キャンセル
+                                </button>
+                                <button
+                                    onClick={handleRunNormalize}
+                                    className="px-4 py-2 text-sm bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 font-bold rounded-lg hover:bg-gray-800 dark:hover:bg-white"
+                                >
+                                    本実行
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
 
