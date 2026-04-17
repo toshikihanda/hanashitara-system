@@ -55,6 +55,22 @@ function getCustomerBalanceByPhone(ss, phone) {
   return 0;
 }
 
+// 電話番号から顧客リスト上の正式名称を取得（表記ゆれ防止のための Source of Truth）
+// 顧客リストに該当がない or 名前欄が空なら空文字を返す → 呼び出し側はフロント入力値にフォールバック
+function getCanonicalNameByPhone(ss, phone) {
+  const sheet = ss.getSheetByName('顧客リスト');
+  if (!sheet) return '';
+  const normalizedPhone = normalizePhoneGAS(phone);
+  if (!normalizedPhone) return '';
+  const values = sheet.getDataRange().getValues();
+  for (let i = 1; i < values.length; i++) {
+    if (normalizePhoneGAS(values[i][1]) === normalizedPhone) {
+      return String(values[i][0] || '').trim();
+    }
+  }
+  return '';
+}
+
 // 業務報告から未記録のデポジット履歴を補填する一回限りのマイグレーション関数
 // Apps Script エディタから直接実行する：実行メニュー → 関数選択 backfillDepositHistoryFromReports → 実行
 // べき等（何度実行しても同じ結果）。reportIdで紐付け済みの報告はスキップ。
@@ -243,6 +259,13 @@ function doPost(e) {
           }
         }
 
+        // ★ 顧客名の表記ゆれ防止: 既存顧客なら顧客リスト側の正式名称で上書きする
+        //    （isNewCustomer 直後の登録で書いた顧客名はこのルックアップで自動的に一致する）
+        const canonicalName = getCanonicalNameByPhone(ss, data.customerPhone);
+        if (canonicalName) {
+          data.customerName = canonicalName;
+        }
+
         const newId = Utilities.getUuid();
         let paidStatus = '未入金';
         let autoDeducted = false;
@@ -402,6 +425,11 @@ function doPost(e) {
     if (action === 'editReport') {
       const sheet = ss.getSheetByName('業務報告');
       const values = sheet.getDataRange().getValues();
+      // ★ 顧客名の表記ゆれ防止: 顧客リスト側の正式名称で上書き
+      const canonicalNameEdit = getCanonicalNameByPhone(ss, data.customerPhone);
+      if (canonicalNameEdit) {
+        data.customerName = canonicalNameEdit;
+      }
       for(let i = 1; i < values.length; i++) {
         if(values[i][0] === data.id) {
           const customerName = data.customerName;
@@ -779,6 +807,97 @@ function doPost(e) {
           lock = null;
         }
       }
+    }
+
+    // ⑤-1.5 顧客名の表記ゆれ一括正規化
+    //   顧客リストを Source of Truth として、業務報告・デポジット履歴・前払い管理の顧客名を
+    //   電話番号をキーに揃える。dryRun:true を渡すと変更候補だけを返す（実行はしない）。
+    if (action === 'normalizeCustomerNames') {
+      const dryRun = !!data.dryRun;
+      const customerSheet = ss.getSheetByName('顧客リスト');
+      if (!customerSheet) {
+        if (lock) lock.releaseLock();
+        return output.setContent(JSON.stringify({ success: false, message: '顧客リストシートがありません' }));
+      }
+      // 顧客リストから phone -> canonical name のマップを作成
+      const custValues = customerSheet.getDataRange().getValues();
+      const canonicalByPhone = new Map();
+      for (let i = 1; i < custValues.length; i++) {
+        const p = normalizePhoneGAS(custValues[i][1]);
+        const n = String(custValues[i][0] || '').trim();
+        if (p && n) canonicalByPhone.set(p, n);
+      }
+
+      const targets = [
+        { sheetName: '業務報告', nameCol: 5, phoneCol: 4 }, // E列=名前, D列=電話
+        { sheetName: 'デポジット履歴', nameCol: 2, phoneCol: 3 }, // B列=名前, C列=電話
+        { sheetName: '前払い管理', nameCol: 1, phoneCol: 2 }, // A列=名前, B列=電話
+      ];
+
+      const changes = []; // {sheet, row, phone, oldName, newName}
+      targets.forEach(t => {
+        const sh = ss.getSheetByName(t.sheetName);
+        if (!sh) return;
+        const vals = sh.getDataRange().getValues();
+        for (let i = 1; i < vals.length; i++) {
+          const rowPhone = normalizePhoneGAS(vals[i][t.phoneCol - 1]);
+          if (!rowPhone) continue;
+          const canonical = canonicalByPhone.get(rowPhone);
+          if (!canonical) continue; // 顧客リストに無い電話 → スキップ
+          const oldName = String(vals[i][t.nameCol - 1] || '').trim();
+          if (oldName !== canonical) {
+            changes.push({
+              sheet: t.sheetName,
+              row: i + 1,
+              phone: rowPhone,
+              oldName: oldName,
+              newName: canonical,
+              _nameCol: t.nameCol
+            });
+          }
+        }
+      });
+
+      if (dryRun) {
+        if (lock) lock.releaseLock();
+        return output.setContent(JSON.stringify({
+          success: true,
+          dryRun: true,
+          totalChanges: changes.length,
+          // プレビューは最大500件まで返す（UI側で十分）
+          changes: changes.slice(0, 500).map(c => ({
+            sheet: c.sheet, phone: c.phone, oldName: c.oldName, newName: c.newName
+          }))
+        }));
+      }
+
+      // 本実行: シート別にまとめて書き込み
+      const bySheet = {};
+      changes.forEach(c => {
+        if (!bySheet[c.sheet]) bySheet[c.sheet] = [];
+        bySheet[c.sheet].push(c);
+      });
+      Object.keys(bySheet).forEach(sn => {
+        const sh = ss.getSheetByName(sn);
+        if (!sh) return;
+        bySheet[sn].forEach(c => {
+          sh.getRange(c.row, c._nameCol).setValue(c.newName);
+        });
+      });
+
+      // 操作ログに実行記録
+      try {
+        const auditSheet = getOrCreateAuditLogSheet(ss);
+        const summary = Object.keys(bySheet).map(s => `${s}:${bySheet[s].length}件`).join(', ');
+        auditSheet.appendRow([nowJST(), '顧客名一括正規化', '', '', `${changes.length}件の表記ゆれを顧客リストに揃えて修正 (${summary || 'なし'})`]);
+      } catch (logErr) { /* ログ失敗でも続行 */ }
+
+      if (lock) lock.releaseLock();
+      return output.setContent(JSON.stringify({
+        success: true,
+        dryRun: false,
+        totalChanges: changes.length
+      }));
     }
 
     // ⑤-1.6 お客様の削除（顧客リスト・前払い管理・デポジット履歴から削除、削除前にアーカイブ退避）
