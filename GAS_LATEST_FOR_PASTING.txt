@@ -191,10 +191,11 @@ function doPost(e) {
         // 重複チェック要求の場合
         if (data.checkDuplicate && reportSheet) {
           const values = reportSheet.getDataRange().getValues();
+          const dupPhone = normalizePhoneGAS(data.customerPhone);
           let isDuplicate = false;
           for (let i = 1; i < values.length; i++) {
-            // 日付・スタッフ・電話番号が一致したら重複とみなす
-            if (values[i][1] === data.date && values[i][2] === data.staff && values[i][3] === data.customerPhone) {
+            // 日付・スタッフ・電話番号が一致したら重複とみなす（電話番号は正規化して比較）
+            if (values[i][1] === data.date && values[i][2] === data.staff && normalizePhoneGAS(values[i][3]) === dupPhone) {
               isDuplicate = true;
               break;
             }
@@ -211,11 +212,12 @@ function doPost(e) {
             s.appendRow(['お客様名', '電話番号', '登録日']);
             return s;
           })();
-          // 電話番号で既存チェック（二重登録防止）
+          // 電話番号で既存チェック（二重登録防止）: 正規化して比較
           const custValues = custSheet.getDataRange().getValues();
+          const newCustPhone = normalizePhoneGAS(data.customerPhone);
           let custExists = false;
           for (let i = 1; i < custValues.length; i++) {
-            if (String(custValues[i][1]).replace(/[-']/g, '') === String(data.customerPhone).replace(/-/g, '')) {
+            if (normalizePhoneGAS(custValues[i][1]) === newCustPhone) {
               custExists = true;
               break;
             }
@@ -1048,8 +1050,12 @@ function doPost(e) {
         // → 通帳上で「どの利用が・いつチャージで充当されたか」が分かるようにするため
         const balBeforeSettle = currentBalance + amount; // チャージ直後（精算前）の仮残高
         historySheet.appendRow([nowJST(), customerName, "'" + chargePhone, amount, typeLabel, balBeforeSettle, '']);
+        // ★ 精算1件ごとに残高を逐次計算して記録（同じ残高を繰り返さない）
+        let runningBalance = balBeforeSettle;
         for (const s of settledReports) {
-          historySheet.appendRow([nowJST(), customerName, "'" + chargePhone, -Number(s.amount || 0), '未払い充当', newBalance, String(s.reportId || '')]);
+          const settleAmt = Number(s.amount || 0);
+          runningBalance -= settleAmt;
+          historySheet.appendRow([nowJST(), customerName, "'" + chargePhone, -settleAmt, '未払い充当', runningBalance, String(s.reportId || '')]);
         }
       } else {
         // チャージのみ or 利用のみの場合

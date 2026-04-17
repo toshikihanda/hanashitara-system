@@ -762,16 +762,22 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         const phoneKey = normalizePhone(rawPhone);
         const key = phoneKey || cName;
         if (customerMap.has(key)) return;
-        // 業務報告側の電話番号と顧客リスト側の電話番号が食い違っている場合の重複エントリ防止
-        // 既に同じ名前の顧客が存在していれば、こちら側の情報（電話番号）を合流させる
-        const existing = Array.from(customerMap.values()).find(c => c.name === cName);
+        // 業務報告側の電話番号と顧客リスト側の電話番号が食い違っている場合の重複エントリ防止。
+        // ただし、同姓同名で電話番号が明確に異なる場合は別人として扱う（名前一致だけで合流させない）。
+        const existing = Array.from(customerMap.values()).find(c =>
+            c.name === cName && (!c.phoneKey || !phoneKey || c.phoneKey === phoneKey)
+        );
         if (existing) {
+            if (!existing.phoneKey && phoneKey) existing.phoneKey = phoneKey;
+            if (!existing.phoneDisplay && rawPhone) existing.phoneDisplay = rawPhone;
             // 顧客リスト側の登録日があり、まだ反映されていなければ上書き
             const listRegDate = customerRegisterDatesByPhone[phoneKey];
             if (listRegDate) existing.registeredDate = listRegDate;
             return;
         }
-        customerMap.set(key, {
+        // 電話番号が無い同名エントリと衝突しないよう、必要なら複合キーで追加
+        const effectiveKey = customerMap.has(key) ? `${cName}::${phoneKey || 'no-phone'}` : key;
+        customerMap.set(effectiveKey, {
             name: cName,
             phoneKey,
             phoneDisplay: rawPhone,
@@ -794,7 +800,10 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         const effectiveKey = existingByKey && existingByKey.name !== cName ? `${cName}::${phoneKey || 'no-phone'}` : key;
         if (customerMap.has(effectiveKey)) return;
 
-        const existing = Array.from(customerMap.values()).find(c => c.name === cName);
+        // 同姓同名で電話番号が明確に異なる場合は別人として扱う
+        const existing = Array.from(customerMap.values()).find(c =>
+            c.name === cName && (!c.phoneKey || !phoneKey || c.phoneKey === phoneKey)
+        );
         const listRegDate = customerRegisterDatesByPhone[phoneKey] || '';
 
         // 既存エントリが同名で存在する場合は、情報だけ補完して重複作成を避ける
@@ -834,7 +843,10 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         const effectiveKey = existingByKey && existingByKey.name !== cName ? `${cName}::${fallbackPhone || 'no-phone'}` : key;
         if (customerMap.has(effectiveKey)) return;
 
-        const existing = Array.from(customerMap.values()).find(c => c.name === cName);
+        // 同姓同名で電話番号が明確に異なる場合は別人として扱う
+        const existing = Array.from(customerMap.values()).find(c =>
+            c.name === cName && (!c.phoneKey || !fallbackPhone || c.phoneKey === fallbackPhone)
+        );
         const regDateByPhone = fallbackPhone ? (customerRegisterDatesByPhone[fallbackPhone] || '') : '';
 
         if (existing) {
