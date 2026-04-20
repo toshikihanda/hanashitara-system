@@ -675,6 +675,12 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         // それ以外は新しい報告を上に表示（降順）
         return new Date(b.date).getTime() - new Date(a.date).getTime();
     });
+    /** スタッフ実績詳細・給与PDFなど「月初→月末」のカレンダー順表示用（一覧の緊急ソートは monthReports のまま） */
+    const monthReportsChronologicalForStaff = (staffName: string) =>
+        monthReports
+            .filter(r => r.staff === staffName)
+            .slice()
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     const totalMonthSales = monthReports.reduce((sum, r) => sum + r.totalSales, 0);
     const totalMonthProfit = monthReports.reduce((sum, r) => sum + getProfit(r), 0);
 
@@ -2448,7 +2454,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {monthReports.filter(r => r.staff === selectedPdfStaff).map(r => (
+                                            {monthReportsChronologicalForStaff(selectedPdfStaff).map(r => (
                                                 <tr key={r.id} className="text-center print:bg-white">
                                                     <td className="border border-gray-400 py-2 px-2 text-gray-700 print:text-black">{formatJSTDate(r.date).slice(5)}</td>
                                                     <td className="border border-gray-400 py-2 px-2 text-gray-800 font-medium print:text-black">{r.customerName}</td>
@@ -2457,7 +2463,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     <td className="border border-gray-400 py-2 px-2 font-bold text-gray-900 print:text-black">¥{r.staffShare.toLocaleString()}</td>
                                                 </tr>
                                             ))}
-                                            {monthReports.filter(r => r.staff === selectedPdfStaff).length === 0 && (
+                                            {monthReportsChronologicalForStaff(selectedPdfStaff).length === 0 && (
                                                 <tr>
                                                     <td colSpan={5} className="border border-gray-400 py-8 text-center text-gray-500 dark:text-gray-400">
                                                         今月の実績はありません
@@ -2557,7 +2563,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {monthReports.filter(r => r.staff === showStaffDetailFor).map(r => (
+                                            {monthReportsChronologicalForStaff(showStaffDetailFor).map(r => (
                                                 <tr key={r.id} className="border-b dark:border-gray-700 hover:bg-gray-50/50 dark:bg-gray-800/50">
                                                     <td className="px-4 py-3">{formatJSTDate(r.date).slice(5)}</td>
                                                     <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">{r.customerName}</td>
@@ -2565,7 +2571,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     <td className="px-4 py-3 text-right font-bold text-indigo-700">¥{r.staffShare.toLocaleString()}</td>
                                                 </tr>
                                             ))}
-                                            {monthReports.filter(r => r.staff === showStaffDetailFor).length === 0 && (
+                                            {monthReportsChronologicalForStaff(showStaffDetailFor).length === 0 && (
                                                 <tr>
                                                     <td colSpan={4} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">この月の実績がありません</td>
                                                 </tr>
