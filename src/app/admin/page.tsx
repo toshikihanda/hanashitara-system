@@ -2635,9 +2635,10 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             }
                                             return log.customerName === customer;
                                         });
-                                        // ⭐ 自動修復① 孤立「直接入金確認」行の除外
+                                        // ⭐ 自動修復① 孤立「直接入金確認」行の除外 + 重複除去
                                         //   業務報告が「未入金」なのに履歴に直接入金確認が残っているケースを除外。
-                                        //   過去のバグ or 手動削除で残った虚偽の入金確認行を通帳から隠す。
+                                        //   また同一 reportId の直接入金確認が複数ある場合は最初の1件のみ残す（旧バグ由来の重複除去）。
+                                        const _seenConfirmReportIds = new Set<string>();
                                         const orphanFilteredLogs = filteredCustomerDepositLogs.filter(log => {
                                             const t = String(log.type || '');
                                             if (t.indexOf('直接入金確認') !== 0) return true;
@@ -2646,6 +2647,10 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             // 関連報告が未入金 or 見つからない → 孤立行として除外
                                             if (!rep) return false;
                                             if (!rep.isPaid) return false;
+                                            // 同一 reportId の2件目以降は重複として除外
+                                            const rid = String(log.reportId);
+                                            if (_seenConfirmReportIds.has(rid)) return false;
+                                            _seenConfirmReportIds.add(rid);
                                             return true;
                                         });
 
