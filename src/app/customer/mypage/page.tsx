@@ -94,12 +94,6 @@ export default function CustomerMyPage() {
     // 入金額（正の金額）を取得
     const getCreditAmount = (item: HistoryItem): number => {
         if (item.type === 'charge' || item.type === 'deposit_op') {
-            const dt = String(item.depositType || '');
-            // 未払い調整: amount<0（未払い減）は入金側扱い
-            if (dt.indexOf('未払い調整') === 0) {
-                const amt = item.chargeAmount ?? 0;
-                return amt < 0 ? Math.abs(amt) : 0;
-            }
             const amt = item.chargeAmount ?? item.totalCharged ?? 0;
             return amt > 0 ? amt : 0;
         }
@@ -112,12 +106,6 @@ export default function CustomerMyPage() {
             return item.amount ?? 0;
         }
         if (item.type === 'charge' || item.type === 'deposit_op') {
-            const dt = String(item.depositType || '');
-            // 未払い調整: amount>0（未払い増）は利用側扱い
-            if (dt.indexOf('未払い調整') === 0) {
-                const amt = item.chargeAmount ?? 0;
-                return amt > 0 ? amt : 0;
-            }
             const amt = item.chargeAmount ?? 0;
             return amt < 0 ? Math.abs(amt) : 0;
         }

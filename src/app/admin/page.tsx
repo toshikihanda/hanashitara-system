@@ -48,8 +48,6 @@ export default function AdminDashboard() {
     // 前払いデポジット状態と顧客電話番号
     const [deposits, setDeposits] = useState<Record<string, number>>({});
     const [depositsByPhone, setDepositsByPhone] = useState<Record<string, number>>({});
-    // 電話番号→未払い調整額 (前払い管理シートD列)
-    const [unpaidAdjustmentByPhone, setUnpaidAdjustmentByPhone] = useState<Record<string, number>>({});
     const [customerPhones, setCustomerPhones] = useState<Record<string, string>>({});
     // スタッフのメアド保持用・対応サービス保持用・パスワード保持用
     const [staffEmails, setStaffEmails] = useState<Record<string, string>>({});
@@ -284,10 +282,6 @@ export default function AdminDashboard() {
                 for (const [k, v] of Object.entries(json.depositsByPhone || {})) {
                     safeDepositsByPhone[normalizePhone(String(k).trim())] = Number(v) || 0;
                 }
-                const safeUnpaidAdjustment: Record<string, number> = {};
-                for (const [k, v] of Object.entries(json.unpaidAdjustmentByPhone || {})) {
-                    safeUnpaidAdjustment[normalizePhone(String(k).trim())] = Number(v) || 0;
-                }
                 for (const [k, v] of Object.entries(json.passwords || {})) {
                     safePasswords[String(k).trim()] = String(v);
                 }
@@ -310,7 +304,6 @@ export default function AdminDashboard() {
 
                 setCustomerPhones(safePhones);
                 setDepositsByPhone(safeDepositsByPhone);
-                setUnpaidAdjustmentByPhone(safeUnpaidAdjustment);
                 setCustomerPasswords(safePasswords);
                 setCustomerPasswordsByPhone(safePasswordsByPhone);
                 setCustomerRegisterDatesByPhone(safeRegisterDates);
@@ -960,12 +953,10 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         const callCount = customerReports.length;
         const monthlyReports = monthReports.filter(matches);
         const monthlyAmount = monthlyReports.reduce((sum, r) => sum + r.totalSales, 0);
-        // 未払い合計: 業務報告の isPaid=false の差引請求額 + 前払い管理D列の未払い調整
-        const reportUnpaidSum = customerReports
+        // 未払い合計: 業務報告の isPaid=false の差引請求額を合算
+        const unpaidTotal = customerReports
             .filter(r => !r.isPaid)
             .reduce((sum, r) => sum + (Number(r.billingAmount) || Math.max(0, (Number(r.totalSales) || 0) - (Number(r.depositUsed) || 0))), 0);
-        const unpaidAdjustment = customer.phoneKey ? (unpaidAdjustmentByPhone[customer.phoneKey] || 0) : 0;
-        const unpaidTotal = reportUnpaidSum + unpaidAdjustment;
 
         return {
             name: customer.name,
@@ -2325,79 +2316,6 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 </div>
                                             </div>
 
-                                            {/* 未払い残高の調整セクション */}
-                                            {(() => {
-                                                const normalizedEditPhone = normalizePhone(editCustomerData.customerPhone || editingCustomerOriginalPhone || '');
-                                                const customerRepsForEdit = reports.filter(r =>
-                                                    normalizedEditPhone ? normalizePhone(r.customerPhone) === normalizedEditPhone : r.customerName === editingCustomerName
-                                                );
-                                                const reportUnpaid = customerRepsForEdit
-                                                    .filter(r => !r.isPaid)
-                                                    .reduce((sum, r) => sum + (Number(r.billingAmount) || Math.max(0, (Number(r.totalSales) || 0) - (Number(r.depositUsed) || 0))), 0);
-                                                const currentAdj = normalizedEditPhone ? (unpaidAdjustmentByPhone[normalizedEditPhone] || 0) : 0;
-                                                const currentUnpaidTotal = reportUnpaid + currentAdj;
-                                                return (
-                                                    <div className="mt-3 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
-                                                        <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">未払い残高の調整</h4>
-                                                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                                                            現在の未払い合計: <span className={`font-bold ${currentUnpaidTotal > 0 ? 'text-red-600' : 'text-gray-700 dark:text-gray-300'}`}>¥{currentUnpaidTotal.toLocaleString()}</span>
-                                                            <span className="text-[10px] text-gray-400 ml-2">(業務報告分 ¥{reportUnpaid.toLocaleString()}{currentAdj !== 0 ? ` + 調整 ${currentAdj >= 0 ? '+' : ''}¥${currentAdj.toLocaleString()}` : ''})</span>
-                                                        </p>
-                                                        <div className="flex gap-2">
-                                                            <input
-                                                                type="number"
-                                                                id="fixUnpaidInput"
-                                                                placeholder="新しい未払い合計を入力"
-                                                                className="flex-1 border border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:text-gray-100"
-                                                            />
-                                                            <button
-                                                                disabled={isSaving}
-                                                                onClick={async () => {
-                                                                    const input = document.getElementById('fixUnpaidInput') as HTMLInputElement;
-                                                                    const newUnpaid = Number(input?.value);
-                                                                    if (isNaN(newUnpaid) || input?.value === '') {
-                                                                        return alert('有効な金額を入力してください');
-                                                                    }
-                                                                    if (newUnpaid < 0) return alert('未払い合計は 0 以上で入力してください');
-                                                                    if (!confirm(`${editingCustomerName} さんの未払い合計を ¥${newUnpaid.toLocaleString()} に設定しますか？\n\n(業務報告の未入金分と合わせて調整額が自動計算されます)`)) return;
-                                                                    setIsSaving(true);
-                                                                    setSavingMessage('未払いを調整中...');
-                                                                    try {
-                                                                        const res = await fetch(GAS_URL, {
-                                                                            method: 'POST',
-                                                                            body: JSON.stringify({
-                                                                                action: 'fixUnpaidBalance',
-                                                                                customerName: editingCustomerName,
-                                                                                customerPhone: normalizedEditPhone,
-                                                                                newUnpaid: newUnpaid
-                                                                            })
-                                                                        });
-                                                                        const resJson = await res.json();
-                                                                        if (resJson.success) {
-                                                                            if (normalizedEditPhone) {
-                                                                                setUnpaidAdjustmentByPhone(prev => ({ ...prev, [normalizedEditPhone]: Number(resJson.adjustment) || 0 }));
-                                                                            }
-                                                                            alert(`未払い合計を ¥${newUnpaid.toLocaleString()} に設定しました`);
-                                                                            input.value = '';
-                                                                        } else {
-                                                                            alert('エラー: ' + (resJson.message || '未払いの更新に失敗しました'));
-                                                                        }
-                                                                    } catch {
-                                                                        alert('エラーが発生しました');
-                                                                    } finally {
-                                                                        setIsSaving(false);
-                                                                        setSavingMessage(null);
-                                                                    }
-                                                                }}
-                                                                className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-bold hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                            >
-                                                                未払いを上書き
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })()}
-
                                             <div className="space-y-3 mt-4">
                                                 {/* ブラックリスト登録ボタン */}
                                                 {editCustomerData.customerPhone && editCustomerData.customerPhone !== '登録なし' && !blacklistedPhones.some(bl => normalizePhone(bl) === normalizePhone(editCustomerData.customerPhone)) && (
@@ -2754,8 +2672,6 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             const a = Number(log.amount) || 0;
                                             const rep = log.reportId ? reports.find((r: any) => r.id === log.reportId) : null;
                                             if (t.indexOf('未払い充当') === 0) return 0;
-                                            // 未払い調整: 増減額は「未払いの増加量」なので帳簿残高にはマイナス方向に作用
-                                            if (t.indexOf('未払い調整') === 0) return -a;
                                             if (t.indexOf('利用(一部引落)') === 0 && rep) return -rep.totalSales;
                                             // 利用系で未払いを含むものすべて（利用(未払い), 利用(過去分・未払い), 利用(過去分・未払い・要確認) 等）
                                             if (t.indexOf('利用') === 0 && t.indexOf('未払い') >= 0 && rep) return -rep.totalSales;
@@ -2849,10 +2765,6 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 debitAmount = relatedReportForCalc.totalSales;
                                             } else if (type.indexOf('利用(未払い)') === 0 && relatedReportForCalc) {
                                                 debitAmount = relatedReportForCalc.totalSales;
-                                            } else if (type.indexOf('未払い調整') === 0) {
-                                                // 未払い増=利用側、未払い減=入金側に表示
-                                                if (amount > 0) debitAmount = amount;
-                                                else if (amount < 0) creditAmount = Math.abs(amount);
                                             } else if (amount > 0) {
                                                 creditAmount = amount;
                                             } else if (amount < 0) {
