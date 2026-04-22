@@ -1773,6 +1773,7 @@ function doGet(e) {
       }
 
       const histSheet = ss.getSheetByName('デポジット履歴');
+      const _seenConfirmIds = {};
       if (histSheet) {
         const histData = histSheet.getDataRange().getValues();
         for (let i = 1; i < histData.length; i++) {
@@ -1793,6 +1794,11 @@ function doGet(e) {
               // ★ 孤立「直接入金確認」行の除外: 関連業務報告が「未入金」状態ならこの行は虚偽情報として通帳から除外
               if (depositType.indexOf('直接入金確認') === 0 && relId && unpaidReportIds[relId]) {
                 continue;
+              }
+              // ★ 同一 reportId の「直接入金確認」が複数ある場合は重複として除外（旧バグ由来の二重計上防止）
+              if (depositType.indexOf('直接入金確認') === 0 && relId) {
+                if (_seenConfirmIds[relId]) continue;
+                _seenConfirmIds[relId] = true;
               }
               history.push({
                 date: hDate,
