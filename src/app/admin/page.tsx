@@ -2635,7 +2635,81 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             }
                                             return log.customerName === customer;
                                         });
-                                        const filteredLogs = filteredCustomerDepositLogs;
+                                        // ⭐ 自動修復① 孤立「直接入金確認」行の除外
+                                        //   業務報告が「未入金」なのに履歴に直接入金確認が残っているケースを除外。
+                                        //   過去のバグ or 手動削除で残った虚偽の入金確認行を通帳から隠す。
+                                        const orphanFilteredLogs = filteredCustomerDepositLogs.filter(log => {
+                                            const t = String(log.type || '');
+                                            if (t.indexOf('直接入金確認') !== 0) return true;
+                                            if (!log.reportId) return true;
+                                            const rep = reports.find(r => r.id === log.reportId);
+                                            // 関連報告が未入金 or 見つからない → 孤立行として除外
+                                            if (!rep) return false;
+                                            if (!rep.isPaid) return false;
+                                            return true;
+                                        });
+
+                                        // ⭐ 自動修復② 不足「利用」行の合成
+                                        //   業務報告にあるのに履歴に対応する利用行が無いケースを仮想行として補完。
+                                        //   スプレッドシートには書き込まない（表示のみの整合性維持）。
+                                        const reportIdsWithUsageRow = new Set(
+                                            orphanFilteredLogs
+                                                .filter(l => l.reportId && /^利用/.test(String(l.type || '')))
+                                                .map(l => String(l.reportId))
+                                        );
+                                        const syntheticUsageLogs = filteredCustomerReports
+                                            .filter(r => !reportIdsWithUsageRow.has(String(r.id)))
+                                            .map(r => {
+                                                // 常に「利用(未払い)」相当として合成（effect=-totalSales）。
+                                                // 入金済の場合は別途「直接入金確認」を合成して相殺する（下段）。
+                                                return {
+                                                    date: r.date,
+                                                    customerName: r.customerName,
+                                                    customerPhone: r.customerPhone,
+                                                    amount: 0,
+                                                    balance: 0,
+                                                    type: '利用(未払い)',
+                                                    reportId: r.id,
+                                                    _synthetic: true,
+                                                } as typeof filteredCustomerDepositLogs[number] & { _synthetic?: boolean };
+                                            });
+
+                                        // ⭐ 自動修復③ 入金済だが直接入金確認行が無い場合の合成
+                                        //   (デポジット全額引落ケース、過去分・直接入金ケースは除く — それらは利用行で既に完結)
+                                        const reportIdsWithConfirmRow = new Set(
+                                            orphanFilteredLogs
+                                                .filter(l => l.reportId && /^直接入金確認/.test(String(l.type || '')))
+                                                .map(l => String(l.reportId))
+                                        );
+                                        // 既存の利用行が「過去分・直接入金」系（effect=0で完結済み）のreportIdはスキップ対象
+                                        const reportIdsAlreadySettledByBackfill = new Set(
+                                            orphanFilteredLogs
+                                                .filter(l => l.reportId && /^利用/.test(String(l.type || '')) && /過去分/.test(String(l.type || '')) && /直接入金/.test(String(l.type || '')) && !/未払/.test(String(l.type || '')))
+                                                .map(l => String(l.reportId))
+                                        );
+                                        const syntheticConfirmLogs = filteredCustomerReports
+                                            .filter(r => {
+                                                if (!r.isPaid) return false;
+                                                if (reportIdsWithConfirmRow.has(String(r.id))) return false;
+                                                if (reportIdsAlreadySettledByBackfill.has(String(r.id))) return false;
+                                                const billed = Number(r.billingAmount) || Math.max(0, (Number(r.totalSales) || 0) - (Number(r.depositUsed) || 0));
+                                                return billed > 0; // デポ全額ならスキップ
+                                            })
+                                            .map(r => {
+                                                const billed = Number(r.billingAmount) || Math.max(0, (Number(r.totalSales) || 0) - (Number(r.depositUsed) || 0));
+                                                return {
+                                                    date: r.paymentDate || r.date,
+                                                    customerName: r.customerName,
+                                                    customerPhone: r.customerPhone,
+                                                    amount: 0,
+                                                    balance: 0,
+                                                    type: '直接入金確認(¥' + billed.toLocaleString() + ')',
+                                                    reportId: r.id,
+                                                    _synthetic: true,
+                                                } as typeof filteredCustomerDepositLogs[number] & { _synthetic?: boolean };
+                                            });
+
+                                        const filteredLogs = [...orphanFilteredLogs, ...syntheticUsageLogs, ...syntheticConfirmLogs];
                                         // 日付で昇順ソート（古い→新しい）。バックフィル行が後から挿入されていても
                                         // 実際の取引日時で並ぶようにするため。同一日時は挿入順を保つ(安定ソート)。
                                         const chronological = [...filteredLogs]
@@ -2770,6 +2844,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             } else if (amount < 0) {
                                                 debitAmount = Math.abs(amount);
                                             }
+                                            const isSynthetic = !!(log as { _synthetic?: boolean })._synthetic;
                                             return {
                                                 date: log.date,
                                                 type: isUsage ? ('usage' as const) : ('deposit' as const),
@@ -2786,6 +2861,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 customerPhone: log.customerPhone || '',
                                                 gasBalance: Number(log.balance) || 0,
                                                 sourceIndex: i,
+                                                isSynthetic,
                                                 balance: runningBalance,
                                                 hideBalance,
                                                 paymentMethod,
@@ -2998,6 +3074,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                             {entriesWithBalance.map((entry, i) => {
                                                                 const needsReview = (entry as any).needsReview as boolean;
                                                                 const isBackfill = (entry as any).isBackfill as boolean;
+                                                                const isSynthetic = (entry as any).isSynthetic as boolean;
                                                                 const rawType = String((entry as any).rawType || '');
                                                                 const isSettlement = rawType.indexOf('未払い充当') === 0;
                                                                 // 精算情報行用に関連業務報告のラベルを構築
@@ -3006,9 +3083,11 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     ? 'bg-yellow-50 dark:bg-yellow-900/10 border-l-4 border-l-yellow-400'
                                                                     : isSettlement
                                                                         ? 'bg-emerald-50/40 dark:bg-emerald-900/10'
-                                                                        : isBackfill
-                                                                            ? 'bg-gray-50/50 dark:bg-gray-900/20'
-                                                                            : (entry.type === 'deposit' ? 'bg-blue-50/20 dark:bg-indigo-900/5' : '');
+                                                                        : isSynthetic
+                                                                            ? 'bg-sky-50/30 dark:bg-sky-900/10 border-l-4 border-l-sky-300'
+                                                                            : isBackfill
+                                                                                ? 'bg-gray-50/50 dark:bg-gray-900/20'
+                                                                                : (entry.type === 'deposit' ? 'bg-blue-50/20 dark:bg-indigo-900/5' : '');
                                                                 return (
                                                                 <tr key={entry.id + '-' + i} className={`border-b dark:border-gray-700 hover:bg-gray-50/50 transition-colors ${rowCls}`}>
                                                                     <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{formatJSTDate(entry.date, true)}</td>
@@ -3036,9 +3115,17 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                                 {isBackfill && !needsReview && (
                                                                                     <span title="過去データから自動補填された行です" className="px-1.5 py-0.5 rounded text-[9px] font-bold border bg-gray-100 text-gray-500 border-gray-300">過去分</span>
                                                                                 )}
+                                                                                {isSynthetic && (
+                                                                                    <span title="業務報告を元に表示用に自動合成した行です（スプレッドシートには書き込まれていません）" className="px-1.5 py-0.5 rounded text-[9px] font-bold border bg-sky-100 text-sky-700 border-sky-300">自動補完</span>
+                                                                                )}
                                                                             </div>
                                                                         ) : (
-                                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.amount >= 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>{entry.label}</span>
+                                                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.amount >= 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>{entry.label}</span>
+                                                                                {isSynthetic && (
+                                                                                    <span title="業務報告を元に表示用に自動合成した行です（スプレッドシートには書き込まれていません）" className="px-1.5 py-0.5 rounded text-[9px] font-bold border bg-sky-100 text-sky-700 border-sky-300">自動補完</span>
+                                                                                )}
+                                                                            </div>
                                                                         )}
                                                                     </td>
                                                                     <td className="px-3 py-2 text-right font-bold text-blue-600">
@@ -3059,7 +3146,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                                 <button disabled={isSaving} onClick={() => handleDeleteUsage(entry)} className="text-red-500 hover:text-red-700 text-xs font-bold disabled:opacity-50">🗑️</button>
                                                                             </div>
                                                                         )}
-                                                                        {!isSettlement && entry.type === 'deposit' && (
+                                                                        {!isSettlement && entry.type === 'deposit' && !isSynthetic && (
                                                                             <div className="flex items-center justify-center gap-1">
                                                                                 <button disabled={isSaving} onClick={() => handleEditDeposit(entry)} className="text-blue-500 hover:text-blue-700 text-xs font-bold disabled:opacity-50">✏️</button>
                                                                                 <button disabled={isSaving} onClick={() => handleDeleteDeposit(entry)} className="text-red-500 hover:text-red-700 text-xs font-bold disabled:opacity-50">🗑️</button>
