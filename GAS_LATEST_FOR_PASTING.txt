@@ -1809,14 +1809,22 @@ function doGet(e) {
       //  - チャージ/deposit_op: +chargeAmount（ただし直接入金確認は金額をラベル「直接入金確認(¥3,000)」から抽出）
       //  - 利用: -totalSales（デポジット引落・未払いを問わず、帳簿残高は総売上分だけ減る）
       //  - 未払い充当: 0（チャージ行に既に含まれる情報行）
+      //  - 残高調整: オーナーが直接残高を確定させる信頼境界 → bal を depositBalance にハードリセット
       let ledger = 0;
       history.forEach(function(item) {
+        const dt = String(item.depositType || '');
+        // 残高調整は信頼境界としてリセット
+        if (dt === '残高調整' || dt.indexOf('残高調整') >= 0) {
+          const newBal = Number(item.depositBalance) || 0;
+          item.rowEffect = newBal - ledger;
+          ledger = newBal;
+          item.runningBalance = ledger;
+          return;
+        }
         let effect = 0;
         if (item.type === 'usage') {
           effect = -(Number(item.amount) || 0);
         } else {
-          // charge または deposit_op
-          const dt = String(item.depositType || '');
           if (dt.indexOf('未払い充当') === 0) {
             effect = 0;
           } else if (dt.indexOf('直接入金確認') === 0) {
@@ -1828,7 +1836,7 @@ function doGet(e) {
         }
         ledger += effect;
         item.runningBalance = ledger;
-        item.rowEffect = effect; // フロント側で effect=0 の行を判定するため
+        item.rowEffect = effect;
       });
       // 表示は降順（最新が上）に並び直す。runningBalance は各行に固定済み。
       history.reverse();

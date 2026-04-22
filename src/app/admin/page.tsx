@@ -2682,11 +2682,22 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             return a;
                                         };
                                         // 順算: 最上行から下へ。bal += effect。
+                                        // ただし「残高調整」行はオーナーが直接残高を決めた信頼境界 → そこで bal をリセットする。
+                                        //   → 調整以前の履歴欠損ドリフトは表示に残るが、調整以降は必ず公式残高と整合する。
                                         const perRowBalance: number[] = new Array(chronological.length);
                                         const perRowEffect: number[] = new Array(chronological.length);
                                         {
                                             let bal = 0;
                                             for (let i = 0; i < chronological.length; i++) {
+                                                const log = chronological[i] as { type?: string; balance?: number };
+                                                const t = String(log.type || '');
+                                                if (t === '残高調整' || t.indexOf('残高調整') >= 0) {
+                                                    const newBal = Number(log.balance) || 0;
+                                                    perRowEffect[i] = newBal - bal; // 表示・デバッグ用
+                                                    bal = newBal;
+                                                    perRowBalance[i] = bal;
+                                                    continue;
+                                                }
                                                 const effect = computeEffect(chronological[i]);
                                                 perRowEffect[i] = effect;
                                                 bal += effect;
