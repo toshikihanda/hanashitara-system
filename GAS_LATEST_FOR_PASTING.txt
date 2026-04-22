@@ -1863,7 +1863,8 @@ function doGet(e) {
               serviceSummary: repData[i][5],
               isPaid: isPaid,
               depositUsed: depUsed,
-              billingAmount: billing
+              billingAmount: billing,
+              reportId: rId
             });
             // ★ 自動補完: 入金済で差引請求額 > 0 なのに「直接入金確認」履歴行が無い場合、
             //    仮想的な直接入金確認行を追加して通帳の残高計算を整合させる（書き込みは行わない）
@@ -1903,6 +1904,14 @@ function doGet(e) {
       //  - 利用: -totalSales（デポジット引落・未払いを問わず、帳簿残高は総売上分だけ減る）
       //  - 未払い充当: 0（チャージ行に既に含まれる情報行）
       //  - 残高調整: オーナーが直接残高を確定させる信頼境界 → bal を depositBalance にハードリセット
+      // 要確認行の入金済判定用: reportId → isPaid マップを業務報告アイテムから構築
+      const reportPaidMap = {};
+      history.forEach(function(it) {
+        if (it.type === 'usage' && it.reportId) {
+          reportPaidMap[String(it.reportId)] = !!it.isPaid;
+        }
+      });
+
       let ledger = 0;
       history.forEach(function(item) {
         const dt = String(item.depositType || '');
@@ -1925,6 +1934,18 @@ function doGet(e) {
             effect = m ? parseInt(m[1].replace(/,/g, ''), 10) : 0;
           } else {
             effect = Number(item.chargeAmount) || 0;
+          }
+        }
+        // ⭐ 自動修復: 「要確認」行でデポジット残高不足の場合は不足分を直接入金扱いにする
+        //   業務報告が入金済のとき（またはusageアイテムでisPaid=true）、不足分は直接入金として effect を切り詰める
+        if (dt.indexOf('要確認') >= 0 && effect < 0) {
+          const rid = String(item.relatedReportId || '');
+          const isPaid = rid ? !!reportPaidMap[rid] : (item.isPaid !== false);
+          if (isPaid) {
+            const available = Math.max(0, ledger);
+            if (effect < -available) {
+              effect = -available;
+            }
           }
         }
         ledger += effect;

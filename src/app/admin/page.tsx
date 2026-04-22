@@ -2763,7 +2763,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         {
                                             let bal = 0;
                                             for (let i = 0; i < chronological.length; i++) {
-                                                const log = chronological[i] as { type?: string; balance?: number };
+                                                const log = chronological[i] as { type?: string; balance?: number; reportId?: string };
                                                 const t = String(log.type || '');
                                                 if (t === '残高調整' || t.indexOf('残高調整') >= 0) {
                                                     const newBal = Number(log.balance) || 0;
@@ -2772,7 +2772,20 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                     perRowBalance[i] = bal;
                                                     continue;
                                                 }
-                                                const effect = computeEffect(chronological[i]);
+                                                let effect = computeEffect(chronological[i]);
+                                                // ⭐ 自動修復: 「要確認」行でデポジット残高不足の場合は不足分を直接入金扱い(effect=0方向)にする。
+                                                //   チャージ履歴が無い顧客に過去分デポジット引落が記録されているケースを救済。
+                                                //   入金済であることを条件にして、未払いのケースは通常通り計算する。
+                                                if (t.indexOf('要確認') >= 0 && effect < 0 && log.reportId) {
+                                                    const rep = reports.find(r => r.id === log.reportId);
+                                                    if (rep && rep.isPaid) {
+                                                        const available = Math.max(0, bal);
+                                                        if (effect < -available) {
+                                                            // 実際のデポジットでは払えない → 不足分は直接入金として扱う
+                                                            effect = -available;
+                                                        }
+                                                    }
+                                                }
                                                 perRowEffect[i] = effect;
                                                 bal += effect;
                                                 perRowBalance[i] = bal;
