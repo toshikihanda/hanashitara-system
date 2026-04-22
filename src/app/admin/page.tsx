@@ -83,6 +83,8 @@ export default function AdminDashboard() {
     const [showHistoryForCustomerPhone, setShowHistoryForCustomerPhone] = useState<string | null>(null);
     const [showStaffDetailFor, setShowStaffDetailFor] = useState<string | null>(null);
     const [historyTabMode, setHistoryTabMode] = useState<'detail' | 'ledger'>('detail');
+    // 通帳で同じ reportId を持つ行をハイライトするためのホバー状態
+    const [hoveredReportId, setHoveredReportId] = useState<string>('');
 
     // インライン編集用ステート
     const [editingReportId, setEditingReportId] = useState<string | null>(null);
@@ -2986,7 +2988,16 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     {entry.type === 'usage' ? (
                                                                         <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap ${entry.isPaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{entry.isPaid ? '利用(済)' : '利用(未払)'}</span>
                                                                     ) : (
-                                                                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap ${entry.amount >= 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>{entry.label}</span>
+                                                                        <div className="flex flex-col items-start gap-0.5">
+                                                                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap ${entry.amount >= 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>{entry.label}</span>
+                                                                            {/* 直接入金確認の紐付け情報 */}
+                                                                            {entry.reportId && /^直接入金確認/.test(String((entry as any).rawType || '')) && (() => {
+                                                                                const rRep = reports.find(r => r.id === entry.reportId);
+                                                                                if (!rRep) return null;
+                                                                                const cleanSvc = String(rRep.services || '').replace(/\s*->\s*計算\d+分/g, '').replace(/\((\d+)分\)/g, ' $1分');
+                                                                                return (<span className="text-[9px] text-gray-500 italic">← {formatJSTDate(rRep.date, true)} / {rRep.staff}</span>);
+                                                                            })()}
+                                                                        </div>
                                                                     )}
                                                                 </div>
                                                                 <div className="flex items-center gap-2">
@@ -3117,8 +3128,14 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                             : isBackfill
                                                                                 ? 'bg-gray-50/50 dark:bg-gray-900/20'
                                                                                 : (entry.type === 'deposit' ? 'bg-blue-50/20 dark:bg-indigo-900/5' : '');
+                                                                // 同一 reportId の行をホバー時にハイライト（利用と入金のペアを視覚的に紐付け）
+                                                                const isHoveredPair = !!(entry.reportId && hoveredReportId && entry.reportId === hoveredReportId);
+                                                                const hoverCls = isHoveredPair ? 'ring-2 ring-indigo-300 ring-inset bg-indigo-50/70 dark:bg-indigo-900/20' : '';
                                                                 return (
-                                                                <tr key={entry.id + '-' + i} className={`border-b dark:border-gray-700 hover:bg-gray-50/50 transition-colors ${rowCls}`}>
+                                                                <tr key={entry.id + '-' + i}
+                                                                    onMouseEnter={() => entry.reportId && setHoveredReportId(entry.reportId)}
+                                                                    onMouseLeave={() => setHoveredReportId('')}
+                                                                    className={`border-b dark:border-gray-700 hover:bg-gray-50/50 transition-colors ${rowCls} ${hoverCls}`}>
                                                                     <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{formatJSTDate(entry.date, true)}</td>
                                                                     <td className="px-3 py-2">
                                                                         {isSettlement ? (
@@ -3154,6 +3171,17 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                                 {isSynthetic && (
                                                                                     <span title="業務報告を元に表示用に自動合成した行です（スプレッドシートには書き込まれていません）" className="px-1.5 py-0.5 rounded text-[9px] font-bold border bg-sky-100 text-sky-700 border-sky-300">自動補完</span>
                                                                                 )}
+                                                                                {/* 直接入金確認行 → 関連業務報告の情報を小さく併記（どの利用の入金か分かるように） */}
+                                                                                {entry.reportId && /^直接入金確認/.test(rawType) && (() => {
+                                                                                    const rRep = reports.find(r => r.id === entry.reportId);
+                                                                                    if (!rRep) return null;
+                                                                                    const cleanSvc = String(rRep.services || '').replace(/\s*->\s*計算\d+分/g, '').replace(/\((\d+)分\)/g, ' $1分');
+                                                                                    return (
+                                                                                        <span className="text-[10px] text-gray-500 dark:text-gray-400 italic">
+                                                                                            ← {formatJSTDate(rRep.date, true)} / {rRep.staff} / {cleanSvc}
+                                                                                        </span>
+                                                                                    );
+                                                                                })()}
                                                                             </div>
                                                                         )}
                                                                     </td>
