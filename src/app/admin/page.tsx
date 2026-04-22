@@ -3174,7 +3174,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             if (normalizedDetailPhone) return normalizePhone(log.customerPhone || '') === normalizedDetailPhone;
                                             return log.customerName === detailCustomer;
                                         };
-                                        const filteredReports = reports.filter(filterReportsByCustomer).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                                        const filteredReports = reports.filter(filterReportsByCustomer).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                                         const filteredDepositLogs = depositLogs.filter(filterDepositLogsByCustomer).slice().sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                                         return <>
 
@@ -3418,7 +3418,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         {(() => {
                                             const memoReports = reports
                                                 .filter(r => filterReportsByCustomer(r) && r.memo && r.memo.trim())
-                                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                                                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                                             if (memoReports.length === 0) {
                                                 return <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center bg-white dark:bg-gray-800 rounded border">メモの記録がありません</p>;
                                             }
