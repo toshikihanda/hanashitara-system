@@ -1760,6 +1760,18 @@ function doGet(e) {
       const history = [];
 
       // デポジット履歴（すべての種別を取得 ★ 電話番号で照合）
+      // 先に業務報告から「現在 未入金 のレポートID」集合を作成（孤立直接入金確認行の除外用）
+      const unpaidReportIds = {};
+      const preRepSheet = ss.getSheetByName('業務報告');
+      if (preRepSheet) {
+        const preRepData = preRepSheet.getDataRange().getValues();
+        for (let i = 1; i < preRepData.length; i++) {
+          if (normalizePhoneGAS(preRepData[i][3]) === phone && preRepData[i][8] === '未入金') {
+            unpaidReportIds[String(preRepData[i][0] || '').trim()] = true;
+          }
+        }
+      }
+
       const histSheet = ss.getSheetByName('デポジット履歴');
       if (histSheet) {
         const histData = histSheet.getDataRange().getValues();
@@ -1773,17 +1785,23 @@ function doGet(e) {
             const amount = Number(histData[i][3]) || 0;
             const depositType = String(histData[i][4] || '');
             const depositBalance = Number(histData[i][5]) || 0;
+            const relId = String(histData[i][6] || '').trim();
             // 種別に応じてtype分類（チャージ系 or デポジット操作系）
             const isCharge = depositType === 'チャージ' || amount > 0;
             // ★フロントエンドで既に利用(usage)として表示するため、自動引落の履歴行は二重表示・二重計算防止のために除外する
             if (!depositType.startsWith('利用(自動引落)') && !depositType.startsWith('利用(一部引落)')) {
+              // ★ 孤立「直接入金確認」行の除外: 関連業務報告が「未入金」状態ならこの行は虚偽情報として通帳から除外
+              if (depositType.indexOf('直接入金確認') === 0 && relId && unpaidReportIds[relId]) {
+                continue;
+              }
               history.push({
                 date: hDate,
                 type: isCharge ? 'charge' : 'deposit_op',
                 chargeAmount: amount,
                 totalCharged: amount,
                 depositType: depositType, // 種別ラベル（チャージ、直接入金確認 等）
-                depositBalance: depositBalance // その時点の残高
+                depositBalance: depositBalance, // その時点の残高
+                relatedReportId: relId // 合成行の重複判定用
               });
             }
           }
@@ -1792,6 +1810,32 @@ function doGet(e) {
 
       // 利用履歴（業務報告シートから）
       let unpaidTotal = 0;
+      // 既に「直接入金確認」行が存在する reportId を集める（合成行の重複回避用）
+      const confirmedReportIds = {};
+      // 既存の利用行が「過去分・直接入金」系（effect=0で完結済み）の reportId を集める
+      // これらには合成の「直接入金確認」を追加しない（二重計上を避ける）
+      const settledByBackfillIds = {};
+      // デポジット履歴シートを再走査（同上の履歴配列にはreportIdが全部入っていないため）
+      const _histSheetForBackfillCheck = ss.getSheetByName('デポジット履歴');
+      if (_histSheetForBackfillCheck) {
+        const _hv = _histSheetForBackfillCheck.getDataRange().getValues();
+        for (let _i = 1; _i < _hv.length; _i++) {
+          const _rp = String(_hv[_i][2] || '').replace(/[-\s']/g, '');
+          if (_rp !== phone) continue;
+          const _dt = String(_hv[_i][4] || '');
+          const _rid = String(_hv[_i][6] || '').trim();
+          if (!_rid) continue;
+          if (_dt.indexOf('直接入金確認') === 0) confirmedReportIds[_rid] = true;
+          if (_dt.indexOf('利用') === 0 && _dt.indexOf('過去分') >= 0 && _dt.indexOf('直接入金') >= 0 && _dt.indexOf('未払') < 0) {
+            settledByBackfillIds[_rid] = true;
+          }
+        }
+      }
+      history.forEach(function(h) {
+        if (h && h.depositType && String(h.depositType).indexOf('直接入金確認') === 0 && h.relatedReportId) {
+          confirmedReportIds[String(h.relatedReportId)] = true;
+        }
+      });
       const reportSheet = ss.getSheetByName('業務報告');
       if (reportSheet) {
         const repData = reportSheet.getDataRange().getValues();
@@ -1806,6 +1850,7 @@ function doGet(e) {
             const billing = Number(repData[i][11]) || 0;
             const totalS = Number(repData[i][6]) || 0;
             const depUsed = Number(repData[i][10]) || 0;
+            const rId = String(repData[i][0] || '').trim();
             if (!isPaid) {
               // 未払い合計: 差引請求額 優先、無ければ（総売上 - デポジット使用額）
               unpaidTotal += billing > 0 ? billing : Math.max(0, totalS - depUsed);
@@ -1820,6 +1865,25 @@ function doGet(e) {
               depositUsed: depUsed,
               billingAmount: billing
             });
+            // ★ 自動補完: 入金済で差引請求額 > 0 なのに「直接入金確認」履歴行が無い場合、
+            //    仮想的な直接入金確認行を追加して通帳の残高計算を整合させる（書き込みは行わない）
+            //    ただし「過去分・直接入金」で既に完結している報告は対象外（二重計上防止）
+            if (isPaid && billing > 0 && rId && !confirmedReportIds[rId] && !settledByBackfillIds[rId]) {
+              const pDate = repData[i][9] instanceof Date
+                ? Utilities.formatDate(repData[i][9], "JST", "yyyy/MM/dd HH:mm:ss")
+                : (String(repData[i][9] || '') || repDate);
+              history.push({
+                date: pDate,
+                type: 'deposit_op',
+                chargeAmount: 0,
+                totalCharged: 0,
+                depositType: '直接入金確認(¥' + billing.toLocaleString() + ')',
+                depositBalance: 0,
+                relatedReportId: rId,
+                synthetic: true
+              });
+              confirmedReportIds[rId] = true;
+            }
           }
         }
       }
