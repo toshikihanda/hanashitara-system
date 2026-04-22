@@ -1932,6 +1932,11 @@ function doGet(e) {
           } else if (dt.indexOf('直接入金確認') === 0) {
             const m = dt.match(/¥([\d,]+)/);
             effect = m ? parseInt(m[1].replace(/,/g, ''), 10) : 0;
+          } else if (dt.indexOf('利用') === 0 && dt.indexOf('過去分') >= 0 && dt.indexOf('直接入金') >= 0 && dt.indexOf('未払') < 0) {
+            // ⭐ 自動修復: 「利用(過去分・直接入金)」で関連業務報告が未入金なら未払い扱い(-totalSales)に。
+            //   ただし customer mypage では BR 側に usage 行が別途存在し effect=-totalSales を既に計上済みなので、
+            //   重複防止のためここは 0 のまま（chargeAmount=0）維持。
+            effect = Number(item.chargeAmount) || 0;
           } else {
             effect = Number(item.chargeAmount) || 0;
           }

@@ -2746,6 +2746,11 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             const a = Number(log.amount) || 0;
                                             const rep = log.reportId ? reports.find((r: any) => r.id === log.reportId) : null;
                                             if (t.indexOf('未払い充当') === 0) return 0;
+                                            // ⭐ 自動修復: 「利用(過去分・直接入金)」で関連業務報告が未入金なら未払い扱いに転換
+                                            //   (過去分インポート時に直接入金として記録されていたが実は未払いだったケース)
+                                            if (t.indexOf('利用') === 0 && t.indexOf('過去分') >= 0 && t.indexOf('直接入金') >= 0 && t.indexOf('未払') < 0) {
+                                                if (rep && !rep.isPaid) return -rep.totalSales;
+                                            }
                                             if (t.indexOf('利用(一部引落)') === 0 && rep) return -rep.totalSales;
                                             // 利用系で未払いを含むものすべて（利用(未払い), 利用(過去分・未払い), 利用(過去分・未払い・要確認) 等）
                                             if (t.indexOf('利用') === 0 && t.indexOf('未払い') >= 0 && rep) return -rep.totalSales;
@@ -2818,6 +2823,12 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 paymentMethod = '直接入金';
                                                 paymentColor = 'bg-sky-50 text-sky-700 border-sky-200';
                                             } else if (type.indexOf('未払い') >= 0) {
+                                                paymentMethod = '未払い';
+                                                paymentColor = 'bg-red-50 text-red-700 border-red-200';
+                                            }
+                                            // ⭐ 関連業務報告が未入金なら、支払手段は「未払い」に強制上書き
+                                            //   （過去分・直接入金行が未入金報告にぶら下がっている矛盾表示を解消）
+                                            if (relatedReportForCalc && !relatedReportForCalc.isPaid && isUsage) {
                                                 paymentMethod = '未払い';
                                                 paymentColor = 'bg-red-50 text-red-700 border-red-200';
                                             }
