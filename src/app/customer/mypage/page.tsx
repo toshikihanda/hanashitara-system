@@ -21,6 +21,7 @@ interface HistoryItem {
     depositBalance?: number;
     // 通帳用残高
     runningBalance?: number;
+    rowEffect?: number;
 }
 
 export default function CustomerMyPage() {
@@ -28,6 +29,7 @@ export default function CustomerMyPage() {
     const [customerPhone, setCustomerPhone] = useState('');
     const [customerName, setCustomerName] = useState('');
     const [balance, setBalance] = useState<number | null>(null);
+    const [unpaidTotal, setUnpaidTotal] = useState<number>(0);
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeFilter, setActiveFilter] = useState<'all' | 'usage' | 'charge'>('all');
@@ -42,6 +44,7 @@ export default function CustomerMyPage() {
 
             if (data.success) {
                 setBalance(data.balance ?? 0);
+                setUnpaidTotal(data.unpaidTotal ?? 0);
                 setHistory(data.history ?? []);
                 if (data.customerName) setCustomerName(data.customerName);
             } else {
@@ -167,10 +170,20 @@ export default function CustomerMyPage() {
             <main className="max-w-lg mx-auto px-4 py-6 space-y-5">
                 {/* 残高カード */}
                 <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] shadow-sm p-5">
-                    <p className="text-xs text-[var(--muted)] mb-1">デポジット残高</p>
-                    <p className={`text-3xl font-bold tracking-tight ${(balance ?? 0) < 0 ? 'text-red-500' : 'text-[var(--foreground)]'}`}>
-                        ¥{(balance ?? 0).toLocaleString()}
-                    </p>
+                    <div className="flex items-end justify-between gap-4">
+                        <div>
+                            <p className="text-xs text-[var(--muted)] mb-1">デポジット残高</p>
+                            <p className={`text-3xl font-bold tracking-tight ${(balance ?? 0) < 0 ? 'text-red-500' : 'text-[var(--foreground)]'}`}>
+                                ¥{(balance ?? 0).toLocaleString()}
+                            </p>
+                        </div>
+                        {unpaidTotal > 0 && (
+                            <div className="text-right">
+                                <p className="text-[10px] text-[var(--muted)] mb-1">未払い合計</p>
+                                <p className="text-lg font-bold text-red-500">¥{unpaidTotal.toLocaleString()}</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* フィルタータブ */}
@@ -218,6 +231,8 @@ export default function CustomerMyPage() {
                                         const debit = getDebitAmount(item);
                                         const itemBalance = item.runningBalance ?? 0;
                                         const paymentLabel = getPaymentLabel(item);
+                                        // 残高が動かない行（過去分直接入金等）は残高列を非表示にする
+                                        const hideBalance = (item.rowEffect ?? (credit - debit)) === 0;
 
                                         return (
                                             <tr
@@ -253,9 +268,9 @@ export default function CustomerMyPage() {
                                                     {debit > 0 ? `-¥${debit.toLocaleString()}` : ''}
                                                 </td>
                                                 <td className={`px-3 py-2.5 text-right font-bold align-top whitespace-nowrap ${
-                                                    itemBalance < 0 ? 'text-red-500' : 'text-[var(--foreground)]'
+                                                    hideBalance ? 'text-gray-300 dark:text-gray-600' : itemBalance < 0 ? 'text-red-500' : 'text-[var(--foreground)]'
                                                 }`}>
-                                                    ¥{itemBalance.toLocaleString()}
+                                                    {hideBalance ? '—' : `¥${itemBalance.toLocaleString()}`}
                                                 </td>
                                             </tr>
                                         );

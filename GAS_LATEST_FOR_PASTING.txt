@@ -1762,6 +1762,7 @@ function doGet(e) {
       }
 
       // 利用履歴（業務報告シートから）
+      let unpaidTotal = 0;
       const reportSheet = ss.getSheetByName('業務報告');
       if (reportSheet) {
         const repData = reportSheet.getDataRange().getValues();
@@ -1772,45 +1773,70 @@ function doGet(e) {
             const repDate = repData[i][1] instanceof Date
               ? Utilities.formatDate(repData[i][1], "JST", "yyyy/MM/dd HH:mm:ss")
               : String(repData[i][1]);
+            const isPaid = repData[i][8] === '入金済';
+            const billing = Number(repData[i][11]) || 0;
+            const totalS = Number(repData[i][6]) || 0;
+            const depUsed = Number(repData[i][10]) || 0;
+            if (!isPaid) {
+              // 未払い合計: 差引請求額 優先、無ければ（総売上 - デポジット使用額）
+              unpaidTotal += billing > 0 ? billing : Math.max(0, totalS - depUsed);
+            }
             history.push({
               date: repDate,
               type: 'usage',
               staffName: repData[i][2],
-              amount: Number(repData[i][6]) || 0,
+              amount: totalS,
               serviceSummary: repData[i][5],
-              isPaid: repData[i][8] === '入金済',
-              depositUsed: Number(repData[i][10]) || 0,
-              billingAmount: Number(repData[i][11]) || 0
+              isPaid: isPaid,
+              depositUsed: depUsed,
+              billingAmount: billing
             });
           }
         }
       }
 
-      // 安定ソート（降順）: 最新が上
+      // 安定ソート（昇順）: 古い順にして順算で帳簿残高を計算
       history.sort(function(a, b) {
-        const diff = new Date(b.date).getTime() - new Date(a.date).getTime();
+        const diff = new Date(a.date).getTime() - new Date(b.date).getTime();
         if (diff !== 0) return diff;
-        // 同じ日時の場合は、利用（usage）を先に、チャージ系を後にする（逆算用）
-        if (a.type === 'usage' && b.type !== 'usage') return -1;
-        if (a.type !== 'usage' && b.type === 'usage') return 1;
+        // 同じ日時: チャージ系を先に、利用を後にする（順算で自然な順序）
+        if (a.type !== 'usage' && b.type === 'usage') return -1;
+        if (a.type === 'usage' && b.type !== 'usage') return 1;
         return 0;
       });
 
-      // 通帳形式の残高計算（逆算方式：現在の完璧な残高から過去へ引いていく）
-      let rollingBalance = balance;
+      // 通帳形式の帳簿残高計算（順算方式：最上行=0 起点でイベントごとに積み上げ）
+      //  - チャージ/deposit_op: +chargeAmount（ただし直接入金確認は金額をラベル「直接入金確認(¥3,000)」から抽出）
+      //  - 利用: -totalSales（デポジット引落・未払いを問わず、帳簿残高は総売上分だけ減る）
+      //  - 未払い充当: 0（チャージ行に既に含まれる情報行）
+      let ledger = 0;
       history.forEach(function(item) {
-        item.runningBalance = rollingBalance;
-        // 過去へ戻るため、増えた分(チャージ等)は引き、減った分(利用)は足す
-        if (item.type === 'charge' || item.type === 'deposit_op') {
-          rollingBalance -= (item.chargeAmount || 0);
-        } else if (item.type === 'usage') {
-          rollingBalance += (item.depositUsed || 0);
+        let effect = 0;
+        if (item.type === 'usage') {
+          effect = -(Number(item.amount) || 0);
+        } else {
+          // charge または deposit_op
+          const dt = String(item.depositType || '');
+          if (dt.indexOf('未払い充当') === 0) {
+            effect = 0;
+          } else if (dt.indexOf('直接入金確認') === 0) {
+            const m = dt.match(/¥([\d,]+)/);
+            effect = m ? parseInt(m[1].replace(/,/g, ''), 10) : 0;
+          } else {
+            effect = Number(item.chargeAmount) || 0;
+          }
         }
+        ledger += effect;
+        item.runningBalance = ledger;
+        item.rowEffect = effect; // フロント側で effect=0 の行を判定するため
       });
+      // 表示は降順（最新が上）に並び直す。runningBalance は各行に固定済み。
+      history.reverse();
 
       return output.setContent(JSON.stringify({
         success: true,
         balance: balance,
+        unpaidTotal: unpaidTotal,
         customerName: customerName,
         history: history
       }));

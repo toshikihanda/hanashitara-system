@@ -953,11 +953,16 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
         const callCount = customerReports.length;
         const monthlyReports = monthReports.filter(matches);
         const monthlyAmount = monthlyReports.reduce((sum, r) => sum + r.totalSales, 0);
+        // 未払い合計: 業務報告の isPaid=false の差引請求額を合算
+        const unpaidTotal = customerReports
+            .filter(r => !r.isPaid)
+            .reduce((sum, r) => sum + (Number(r.billingAmount) || Math.max(0, (Number(r.totalSales) || 0) - (Number(r.depositUsed) || 0))), 0);
 
         return {
             name: customer.name,
             phone,
             balance,
+            unpaidTotal,
             totalPaid: customer.totalPaid,
             registeredDate: customer.registeredDate,
             customerNumber: index + 1,
@@ -2039,7 +2044,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                 <div className="md:hidden p-3 space-y-3">
                                     {customerList.length === 0 ? (
                                         <p className="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">データがありません。上の「＋ 追加する」ボタンから顧客を追加してください。</p>
-                                    ) : customerList.map(({ name: customerName, phone, registeredDate, callCount, monthlyAmount, totalPaid, balance }) => {
+                                    ) : customerList.map(({ name: customerName, phone, registeredDate, callCount, monthlyAmount, totalPaid, balance, unpaidTotal }) => {
                                         const isBlacklisted = phone && phone !== '登録なし' && blacklistedPhones.some(bl => normalizePhone(bl) === normalizePhone(phone));
                                         return (
                                             <div key={`${customerName}-${phone}`} className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border border-gray-100 dark:border-gray-700 space-y-3">
@@ -2048,7 +2053,14 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         <span className="font-bold text-gray-900 dark:text-gray-100">{customerName}</span>
                                                         {isBlacklisted && <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold border border-red-200">NG</span>}
                                                     </div>
-                                                    <span className={`font-bold text-sm ${balance > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`}>¥{balance.toLocaleString()}</span>
+                                                    <div className="flex items-center gap-2">
+                                                        {unpaidTotal > 0 && (
+                                                            <span className="text-[11px] font-bold text-red-600 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 px-1.5 py-0.5 rounded" title="未払い合計">
+                                                                未払 ¥{unpaidTotal.toLocaleString()}
+                                                            </span>
+                                                        )}
+                                                        <span className={`font-bold text-sm ${balance > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`}>¥{balance.toLocaleString()}</span>
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
                                                     <span>{phone && phone !== '登録なし' ? formatPhone(phone) : phone}</span>
@@ -2110,6 +2122,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 <th className="px-4 py-3 font-medium text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onClick={() => setCustomerSortBy('call_count_desc')}>通話回数 {customerSortBy === 'call_count_desc' ? '▼' : ''}</th>
                                                 <th className="px-4 py-3 font-medium text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onClick={() => setCustomerSortBy('monthly_amount_desc')}>今月の通話利用額 {customerSortBy === 'monthly_amount_desc' ? '▼' : ''}</th>
                                                 <th className="px-4 py-3 font-medium text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onClick={() => setCustomerSortBy('paid_desc')}>累計利用額 {customerSortBy === 'paid_desc' ? '▼' : ''}</th>
+                                                <th className="px-4 py-3 font-medium text-right">未払い</th>
                                                 <th className="px-4 py-3 font-medium text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onClick={() => setCustomerSortBy('balance_desc')}>デポジット残高 {customerSortBy === 'balance_desc' ? '▼' : ''}</th>
                                                 <th className="px-4 py-3 font-medium text-center">操作</th>
                                             </tr>
@@ -2117,12 +2130,12 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                         <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                             {customerList.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={8} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500">
+                                                    <td colSpan={9} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500">
                                                         データがありません。上の「＋ 追加する」ボタンから顧客を追加してください。
                                                     </td>
                                                 </tr>
                                             ) : (
-                                                customerList.map(({ name: customerName, phone, registeredDate, customerNumber, callCount, monthlyAmount, totalPaid, balance }) => (
+                                                customerList.map(({ name: customerName, phone, registeredDate, customerNumber, callCount, monthlyAmount, totalPaid, balance, unpaidTotal }) => (
                                                     <tr key={`${customerName}-${phone}`} className="hover:bg-gray-50/50 dark:bg-gray-800/50 transition-colors">
                                                         <td className="px-4 py-3">
                                                             <div className="flex items-center gap-2">
@@ -2148,6 +2161,13 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                         </td>
                                                         <td className="px-4 py-3 text-right">
                                                             <span className="text-gray-900 dark:text-gray-100 font-bold">¥{totalPaid.toLocaleString()}</span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            {unpaidTotal > 0 ? (
+                                                                <span className="font-bold text-red-600 dark:text-red-400">¥{unpaidTotal.toLocaleString()}</span>
+                                                            ) : (
+                                                                <span className="text-gray-300 dark:text-gray-600">—</span>
+                                                            )}
                                                         </td>
                                                         <td className="px-4 py-3 text-right">
                                                             <span className={`font-bold ${balance > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400 dark:text-gray-500'}`}>
@@ -2628,42 +2648,54 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 return b.origIdx - a.origIdx;
                                             })
                                             .map(x => x.log);
-                                        // ⭐ 逆算方式: 最下行(最新)の残高 = 現在のデポジット残高(権威値) に固定し、
-                                        //   そこから1行ずつ上に遡って「その時点の残高」を推定する。
-                                        //   こうすれば通帳最下行が必ずダッシュボード残高と一致し、過去履歴の欠損に依存しなくなる。
+                                        // ⭐ 順算方式（通帳本来の姿）: 最上行(最古)を ¥0 起点として、
+                                        //   各行の effect を足していく。通帳は正直な「取引の累積」になる。
+                                        //   最終行の残高 = 前払い管理残高 − 未払い合計 になるのが理想（データ整合性）。
                                         const currentDepositBalance = getCustomerBalance(customer, customerPhoneForHistory);
+                                        // 当該顧客の未払い合計（業務報告の isPaid=false の差引請求額）
+                                        const currentUnpaidTotal = filteredCustomerReports
+                                            .filter(r => !r.isPaid)
+                                            .reduce((sum, r) => sum + (Number(r.billingAmount) || Math.max(0, (Number(r.totalSales) || 0) - (Number(r.depositUsed) || 0))), 0);
+                                        const expectedFinalBalance = currentDepositBalance - currentUnpaidTotal;
                                         // 各行の「この行のイベントが帳簿残高にもたらす変化量(effect)」を計算
                                         //  - チャージ系: +amount (そのまま)
                                         //  - 利用(自動引落): +amount (負の値)
                                         //  - 利用(一部引落): -totalSales (売上満額引き)
-                                        //  - 利用(未払い): -totalSales
+                                        //  - 利用(未払い)/利用(過去分・未払い)系: -totalSales
                                         //  - 直接入金確認: +billingAmount (未払い帳消し)
                                         //  - 未払い充当: 0 (情報行。チャージ行に既に含まれる)
                                         //  - 残高調整/報告削除による返還/報告編集(追加/返還): +amount
-                                        //  - 利用(過去分): +amount (バックフィル分、amount 自体が -depositUsed や 0)
+                                        //  - 利用(過去分・直接入金): 0 (過去に現金精算済み、残高に影響なし)
+                                        //  - 利用(過去分・デポジット引落): amount(負)で記録済み → そのまま
                                         const computeEffect = (log: any) => {
                                             const t = String(log.type || '');
                                             const a = Number(log.amount) || 0;
                                             const rep = log.reportId ? reports.find((r: any) => r.id === log.reportId) : null;
                                             if (t.indexOf('未払い充当') === 0) return 0;
                                             if (t.indexOf('利用(一部引落)') === 0 && rep) return -rep.totalSales;
-                                            if (t.indexOf('利用(未払い)') === 0 && rep) return -rep.totalSales;
+                                            // 利用系で未払いを含むものすべて（利用(未払い), 利用(過去分・未払い), 利用(過去分・未払い・要確認) 等）
+                                            if (t.indexOf('利用') === 0 && t.indexOf('未払い') >= 0 && rep) return -rep.totalSales;
                                             if (t.indexOf('直接入金確認') === 0 && rep) {
                                                 const billed = Number(rep.billingAmount) || (rep.totalSales - (rep.depositUsed || 0));
                                                 return billed;
                                             }
                                             return a;
                                         };
-                                        // 逆算: 最下行から上へ。rowN.balance = currentDeposit, rowN-1.balance = rowN.balance - rowN.effect
+                                        // 順算: 最上行から下へ。bal += effect。
                                         const perRowBalance: number[] = new Array(chronological.length);
+                                        const perRowEffect: number[] = new Array(chronological.length);
                                         {
-                                            let bal = currentDepositBalance;
-                                            for (let i = chronological.length - 1; i >= 0; i--) {
-                                                perRowBalance[i] = bal;
+                                            let bal = 0;
+                                            for (let i = 0; i < chronological.length; i++) {
                                                 const effect = computeEffect(chronological[i]);
-                                                bal -= effect;
+                                                perRowEffect[i] = effect;
+                                                bal += effect;
+                                                perRowBalance[i] = bal;
                                             }
                                         }
+                                        // データ整合性チェック（ズレがあっても表示はそのまま。ドリフトは UI 側で後述の警告に活用可能）
+                                        const computedFinalBalance = chronological.length ? perRowBalance[chronological.length - 1] : 0;
+                                        const balanceDrift = computedFinalBalance - expectedFinalBalance;
                                         const entriesWithBalance = chronological.map((log: any, i: number) => {
                                             const type = String(log.type || '');
                                             const amount = Number(log.amount) || 0;
@@ -2672,6 +2704,9 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                             const needsReview = type.indexOf('要確認') >= 0;
                                             const relatedReportForCalc = log.reportId ? reports.find(r => r.id === log.reportId) : null;
                                             const runningBalance = perRowBalance[i];
+                                            const effect = perRowEffect[i];
+                                            // 残高が動かない行（過去分直接入金、reportIdなしの直接入金確認など）は残高列を非表示にする
+                                            const hideBalance = effect === 0;
                                             // 支払手段バッジ
                                             let paymentMethod = '';
                                             let paymentColor = '';
@@ -2741,6 +2776,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                 gasBalance: Number(log.balance) || 0,
                                                 sourceIndex: i,
                                                 balance: runningBalance,
+                                                hideBalance,
                                                 paymentMethod,
                                                 paymentMethodColor: paymentColor,
                                                 isBackfill,
@@ -2924,7 +2960,7 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                     <span className={`text-sm font-bold ${entry.amount >= 0 ? 'text-indigo-600' : 'text-orange-600'}`}>
                                                                         {entry.amount >= 0 ? '+' : ''}{entry.amount.toLocaleString()}
                                                                     </span>
-                                                                    {entry.type === 'deposit' && <span className="text-xs font-bold text-gray-800 dark:text-gray-200">残 ¥{entry.balance.toLocaleString()}</span>}
+                                                                    {entry.type === 'deposit' && !entry.hideBalance && <span className={`text-xs font-bold ${entry.balance < 0 ? 'text-red-600' : 'text-gray-800 dark:text-gray-200'}`}>残 ¥{entry.balance.toLocaleString()}</span>}
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -3002,8 +3038,8 @@ ${new Date(report.date).toLocaleDateString('ja-JP')} にご利用いただきま
                                                                             ? <span className="text-[11px] text-emerald-600 italic">(チャージから充当)</span>
                                                                             : entry.debitAmount > 0 ? `-¥${entry.debitAmount.toLocaleString()}` : ''}
                                                                     </td>
-                                                                    <td className={`px-3 py-2 text-right font-bold ${entry.balance < 0 ? 'text-red-600' : 'text-gray-800 dark:text-gray-200'}`}>
-                                                                        ¥{entry.balance.toLocaleString()}
+                                                                    <td className={`px-3 py-2 text-right font-bold ${entry.hideBalance ? 'text-gray-300 dark:text-gray-600' : entry.balance < 0 ? 'text-red-600' : 'text-gray-800 dark:text-gray-200'}`}>
+                                                                        {entry.hideBalance ? '—' : `¥${entry.balance.toLocaleString()}`}
                                                                     </td>
                                                                     <td className="px-3 py-2 text-center whitespace-nowrap">
                                                                         {!isSettlement && entry.type === 'usage' && entry.reportId && (
