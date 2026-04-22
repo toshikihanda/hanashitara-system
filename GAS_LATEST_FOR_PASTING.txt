@@ -580,7 +580,26 @@ function doPost(e) {
           }
 
           // 入金済に変更した場合、デポジット履歴に「直接入金」として記録＋スタッフにメール通知
+          // 未入金に戻した場合、既存の「直接入金確認」履歴行を削除（整合性保持）
           let emailSent = false;
+          if (!data.isPaid) {
+            // ★ 未入金に戻すとき: 該当 reportId の「直接入金確認」履歴行を削除
+            //   これをしないと、通帳に +billing 効果が残り続け、ダッシュボード未払いとズレる。
+            try {
+              const histSheet = ss.getSheetByName('デポジット履歴');
+              if (histSheet) {
+                const histData = histSheet.getDataRange().getValues();
+                // 末尾から走査して複数該当行があっても安全に削除
+                for (let k = histData.length - 1; k >= 1; k--) {
+                  const rowType = String(histData[k][4] || '');
+                  const rowRelId = String(histData[k][6] || '').trim();
+                  if (rowType.indexOf('直接入金確認') === 0 && rowRelId === String(targetId)) {
+                    histSheet.deleteRow(k + 1);
+                  }
+                }
+              }
+            } catch (cleanupErr) { /* 履歴削除失敗でも本体処理は続行 */ }
+          }
           if (data.isPaid) {
             const staffName = values[i][2]; // C列: スタッフ名
             const customerName = values[i][4]; // E列: 顧客名
@@ -600,6 +619,16 @@ function doPost(e) {
                 if (!histSheet) {
                   histSheet = ss.insertSheet('デポジット履歴');
                   histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
+                }
+                // ★ 入金済→未入金→入金済の再切替や旧バグ由来の重複を避けるため、
+                //    同じ reportId の既存「直接入金確認」行を先に削除してから追加する
+                const existingHist = histSheet.getDataRange().getValues();
+                for (let k = existingHist.length - 1; k >= 1; k--) {
+                  const rowType = String(existingHist[k][4] || '');
+                  const rowRelId = String(existingHist[k][6] || '').trim();
+                  if (rowType.indexOf('直接入金確認') === 0 && rowRelId === String(targetId)) {
+                    histSheet.deleteRow(k + 1);
+                  }
                 }
                 // 現在のデポジット残高を取得（残高自体は変動しない。参照用として記録）
                 const currentBal = paidPhone ? getCustomerBalanceByPhone(ss, paidPhone) : getCustomerBalance(ss, customerName);
