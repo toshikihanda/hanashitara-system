@@ -1232,6 +1232,84 @@ function doPost(e) {
       return output.setContent(JSON.stringify({ success: true, newBalance: newBalance }));
     }
 
+    // ⑥-2b 未払い残高の強制上書き（帳簿上の未払い合計を信頼境界として設定）
+    //   前払い管理シートのD列（未払い調整）にオフセットを記録し、
+    //   総未払い = (業務報告の未入金分の差引請求額合計) + (D列の未払い調整額) で表現する。
+    //   デポジット履歴にも「未払い調整」行を追加（通帳で可視化）。
+    if (action === 'fixUnpaidBalance') {
+      const sheet = ss.getSheetByName('前払い管理');
+      let historySheet = ss.getSheetByName('デポジット履歴');
+      if (!historySheet) {
+        historySheet = ss.insertSheet('デポジット履歴');
+        historySheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
+      }
+      if (!sheet) {
+        if (lock) lock.releaseLock();
+        return output.setContent(JSON.stringify({ success: false, message: '前払い管理シートがありません' }));
+      }
+
+      // ヘッダーに「未払い調整」列が無ければ D列に追加
+      const headerRow = sheet.getRange(1, 1, 1, Math.max(4, sheet.getLastColumn())).getValues()[0];
+      if (!headerRow[3] || String(headerRow[3]).trim() === '') {
+        sheet.getRange(1, 4).setValue('未払い調整');
+      }
+
+      const customerName = String(data.customerName).trim();
+      const fixPhone = normalizePhoneGAS(data.customerPhone);
+      const newUnpaid = Number(data.newUnpaid) || 0; // 新しい未払い合計
+      const values = sheet.getDataRange().getValues();
+      let targetRow = -1;
+      let currentBal = 0;
+      let oldAdjustment = 0;
+
+      for (let i = 1; i < values.length; i++) {
+        if ((fixPhone && normalizePhoneGAS(values[i][1]) === fixPhone) || (!fixPhone && String(values[i][0]).trim() === customerName)) {
+          targetRow = i + 1;
+          currentBal = Number(values[i][2]) || 0;
+          oldAdjustment = Number(values[i][3]) || 0;
+          break;
+        }
+      }
+
+      if (targetRow === -1) {
+        if (lock) lock.releaseLock();
+        return output.setContent(JSON.stringify({ success: false, message: '顧客が見つかりません' }));
+      }
+
+      // 業務報告から現在の未入金合計（差引請求額ベース）を集計
+      let reportUnpaid = 0;
+      const repSheet = ss.getSheetByName('業務報告');
+      if (repSheet && fixPhone) {
+        const rv = repSheet.getDataRange().getValues();
+        for (let i = 1; i < rv.length; i++) {
+          if (normalizePhoneGAS(rv[i][3]) === fixPhone && rv[i][8] === '未入金') {
+            reportUnpaid += Number(rv[i][11]) || 0;
+          }
+        }
+      }
+
+      const newAdjustment = newUnpaid - reportUnpaid;
+      const delta = newAdjustment - oldAdjustment; // 履歴に記録するためのデルタ（未払い増減）
+      sheet.getRange(targetRow, 4).setValue(newAdjustment);
+
+      // デポジット履歴に「未払い調整」行を追加（残高はデポジットを変えないので currentBal 据え置き）
+      historySheet.appendRow([nowJST(), customerName, "'" + fixPhone, delta, '未払い調整', currentBal, '']);
+
+      // 操作ログ
+      try {
+        const auditSheet = getOrCreateAuditLogSheet(ss);
+        auditSheet.appendRow([nowJST(), '未払い残高の調整', customerName, '', '未払い合計を ¥' + reportUnpaid.toLocaleString() + ' + 調整' + (newAdjustment >= 0 ? '+' : '') + newAdjustment.toLocaleString() + ' = ¥' + newUnpaid.toLocaleString() + ' に設定']);
+      } catch (logErr) { /* ログ失敗は継続 */ }
+
+      if (lock) lock.releaseLock();
+      return output.setContent(JSON.stringify({
+        success: true,
+        newUnpaid: newUnpaid,
+        reportUnpaid: reportUnpaid,
+        adjustment: newAdjustment
+      }));
+    }
+
     // ⑥-3 デポジット履歴の個別削除（残高自動連動）
     if (action === 'deleteDepositHistory') {
       const historySheet = ss.getSheetByName("デポジット履歴");
@@ -1621,11 +1699,13 @@ function doGet(e) {
       const phones = {};
       const depositsByPhone = {};
       const namesByPhone = {};
+      const unpaidAdjustmentByPhone = {}; // D列: 未払い調整額
       if (data.length > 1) {
         for (let i = 1; i < data.length; i++) {
           const name = String(data[i][0] || '').trim();
           const phone = normalizePhoneGAS(data[i][1]);
           const balance = data[i][2];
+          const adjustment = Number(data[i][3]) || 0; // D列: 未払い調整
           const normalizedBalance = Number(balance) || 0;
 
           // 電話番号主キーの残高マップ（最優先）
@@ -1634,6 +1714,9 @@ function doGet(e) {
           }
           if (phone && name && !namesByPhone[phone]) {
             namesByPhone[phone] = name;
+          }
+          if (phone && unpaidAdjustmentByPhone[phone] === undefined) {
+            unpaidAdjustmentByPhone[phone] = adjustment;
           }
 
           // 後方互換: 名前キーのマップも返す（重複名の場合は最初の1件のみ）
@@ -1673,12 +1756,13 @@ function doGet(e) {
         }
       }
 
-      return output.setContent(JSON.stringify({ 
-        success: true, 
-        deposits: deposits, 
-        phones: phones, 
+      return output.setContent(JSON.stringify({
+        success: true,
+        deposits: deposits,
+        phones: phones,
         depositsByPhone: depositsByPhone,
         namesByPhone: namesByPhone,
+        unpaidAdjustmentByPhone: unpaidAdjustmentByPhone,
         passwords: passwords,
         passwordsByPhone: passwordsByPhone,
         registerDatesByPhone: registerDatesByPhone
@@ -1703,8 +1787,9 @@ function doGet(e) {
       }
       if (!customerName) return output.setContent(JSON.stringify({ success: false, message: '顧客が見つかりません' }));
 
-      // 残高を取得
+      // 残高と未払い調整を取得
       let balance = 0;
+      let unpaidAdjustment = 0;
       const depSheet = ss.getSheetByName('前払い管理');
       if (depSheet) {
         const depData = depSheet.getDataRange().getValues();
@@ -1712,6 +1797,7 @@ function doGet(e) {
         for (let i = 1; i < depData.length; i++) {
           if (normalizePhoneGAS(depData[i][1]) === phone) {
             balance = Number(depData[i][2]) || 0;
+            unpaidAdjustment = Number(depData[i][3]) || 0;
             foundByPhone = true;
             break;
           }
@@ -1721,6 +1807,7 @@ function doGet(e) {
           for (let i = 1; i < depData.length; i++) {
             if (String(depData[i][0]).trim() === customerName) {
               balance = Number(depData[i][2]) || 0;
+              unpaidAdjustment = Number(depData[i][3]) || 0;
               break;
             }
           }
@@ -1827,6 +1914,9 @@ function doGet(e) {
         } else {
           if (dt.indexOf('未払い充当') === 0) {
             effect = 0;
+          } else if (dt.indexOf('未払い調整') === 0) {
+            // 未払い調整: 増減額が「未払いの増加量」。帳簿残高への影響はマイナス方向。
+            effect = -(Number(item.chargeAmount) || 0);
           } else if (dt.indexOf('直接入金確認') === 0) {
             const m = dt.match(/¥([\d,]+)/);
             effect = m ? parseInt(m[1].replace(/,/g, ''), 10) : 0;
@@ -1841,10 +1931,13 @@ function doGet(e) {
       // 表示は降順（最新が上）に並び直す。runningBalance は各行に固定済み。
       history.reverse();
 
+      // 未払い調整額を合算（オーナーが「未払いを上書き」で設定したオフセット）
+      const effectiveUnpaidTotal = unpaidTotal + unpaidAdjustment;
       return output.setContent(JSON.stringify({
         success: true,
         balance: balance,
-        unpaidTotal: unpaidTotal,
+        unpaidTotal: effectiveUnpaidTotal,
+        unpaidAdjustment: unpaidAdjustment,
         customerName: customerName,
         history: history
       }));
