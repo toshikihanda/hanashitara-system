@@ -12,11 +12,12 @@
   GAS側のコードを変更した際、絶対に「新しいデプロイ」を選んでURLを変更してはいけません。フロントエンドとの通信が壊れます。
   **【正しいGAS上書き手順】: 「デプロイを管理」を選択 → 左側の現在アクティブなデプロイを選択して「鉛筆マーク（編集）」を押す → バージョンを「新バージョン」に変更して「デプロイ」を押す。** これを厳守してください。
 
-- **GAS コード変更時は必ずクリッカブルリンクを提示する:**
-  `GAS_LATEST_FOR_PASTING.txt` を編集した場合（= GAS側の更新がある場合）、完了報告の中で **相対パスのマークダウンリンク形式** で提示する。絶対パスや `file:///` URL はClaude Code の UI でクリック出来ないので NG。
-  - 正しい書式: `[GAS_LATEST_FOR_PASTING.txt](GAS_LATEST_FOR_PASTING.txt)`
-  - NG書式: `[...](file:///C:/Users/.../GAS_LATEST_FOR_PASTING.txt)` や絶対パスのコードブロック表示のみ
-  - タイミング: commit・push・Vercel 確認が終わった後、完了報告の最後に貼る
+- **GAS コード変更時は必ずクリッカブルリンクを提示する（毎回・例外なし）:**
+  `GAS_LATEST_FOR_PASTING.txt` を編集した場合（= GAS側の更新がある場合）、**完了報告の中で毎回必ず** 以下の書式でリンクを貼る。この書式ならはんださんがクリック一発で開けてコピーできる（検証済み）。
+  - **【必須書式】**: `[GAS_LATEST_FOR_PASTING.txt](GAS_LATEST_FOR_PASTING.txt)`
+    → Claude Code の UI で下線付き青リンクとして表示され、クリックでファイルが開く
+  - NG書式: `[...](file:///C:/Users/.../GAS_LATEST_FOR_PASTING.txt)` や絶対パスをコードブロックで貼るだけ（どちらもクリック不可）
+  - タイミング: commit・push・Vercel 確認が終わった後、完了報告の最後に「**📂 GAS コード全文:** [GAS_LATEST_FOR_PASTING.txt](GAS_LATEST_FOR_PASTING.txt)」の形で貼る
   - フロントのみの変更で GAS に触っていない場合は不要
 
 - **バグ修正の原則:**
