@@ -367,6 +367,21 @@ function doPost(e) {
           ]);
           _reportRowNum = reportSheet.getLastRow();
 
+          // ★ 対策①: 強制フラッシュ（appendRow のサイレント失敗対策）
+          // GAS の appendRow は内部バッファに積まれるだけで、関数終了時に一括フラッシュされる。
+          // 高負荷時やデプロイ直後はこのフラッシュが失敗し、例外を投げずに書き込みが消える現象がある。
+          // 明示的にフラッシュを呼ぶことで書き込みを即座に永続化する。
+          SpreadsheetApp.flush();
+
+          // ★ 対策②: 検証読み直し（書き込み後の永続化確認）
+          // フラッシュ後、実際に最後の行のIDが newId と一致するかを確認する。
+          // 一致しない場合は「appendRow が成功ステータスを返したが永続化されなかった」ケースなので、
+          // 明示的に例外を投げてロールバック処理に乗せる。
+          const verifyId = String(reportSheet.getRange(_reportRowNum, 1).getValue() || '').trim();
+          if (verifyId !== newId) {
+            throw new Error('業務報告の永続化検証に失敗: 期待ID=' + newId + ' 実際ID=' + verifyId + ' 行番号=' + _reportRowNum);
+          }
+
           // --- 書き込み② 前払い管理残高の更新 ---
           if (depositCase === 'full' && depositRowIdx > 0) {
             _depositRestore = { rowIdx: depositRowIdx, oldBalance: currentDeposit };
@@ -390,6 +405,9 @@ function doPost(e) {
             histSheet.appendRow([nowJST(), customerName, "'" + customerPhone, 0, '利用(未払い)', depositCase === 'no-customer' ? 0 : currentDeposit, newId]);
           }
           // depositCase === 'no-phone-or-zero-sales': 履歴なし（仕様）
+
+          // ★ 対策①: 前払い管理・デポジット履歴もフラッシュして永続化を保証
+          SpreadsheetApp.flush();
         } catch (writeErr) {
           _writeError = writeErr;
           _writeErrorStep = _reportRowNum < 0 ? '業務報告の登録' : (_depositRestore ? 'デポジット履歴の記録' : '前払い管理残高の更新');
@@ -2073,4 +2091,248 @@ function doGet(e) {
   } catch (error) {
     return output.setContent(JSON.stringify({ success: false, error: error.toString() }));
   }
+}
+
+// ============================================================================
+// ★ 日次ヘルスチェック（毎朝6:00に自動実行・チャットワーク通知）
+// ============================================================================
+// セットアップ手順:
+// 1. GASエディタ左メニューの歯車「プロジェクトの設定」→「スクリプト プロパティ」
+//    - CHATWORK_TOKEN: チャットワークAPIトークン
+//    - CHATWORK_ROOM_ID: 通知先のルームID（マイチャット等）
+// 2. GASエディタ左メニューの「トリガー」→「+ トリガーを追加」
+//    - 実行する関数: dailyHealthCheck
+//    - イベントのソース: 時間主導型
+//    - 時間ベースのトリガーのタイプ: 日付ベースのタイマー
+//    - 時刻: 午前6時〜7時
+//
+// 手動実行でテストしたい場合: 関数 dailyHealthCheck を選択して実行
+
+function dailyHealthCheck() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const today = new Date();
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  const yStr = Utilities.formatDate(yesterday, "JST", "yyyy/MM/dd");
+  const tStr = Utilities.formatDate(today, "JST", "yyyy/MM/dd HH:mm");
+
+  const issues = [];   // 🚨 要対応（今すぐ）
+  const warnings = []; // ⚠️ 注意事項
+  const stats = [];    // ✅ 正常サマリー
+
+  // --- シート取得 ---
+  const reportSheet = ss.getSheetByName('業務報告');
+  const histSheet = ss.getSheetByName('デポジット履歴');
+  const depSheet = ss.getSheetByName('前払い管理');
+  const auditSheet = ss.getSheetByName('操作ログ');
+
+  const reportVals = reportSheet ? reportSheet.getDataRange().getValues() : [];
+  const histVals = histSheet ? histSheet.getDataRange().getValues() : [];
+  const depVals = depSheet ? depSheet.getDataRange().getValues() : [];
+  const auditVals = auditSheet ? auditSheet.getDataRange().getValues() : [];
+
+  // --- 日付判定ヘルパー ---
+  const isYesterday = function(dVal) {
+    if (!dVal) return false;
+    let dStr = '';
+    if (dVal instanceof Date) dStr = Utilities.formatDate(dVal, "JST", "yyyy/MM/dd");
+    else dStr = String(dVal).slice(0, 10).replace(/-/g, '/');
+    return dStr === yStr || dStr === yStr.replace(/\//g, '-');
+  };
+
+  // ========================================================================
+  // ① 孤立デポジット履歴の検出（最重要）
+  //    デポジット履歴に関連IDがあるのに業務報告にそのIDがない = 今回のバグパターン
+  // ========================================================================
+  const reportIdSet = new Set();
+  for (let i = 1; i < reportVals.length; i++) {
+    const rid = String(reportVals[i][0] || '').trim();
+    if (rid) reportIdSet.add(rid);
+  }
+
+  const orphans = [];
+  for (let i = 1; i < histVals.length; i++) {
+    const relId = String(histVals[i][6] || '').trim();
+    const type = String(histVals[i][4] || '');
+    if (!relId) continue;
+    // 利用系で関連IDがあるのに業務報告に存在しないもの = 孤立
+    if (type.indexOf('利用') === 0 && !reportIdSet.has(relId)) {
+      orphans.push({
+        date: histVals[i][0] instanceof Date ? Utilities.formatDate(histVals[i][0], "JST", "yyyy/MM/dd HH:mm:ss") : String(histVals[i][0]),
+        name: String(histVals[i][1] || ''),
+        phone: String(histVals[i][2] || ''),
+        amount: Number(histVals[i][3]) || 0,
+        type: type,
+        relId: relId
+      });
+    }
+  }
+  if (orphans.length > 0) {
+    issues.push(`🚨 孤立デポジット履歴: ${orphans.length}件\n（業務報告が欠落している可能性 - 直ちに要確認）\n` +
+      orphans.slice(0, 5).map(o => `  ・${o.date.slice(5, 16)} ${o.name} ${o.type} ¥${o.amount}`).join('\n') +
+      (orphans.length > 5 ? `\n  ...他${orphans.length - 5}件` : ''));
+  } else {
+    stats.push(`✅ 孤立デポジット履歴: 0件`);
+  }
+
+  // ========================================================================
+  // ② 残高整合性チェック（前払い管理残高 vs デポジット履歴の最終残高）
+  // ========================================================================
+  const balanceDrift = [];
+  const histByPhone = {};
+  for (let i = 1; i < histVals.length; i++) {
+    const phone = normalizePhoneGAS(histVals[i][2]);
+    if (!phone) continue;
+    if (!histByPhone[phone]) histByPhone[phone] = [];
+    histByPhone[phone].push({
+      date: histVals[i][0],
+      balance: Number(histVals[i][5]) || 0
+    });
+  }
+  for (let i = 1; i < depVals.length; i++) {
+    const phone = normalizePhoneGAS(depVals[i][1]);
+    const name = String(depVals[i][0] || '');
+    const currentBal = Number(depVals[i][2]) || 0;
+    if (!phone || !histByPhone[phone] || histByPhone[phone].length === 0) continue;
+    // 最新の履歴残高を取得
+    const hist = histByPhone[phone].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const latestHistBal = hist[0].balance;
+    if (Math.abs(currentBal - latestHistBal) > 1) {
+      balanceDrift.push({ name, phone, currentBal, latestHistBal, diff: currentBal - latestHistBal });
+    }
+  }
+  if (balanceDrift.length > 0) {
+    warnings.push(`⚠️ 残高ズレ検出: ${balanceDrift.length}顧客\n` +
+      balanceDrift.slice(0, 5).map(d => `  ・${d.name}: 管理¥${d.currentBal.toLocaleString()} vs 履歴¥${d.latestHistBal.toLocaleString()} (差¥${d.diff})`).join('\n') +
+      (balanceDrift.length > 5 ? `\n  ...他${balanceDrift.length - 5}件` : ''));
+  } else {
+    stats.push(`✅ 残高整合性: 全${depVals.length - 1}顧客でズレなし`);
+  }
+
+  // ========================================================================
+  // ③ 昨日の業務報告件数と売上サマリー
+  // ========================================================================
+  let yReports = 0, ySales = 0, yUnpaid = 0, yUnpaidAmount = 0;
+  for (let i = 1; i < reportVals.length; i++) {
+    if (isYesterday(reportVals[i][1])) {
+      yReports++;
+      ySales += Number(reportVals[i][6]) || 0;
+      if (reportVals[i][8] === '未入金') {
+        yUnpaid++;
+        yUnpaidAmount += Number(reportVals[i][11]) || 0;
+      }
+    }
+  }
+  stats.push(`📊 昨日(${yStr})の実績: 報告${yReports}件 / 売上¥${ySales.toLocaleString()} / 未入金${yUnpaid}件¥${yUnpaidAmount.toLocaleString()}`);
+
+  // ========================================================================
+  // ④ 長期未入金の検出（7日以上前の未入金）
+  // ========================================================================
+  const longUnpaid = [];
+  const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+  for (let i = 1; i < reportVals.length; i++) {
+    if (reportVals[i][8] !== '未入金') continue;
+    const dVal = reportVals[i][1];
+    const d = dVal instanceof Date ? dVal : new Date(dVal);
+    if (isNaN(d.getTime())) continue;
+    if (d.getTime() < sevenDaysAgo.getTime()) {
+      longUnpaid.push({
+        date: Utilities.formatDate(d, "JST", "MM/dd"),
+        name: String(reportVals[i][4] || ''),
+        amount: Number(reportVals[i][11]) || 0,
+        days: Math.floor((today.getTime() - d.getTime()) / (24 * 60 * 60 * 1000))
+      });
+    }
+  }
+  if (longUnpaid.length > 0) {
+    const totalLongUnpaid = longUnpaid.reduce((sum, x) => sum + x.amount, 0);
+    warnings.push(`⏰ 7日以上未入金: ${longUnpaid.length}件 / 合計¥${totalLongUnpaid.toLocaleString()}\n` +
+      longUnpaid.slice(0, 3).map(x => `  ・${x.date} ${x.name} ¥${x.amount.toLocaleString()} (${x.days}日経過)`).join('\n') +
+      (longUnpaid.length > 3 ? `\n  ...他${longUnpaid.length - 3}件` : ''));
+  }
+
+  // ========================================================================
+  // ⑤ 昨日の操作ログから重大エラーを抽出
+  // ========================================================================
+  let yAuditCount = 0;
+  for (let i = 1; i < auditVals.length; i++) {
+    if (isYesterday(auditVals[i][0])) yAuditCount++;
+  }
+  if (yAuditCount > 0) {
+    stats.push(`📝 昨日の操作ログ: ${yAuditCount}件`);
+  }
+
+  // ========================================================================
+  // 通知メッセージ組み立て
+  // ========================================================================
+  let msg = `[info][title]📊 ハナシタラ.com 日次ヘルスチェック (${tStr})[/title]`;
+
+  if (issues.length > 0) {
+    msg += `\n\n━━━━━━━━━━━━━━\n🚨 要対応（今すぐ）\n━━━━━━━━━━━━━━\n` + issues.join('\n\n');
+  }
+
+  if (warnings.length > 0) {
+    msg += `\n\n━━━━━━━━━━━━━━\n⚠️ 注意事項\n━━━━━━━━━━━━━━\n` + warnings.join('\n\n');
+  }
+
+  if (stats.length > 0) {
+    msg += `\n\n━━━━━━━━━━━━━━\n📈 サマリー\n━━━━━━━━━━━━━━\n` + stats.join('\n');
+  }
+
+  if (issues.length === 0 && warnings.length === 0) {
+    msg += `\n\n✨ 本日は異常なし。システムは正常に稼働中です。`;
+  }
+
+  msg += `[/info]`;
+
+  // チャットワーク通知
+  sendChatworkNotification(msg);
+
+  return {
+    issuesCount: issues.length,
+    warningsCount: warnings.length,
+    statsCount: stats.length,
+    orphanCount: orphans.length,
+    driftCount: balanceDrift.length
+  };
+}
+
+// ============================================================================
+// チャットワーク通知ヘルパー
+// ============================================================================
+function sendChatworkNotification(message) {
+  const props = PropertiesService.getScriptProperties();
+  const token = props.getProperty('CHATWORK_TOKEN');
+  const roomId = props.getProperty('CHATWORK_ROOM_ID');
+
+  if (!token || !roomId) {
+    Logger.log('チャットワーク未設定: CHATWORK_TOKEN / CHATWORK_ROOM_ID をスクリプトプロパティに登録してください');
+    return { ok: false, reason: 'not_configured' };
+  }
+
+  try {
+    const url = `https://api.chatwork.com/v2/rooms/${roomId}/messages`;
+    const response = UrlFetchApp.fetch(url, {
+      method: 'post',
+      headers: { 'X-ChatWorkToken': token },
+      payload: { body: message },
+      muteHttpExceptions: true
+    });
+    const code = response.getResponseCode();
+    if (code >= 200 && code < 300) {
+      return { ok: true };
+    } else {
+      Logger.log('チャットワーク通知失敗: HTTP ' + code + ' / ' + response.getContentText());
+      return { ok: false, reason: 'http_error', code: code };
+    }
+  } catch (e) {
+    Logger.log('チャットワーク通知例外: ' + e.toString());
+    return { ok: false, reason: 'exception', error: String(e) };
+  }
+}
+
+// テスト用: チャットワーク接続確認
+function testChatworkNotification() {
+  const result = sendChatworkNotification('[info][title]🔔 ハナシタラ.com 接続テスト[/title]\nチャットワーク通知の接続確認です。\nこのメッセージが届いていれば設定OKです。[/info]');
+  Logger.log(JSON.stringify(result));
+  return result;
 }
