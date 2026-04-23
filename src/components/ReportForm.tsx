@@ -287,25 +287,68 @@ export default function ReportForm() {
 
             // ❌ 書き込み失敗（業務報告/前払い管理/デポジット履歴のいずれか）→ ロールバック済みのエラー
             if (data && !data.success) {
-                const errorStep = data.errorStep ? `【${data.errorStep}】` : '';
-                const rollbackMsg = data.rollbackOk === false
-                    ? '\n\n⚠️【重要】ロールバック処理も一部失敗しました。スプレッドシートの状態をオーナーに確認してもらってください。'
-                    : '\n\n入力内容は元に戻してあります。もう一度送信してください。';
-                alert(`❌ 登録に失敗しました\n${errorStep}${data.errorDetail || data.message || '原因不明のエラー'}${rollbackMsg}`);
+                if (data.rollbackOk === false) {
+                    // ロールバックも一部失敗 = データが不整合の可能性
+                    alert(
+                        `🚨 重大エラー：データ整合性が崩れた可能性があります\n\n` +
+                        `━━━━━━━━━━━━━━━━━━━\n` +
+                        `❌ 失敗した処理: ${data.errorStep || '不明'}\n` +
+                        `📄 エラー内容: ${data.errorDetail || '不明'}\n` +
+                        `━━━━━━━━━━━━━━━━━━━\n\n` +
+                        `⚠️ ロールバック（取り消し）処理も一部失敗しました。\n` +
+                        `スプレッドシートの状態がおかしくなっている可能性があります。\n\n` +
+                        `👉 もう一度送信する前に、必ずオーナー（吉川様）にこのエラーを\n` +
+                        `  伝えて、スプレッドシートの状態を確認してもらってください。`
+                    );
+                } else {
+                    // 正常ロールバック完了 = 安全に再送信できる
+                    alert(
+                        `❌ 業務報告の登録に失敗しました\n\n` +
+                        `━━━━━━━━━━━━━━━━━━━\n` +
+                        `失敗した処理: ${data.errorStep || '不明'}\n` +
+                        `エラー内容: ${data.errorDetail || data.message || '不明'}\n` +
+                        `━━━━━━━━━━━━━━━━━━━\n\n` +
+                        `✅ 入力内容は全て取り消されました\n` +
+                        `  （スプレッドシートには何も書き込まれていません）\n\n` +
+                        `👉 お手数ですが、もう一度「送信」ボタンを押してください。`
+                    );
+                }
                 setIsSubmitting(false);
                 return;
             }
 
-            // ✅ 全書き込み成功。メッセージ組み立て（メール警告も合わせて表示）
-            const warningSuffix = data && data.warning ? `\n\n⚠️ ${data.warning}` : '';
+            // ✅ 全書き込み成功。メッセージ組み立て
+            const salesYen = `¥${totals.totalSales.toLocaleString()}`;
+
+            // コア状態メッセージ（引落/未払い/通常）
+            let statusBody = '';
             if (data && data.autoDeducted) {
-                alert(`✅ 業務報告を登録しました\n売上: ¥${totals.totalSales.toLocaleString()}\n\n💰 お客様の前払い残高から自動で引き落とされ、「入金済」として処理されました。${warningSuffix}`);
+                statusBody = `💰 お客様の前払い残高から自動で引き落とされ、\n「入金済」として処理されました。`;
             } else if (data && data.insufficientBalance) {
-                alert(`✅ 業務報告を登録しました\n売上: ¥${totals.totalSales.toLocaleString()}\n\n⚠️ お客様は前払い顧客ですが、残高（¥${data.currentDeposit}）が不足しているため自動引き落としできませんでした。「未入金」となっていますのでご請求をお願いします。${warningSuffix}`);
-            } else {
-                const mailInfo = data && data.emailSent ? '\n\n📧 確認メールをお送りしました。' : warningSuffix;
-                alert(`✅ 業務報告を登録しました\n売上: ¥${totals.totalSales.toLocaleString()}${mailInfo}`);
+                statusBody = `⚠️ お客様は前払い顧客ですが、残高（¥${Number(data.currentDeposit || 0).toLocaleString()}）が\n不足のため自動引き落としできませんでした。\n「未入金」となっていますのでご請求をお願いします。`;
             }
+
+            // メール通知状態（成功 or 失敗）
+            let mailBody = '';
+            if (data && data.emailSent) {
+                mailBody = `📧 確認メールを送信しました。`;
+            } else if (data && data.warning) {
+                // メール失敗 → スタッフが誤解しないよう強調表示
+                mailBody =
+                    `━━━━━━━━━━━━━━━━━━━\n` +
+                    `⚠️ メール通知のみ送信に失敗しました\n` +
+                    `━━━━━━━━━━━━━━━━━━━\n\n` +
+                    `💡 業務報告のデータは正しく保存されています。\n` +
+                    `    再送信する必要はありません。\n\n` +
+                    `    （メールは後ほどオーナーに直接お伝えいただければOKです）`;
+            }
+
+            const fullMsg =
+                `✅ 業務報告を登録しました\n\n` +
+                `売上: ${salesYen}\n\n` +
+                (statusBody ? statusBody + '\n\n' : '') +
+                mailBody;
+            alert(fullMsg.trim());
 
             // 送信成功後、次の入力用にフォームをリセットする
             setPhoneNumber('');
