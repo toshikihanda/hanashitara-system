@@ -336,57 +336,104 @@ function doPost(e) {
           billingAmount = Math.max(0, roundedSales - depositUsed);
         }
 
-        // === 書き込みフェーズ① 業務報告を最初に書く ===
-        reportSheet.appendRow([
-          newId,
-          data.date,
-          data.staff,
-          `'${data.customerPhone}`,
-          data.customerName,
-          data.services,
-          sales,
-          data.staffShare,
-          paidStatus,
-          '',
-          depositUsed,
-          billingAmount,
-          data.memo || ''
-        ]);
+        // ========================================================================
+        // === 書き込みフェーズ（原子性保証: 全書き込みが成功 or 全部ロールバック） ===
+        // ========================================================================
+        // 書き込む順序: 業務報告 → 前払い管理 → デポジット履歴
+        // どれか1つでも失敗したら、それまで書いた分をロールバックしてエラーを返す。
+        // これにより「片方だけ書かれた孤立データ」が発生しない。
 
-        // === 書き込みフェーズ② 前払い管理 + デポジット履歴を更新 ===
-        // ここで失敗しても業務報告は既に書き込み済みなので、整合性は維持される（報告に履歴が無いだけ）。
-        // 既存の「自動修復」ロジックで通帳表示は正しく維持される。
+        let _reportRowNum = -1;
+        let _depositRestore = null; // { rowIdx, oldBalance } 前払い管理を書き換えた場合の復元情報
+        let _writeError = null;
+        let _writeErrorStep = '';
+
         try {
+          // --- 書き込み① 業務報告 ---
+          reportSheet.appendRow([
+            newId,
+            data.date,
+            data.staff,
+            `'${data.customerPhone}`,
+            data.customerName,
+            data.services,
+            sales,
+            data.staffShare,
+            paidStatus,
+            '',
+            depositUsed,
+            billingAmount,
+            data.memo || ''
+          ]);
+          _reportRowNum = reportSheet.getLastRow();
+
+          // --- 書き込み② 前払い管理残高の更新 ---
           if (depositCase === 'full' && depositRowIdx > 0) {
-            const newBal = currentDeposit - sales;
-            depositSheet.getRange(depositRowIdx, 3).setValue(newBal);
-            let histSheet = ss.getSheetByName('デポジット履歴');
-            if (!histSheet) {
-              histSheet = ss.insertSheet('デポジット履歴');
-              histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
-            }
-            histSheet.appendRow([nowJST(), customerName, "'" + customerPhone, -sales, '利用(自動引落)', newBal, newId]);
+            _depositRestore = { rowIdx: depositRowIdx, oldBalance: currentDeposit };
+            depositSheet.getRange(depositRowIdx, 3).setValue(currentDeposit - sales);
           } else if (depositCase === 'partial' && depositRowIdx > 0) {
+            _depositRestore = { rowIdx: depositRowIdx, oldBalance: currentDeposit };
             depositSheet.getRange(depositRowIdx, 3).setValue(0);
-            let histSheet = ss.getSheetByName('デポジット履歴');
-            if (!histSheet) {
-              histSheet = ss.insertSheet('デポジット履歴');
-              histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
-            }
+          }
+
+          // --- 書き込み③ デポジット履歴 ---
+          let histSheet = ss.getSheetByName('デポジット履歴');
+          if (!histSheet) {
+            histSheet = ss.insertSheet('デポジット履歴');
+            histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
+          }
+          if (depositCase === 'full') {
+            histSheet.appendRow([nowJST(), customerName, "'" + customerPhone, -sales, '利用(自動引落)', currentDeposit - sales, newId]);
+          } else if (depositCase === 'partial') {
             histSheet.appendRow([nowJST(), customerName, "'" + customerPhone, -currentDeposit, '利用(一部引落)', 0, newId]);
           } else if (depositCase === 'unpaid' || depositCase === 'no-customer') {
-            let histSheet = ss.getSheetByName('デポジット履歴');
-            if (!histSheet) {
-              histSheet = ss.insertSheet('デポジット履歴');
-              histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
-            }
             histSheet.appendRow([nowJST(), customerName, "'" + customerPhone, 0, '利用(未払い)', depositCase === 'no-customer' ? 0 : currentDeposit, newId]);
           }
-          // no-phone-or-zero-sales: 履歴なし（仕様）
-        } catch (depErr) { /* 前払い/履歴書き込み失敗は通帳自動修復で整合性を回復できるのでメイン処理は続行 */ }
-        
-        // スタッフおよびオーナーへの業務報告確認メール自動送信
+          // depositCase === 'no-phone-or-zero-sales': 履歴なし（仕様）
+        } catch (writeErr) {
+          _writeError = writeErr;
+          _writeErrorStep = _reportRowNum < 0 ? '業務報告の登録' : (_depositRestore ? 'デポジット履歴の記録' : '前払い管理残高の更新');
+        }
+
+        // === ロールバック処理（いずれかの書き込みが失敗した場合） ===
+        if (_writeError) {
+          let _rollbackOk = true;
+          let _rollbackErrors = [];
+          // 前払い管理残高を元に戻す
+          if (_depositRestore) {
+            try {
+              depositSheet.getRange(_depositRestore.rowIdx, 3).setValue(_depositRestore.oldBalance);
+            } catch (e) {
+              _rollbackOk = false;
+              _rollbackErrors.push('前払い管理の復元失敗: ' + e.toString());
+            }
+          }
+          // 業務報告の行を削除
+          if (_reportRowNum > 0) {
+            try {
+              reportSheet.deleteRow(_reportRowNum);
+            } catch (e) {
+              _rollbackOk = false;
+              _rollbackErrors.push('業務報告行の削除失敗: ' + e.toString());
+            }
+          }
+
+          if (lock) { lock.releaseLock(); lock = null; }
+          return output.setContent(JSON.stringify({
+            success: false,
+            errorStep: _writeErrorStep,
+            errorDetail: String(_writeError),
+            rollbackOk: _rollbackOk,
+            rollbackErrors: _rollbackErrors,
+            message: _rollbackOk
+              ? (_writeErrorStep + 'に失敗しました。入力内容は元に戻しました。もう一度お試しください。')
+              : ('【重要】書き込みに失敗し、ロールバックも一部失敗しました。スプレッドシートの状態をご確認ください。')
+          }));
+        }
+
+        // === メール送信（データ書き込みとは独立。失敗しても警告として扱う） ===
         let emailSent = false;
+        let emailError = null;
         const ownerEmail = 'iyashi.hanashitara@gmail.com';
         const staffSheet = ss.getSheetByName('スタッフマスタ');
         let staffEmail = '';
@@ -399,15 +446,14 @@ function doPost(e) {
             }
           }
         }
-        
+
         try {
           let formattedDate = data.date;
           if (Object.prototype.toString.call(formattedDate) === '[object Date]') {
             formattedDate = Utilities.formatDate(formattedDate, "JST", "yyyy年MM月dd日");
           }
           const emailBody = `${data.staff} 様\n\nお疲れ様です。ハナシタラ.comです。\n業務報告を受け付けました。以下が報告内容です。\n\n【対応日】${formattedDate}\n【お客様名】${data.customerName}\n【サービス内容】${data.services}\n【総売上】¥${sales.toLocaleString()}\n【スタッフ報酬】¥${Number(data.staffShare).toLocaleString()}${data.memo ? '\n【メモ】' + data.memo : ''}\n\nこの内容は控えとしてお手元に保管ください。\n引き続きよろしくお願いいたします。`;
-          
-          // スタッフメールが正しく登録されていればスタッフ宛＋BCCでオーナーへ
+
           if (staffEmail && staffEmail !== 'demo@example.com' && staffEmail.includes('@')) {
             MailApp.sendEmail(staffEmail, '【ハナシタラ.com】業務報告の受付確認', emailBody, {
               name: 'ハナシタラ.com 業務システム',
@@ -415,12 +461,14 @@ function doPost(e) {
             });
             emailSent = true;
           } else {
-            // スタッフメール未登録の場合はオーナー宛のみ通知
             MailApp.sendEmail(ownerEmail, `【ハナシタラ.com】業務報告の受付（${data.staff}様のメールアドレス未登録）`, emailBody, {
               name: 'ハナシタラ.com 業務システム'
             });
+            emailSent = true; // オーナー通知も送信成功と扱う
           }
-        } catch(e) { /* メール失敗でも報告自体は成功扱い */ }
+        } catch(e) {
+          emailError = String(e);
+        }
 
         return output.setContent(JSON.stringify({
           success: true,
@@ -428,7 +476,9 @@ function doPost(e) {
           autoDeducted: autoDeducted,
           insufficientBalance: insufficientBalance,
           currentDeposit: currentDeposit,
-          emailSent: emailSent
+          emailSent: emailSent,
+          emailError: emailError,
+          warning: emailError ? 'メール通知の送信に失敗しました（データは保存されています）' : null
         }));
       } finally {
         if (lock) {
