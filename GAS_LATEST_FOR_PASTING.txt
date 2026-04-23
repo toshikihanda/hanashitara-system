@@ -277,68 +277,52 @@ function doPost(e) {
         const customerName = data.customerName;
         const customerPhone = normalizePhoneGAS(data.customerPhone); // ★ 電話番号で照合
 
-        // 前払い残高から自動引き落とし（★ 電話番号で照合に変更）
+        // ★★★ 整合性保証の再設計 ★★★
+        // 以前は「デポジット履歴を書く → 業務報告を書く」の順だったため、業務報告の書き込みが
+        // 失敗すると孤立したデポジット履歴行が残る問題があった。
+        //
+        // 修正: まず読み取りだけで計画を立て、業務報告を最初に書き、その後にデポジット更新を行う。
+        // 業務報告の書き込みが成功した場合のみ、デポジット履歴と前払い管理を更新する。
+        //   → 業務報告の書き込みが失敗した場合、デポジット履歴は一切書き込まれない（整合性保持）
+
+        // === 計画フェーズ: 読み取りのみ ===
+        // どのケース (full / partial / unpaid / no-record) に該当するか決定する
+        let depositCase = 'unpaid'; // full / partial / unpaid / no-customer / no-phone-or-zero-sales
+        let depositRowIdx = -1;
         if (depositSheet && customerPhone && sales > 0) {
           const dValues = depositSheet.getDataRange().getValues();
           let customerFound = false;
           for (let i = 1; i < dValues.length; i++) {
             if (normalizePhoneGAS(dValues[i][1]) === customerPhone) {
               customerFound = true;
-              currentDeposit = Number(dValues[i][2]) || 0; // 残高は3列目(C列)
+              currentDeposit = Number(dValues[i][2]) || 0;
+              depositRowIdx = i + 1;
               if (currentDeposit >= sales) {
-                // デポジットで全額カバーできる場合
-                const newBal = currentDeposit - sales;
-                depositSheet.getRange(i + 1, 3).setValue(newBal);
+                depositCase = 'full';
                 paidStatus = '入金済';
                 autoDeducted = true;
                 depositUsed = sales;
                 billingAmount = 0;
-                // デポジット履歴に自動引き落としを記録
-                let histSheet = ss.getSheetByName('デポジット履歴');
-                if (!histSheet) {
-                  histSheet = ss.insertSheet('デポジット履歴');
-                  histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
-                }
-                histSheet.appendRow([nowJST(), customerName, "'" + normalizePhoneGAS(customerPhone), -sales, '利用(自動引落)', newBal, newId]);
               } else if (currentDeposit > 0) {
-                // デポジットで一部カバーできる場合
-                depositSheet.getRange(i + 1, 3).setValue(0);
+                depositCase = 'partial';
                 insufficientBalance = true;
                 depositUsed = currentDeposit;
                 billingAmount = sales - currentDeposit;
-                let histSheet = ss.getSheetByName('デポジット履歴');
-                if (!histSheet) {
-                  histSheet = ss.insertSheet('デポジット履歴');
-                  histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
-                }
-                histSheet.appendRow([nowJST(), customerName, "'" + normalizePhoneGAS(customerPhone), -currentDeposit, '利用(一部引落)', 0, newId]);
               } else {
-                // デポジット不使用（未払いケース）: 履歴に利用(未払い)を記録
+                depositCase = 'unpaid';
                 depositUsed = 0;
                 billingAmount = sales;
-                let histSheet = ss.getSheetByName('デポジット履歴');
-                if (!histSheet) {
-                  histSheet = ss.insertSheet('デポジット履歴');
-                  histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
-                }
-                histSheet.appendRow([nowJST(), customerName, "'" + normalizePhoneGAS(customerPhone), 0, '利用(未払い)', currentDeposit, newId]);
               }
               break;
             }
           }
           if (!customerFound) {
-            // 前払い管理に顧客レコードなし（初回利用など）: 利用(未払い)として履歴に記録
+            depositCase = 'no-customer';
             depositUsed = 0;
             billingAmount = sales;
-            let histSheet = ss.getSheetByName('デポジット履歴');
-            if (!histSheet) {
-              histSheet = ss.insertSheet('デポジット履歴');
-              histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
-            }
-            histSheet.appendRow([nowJST(), customerName, "'" + normalizePhoneGAS(customerPhone), 0, '利用(未払い)', 0, newId]);
           }
         } else {
-          // 売上0またはphone未設定: 履歴記録は行わない（要件上このケースは少ない）
+          depositCase = 'no-phone-or-zero-sales';
           depositUsed = 0;
           billingAmount = sales;
         }
@@ -352,6 +336,7 @@ function doPost(e) {
           billingAmount = Math.max(0, roundedSales - depositUsed);
         }
 
+        // === 書き込みフェーズ① 業務報告を最初に書く ===
         reportSheet.appendRow([
           newId,
           data.date,
@@ -361,12 +346,44 @@ function doPost(e) {
           data.services,
           sales,
           data.staffShare,
-          paidStatus,  // デポジット全額カバーの場合「入金済」、それ以外「未入金」
-          '', // 入金日は空（オーナーが手動でチェックした際に記録）
-          depositUsed, // デポジット使用額
-          billingAmount, // 請求額
-          data.memo || '' // メモ・備考（M列）
+          paidStatus,
+          '',
+          depositUsed,
+          billingAmount,
+          data.memo || ''
         ]);
+
+        // === 書き込みフェーズ② 前払い管理 + デポジット履歴を更新 ===
+        // ここで失敗しても業務報告は既に書き込み済みなので、整合性は維持される（報告に履歴が無いだけ）。
+        // 既存の「自動修復」ロジックで通帳表示は正しく維持される。
+        try {
+          if (depositCase === 'full' && depositRowIdx > 0) {
+            const newBal = currentDeposit - sales;
+            depositSheet.getRange(depositRowIdx, 3).setValue(newBal);
+            let histSheet = ss.getSheetByName('デポジット履歴');
+            if (!histSheet) {
+              histSheet = ss.insertSheet('デポジット履歴');
+              histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
+            }
+            histSheet.appendRow([nowJST(), customerName, "'" + customerPhone, -sales, '利用(自動引落)', newBal, newId]);
+          } else if (depositCase === 'partial' && depositRowIdx > 0) {
+            depositSheet.getRange(depositRowIdx, 3).setValue(0);
+            let histSheet = ss.getSheetByName('デポジット履歴');
+            if (!histSheet) {
+              histSheet = ss.insertSheet('デポジット履歴');
+              histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
+            }
+            histSheet.appendRow([nowJST(), customerName, "'" + customerPhone, -currentDeposit, '利用(一部引落)', 0, newId]);
+          } else if (depositCase === 'unpaid' || depositCase === 'no-customer') {
+            let histSheet = ss.getSheetByName('デポジット履歴');
+            if (!histSheet) {
+              histSheet = ss.insertSheet('デポジット履歴');
+              histSheet.appendRow(['日時', 'お客様名', '電話番号', '増減額', '種別', '残高', '関連ID']);
+            }
+            histSheet.appendRow([nowJST(), customerName, "'" + customerPhone, 0, '利用(未払い)', depositCase === 'no-customer' ? 0 : currentDeposit, newId]);
+          }
+          // no-phone-or-zero-sales: 履歴なし（仕様）
+        } catch (depErr) { /* 前払い/履歴書き込み失敗は通帳自動修復で整合性を回復できるのでメイン処理は続行 */ }
         
         // スタッフおよびオーナーへの業務報告確認メール自動送信
         let emailSent = false;
