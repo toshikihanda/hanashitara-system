@@ -285,13 +285,26 @@ export default function ReportForm() {
                 }
             }
 
-            // メッセージの組み立て
+            // ❌ 書き込み失敗（業務報告/前払い管理/デポジット履歴のいずれか）→ ロールバック済みのエラー
+            if (data && !data.success) {
+                const errorStep = data.errorStep ? `【${data.errorStep}】` : '';
+                const rollbackMsg = data.rollbackOk === false
+                    ? '\n\n⚠️【重要】ロールバック処理も一部失敗しました。スプレッドシートの状態をオーナーに確認してもらってください。'
+                    : '\n\n入力内容は元に戻してあります。もう一度送信してください。';
+                alert(`❌ 登録に失敗しました\n${errorStep}${data.errorDetail || data.message || '原因不明のエラー'}${rollbackMsg}`);
+                setIsSubmitting(false);
+                return;
+            }
+
+            // ✅ 全書き込み成功。メッセージ組み立て（メール警告も合わせて表示）
+            const warningSuffix = data && data.warning ? `\n\n⚠️ ${data.warning}` : '';
             if (data && data.autoDeducted) {
-                alert(`業務報告を送信しました！\n売上: ${totals.totalSales}円\n\n✅ お客様の前払い残高から自動で引き落とされ、「入金済」として処理されました。`);
+                alert(`✅ 業務報告を登録しました\n売上: ¥${totals.totalSales.toLocaleString()}\n\n💰 お客様の前払い残高から自動で引き落とされ、「入金済」として処理されました。${warningSuffix}`);
             } else if (data && data.insufficientBalance) {
-                alert(`業務報告を送信しました！\n売上: ${totals.totalSales}円\n\n⚠️ お客様は前払い顧客ですが、残高（¥${data.currentDeposit}）が不足しているため自動引き落としできませんでした。「未入金」となっていますのでご請求をお願いします。`);
+                alert(`✅ 業務報告を登録しました\n売上: ¥${totals.totalSales.toLocaleString()}\n\n⚠️ お客様は前払い顧客ですが、残高（¥${data.currentDeposit}）が不足しているため自動引き落としできませんでした。「未入金」となっていますのでご請求をお願いします。${warningSuffix}`);
             } else {
-                alert(`業務報告を送信しました！\n明細がスプレッドシートに追記されます。\n売上: ${totals.totalSales}円${data && data.emailSent ? '\n\n📧 確認メールをお送りしました。' : ''}`);
+                const mailInfo = data && data.emailSent ? '\n\n📧 確認メールをお送りしました。' : warningSuffix;
+                alert(`✅ 業務報告を登録しました\n売上: ¥${totals.totalSales.toLocaleString()}${mailInfo}`);
             }
 
             // 送信成功後、次の入力用にフォームをリセットする
