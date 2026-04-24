@@ -488,6 +488,101 @@ function doPost(e) {
           emailError = String(e);
         }
 
+        // ========================================================================
+        // ★ 書き込み完了後のクロスシート整合性チェック（選択肢A: 保存のまま通知のみ）
+        // ========================================================================
+        // 業務報告・デポジット履歴・前払い管理の3シートを改めて読み直し、
+        // 想定通りに書き込まれているかを検証する。不整合があればChatWorkに通知。
+        // データは保持（ロールバックしない）。スタッフには通常通り成功レスポンスを返す。
+        try {
+          const issues = [];
+          const verifySS = SpreadsheetApp.openById(SHEET_ID);
+
+          // チェック①: 業務報告シートに対応IDの行が存在するか + 内訳計算
+          const verifyReport = verifySS.getSheetByName('業務報告');
+          const repVals = verifyReport.getDataRange().getValues();
+          let reportRow = null;
+          for (let i = repVals.length - 1; i >= 1; i--) {
+            if (String(repVals[i][0]).trim() === newId) {
+              reportRow = repVals[i];
+              break;
+            }
+          }
+          if (!reportRow) {
+            issues.push('❌ 業務報告シートにIDが見つかりません');
+          } else {
+            const rSales = Number(reportRow[6]) || 0;
+            const rDep = Number(reportRow[10]) || 0;
+            const rBilling = Number(reportRow[11]) || 0;
+            if (Math.abs((rDep + rBilling) - rSales) > 0.01) {
+              issues.push('⚠️ 内訳不一致: デポ¥' + rDep + ' + 請求¥' + rBilling + ' ≠ 売上¥' + rSales);
+            }
+          }
+
+          // チェック②: デポジット履歴に対応の関連ID行があるか
+          if (depositCase === 'full' || depositCase === 'partial' || depositCase === 'unpaid' || depositCase === 'no-customer') {
+            const verifyHist = verifySS.getSheetByName('デポジット履歴');
+            if (verifyHist) {
+              const histVals = verifyHist.getDataRange().getValues();
+              let histRow = null;
+              for (let i = histVals.length - 1; i >= 1; i--) {
+                if (String(histVals[i][6]).trim() === newId) {
+                  histRow = histVals[i];
+                  break;
+                }
+              }
+              if (!histRow) {
+                issues.push('❌ デポジット履歴に関連IDの行が見つかりません');
+              } else {
+                const expectedType = depositCase === 'full' ? '利用(自動引落)' :
+                                    depositCase === 'partial' ? '利用(一部引落)' : '利用(未払い)';
+                const actualType = String(histRow[4] || '');
+                if (actualType.indexOf(expectedType) !== 0) {
+                  issues.push('⚠️ デポ履歴の種別不一致: 期待=' + expectedType + ' 実際=' + actualType);
+                }
+                const expectedAmount = depositCase === 'full' ? -sales :
+                                      depositCase === 'partial' ? -currentDeposit : 0;
+                const actualAmount = Number(histRow[3]) || 0;
+                if (actualAmount !== expectedAmount) {
+                  issues.push('⚠️ デポ履歴の金額不一致: 期待=' + expectedAmount + ' 実際=' + actualAmount);
+                }
+              }
+            }
+          }
+
+          // チェック③: 前払い管理の残高が正しく更新されているか
+          if ((depositCase === 'full' || depositCase === 'partial') && depositRowIdx > 0) {
+            const verifyDep = verifySS.getSheetByName('前払い管理');
+            if (verifyDep) {
+              const actualBal = Number(verifyDep.getRange(depositRowIdx, 3).getValue()) || 0;
+              const expectedBal = depositCase === 'full' ? (currentDeposit - sales) : 0;
+              if (actualBal !== expectedBal) {
+                issues.push('⚠️ 前払い残高不一致: 期待=¥' + expectedBal + ' 実際=¥' + actualBal);
+              }
+            }
+          }
+
+          // 不整合があればChatWork通知（データは保持）
+          if (issues.length > 0) {
+            const notifyMsg = '[info][title]🚨 業務報告 整合性エラー検知[/title]' +
+              '\n報告ID: ' + newId +
+              '\nスタッフ: ' + data.staff +
+              '\n顧客: ' + data.customerName + ' (' + customerPhone + ')' +
+              '\n売上: ¥' + sales.toLocaleString() +
+              '\n対応日: ' + data.date +
+              '\n\n【検知項目】\n' + issues.join('\n') +
+              '\n\n※ データは保存されています。必要に応じて手動で確認してください。[/info]';
+            try {
+              sendChatworkNotification(notifyMsg);
+            } catch (notifyErr) {
+              Logger.log('ChatWork通知失敗: ' + notifyErr.toString());
+            }
+          }
+        } catch (verifyErr) {
+          // 整合性チェック自体の失敗は警告扱い（本体処理は成功のまま返す）
+          Logger.log('整合性チェック例外: ' + verifyErr.toString());
+        }
+
         return output.setContent(JSON.stringify({
           success: true,
           id: newId,
@@ -2335,4 +2430,204 @@ function testChatworkNotification() {
   const result = sendChatworkNotification('[info][title]🔔 ハナシタラ.com 接続テスト[/title]\nチャットワーク通知の接続確認です。\nこのメッセージが届いていれば設定OKです。[/info]');
   Logger.log(JSON.stringify(result));
   return result;
+}
+
+// ============================================================================
+// ★ Gmail → スプレッドシート自動同期
+// ============================================================================
+// Gmail の送信済みメール（業務報告受付確認・入金確認・ブラックリスト登録）を
+// スプレッドシートの「メール履歴」シートに蓄積する。
+// メッセージIDで重複排除するので何度実行しても安全。
+//
+// セットアップ手順:
+// 1. GASエディタの「トリガー」→「+ トリガーを追加」
+// 2. 実行する関数: syncEmailsToSheet
+// 3. イベントのソース: 時間主導型
+// 4. 時間ベースのトリガーのタイプ: 時間ベースのタイマー
+// 5. 時刻: 30分おき（または1時間おき）
+//
+// 手動実行でテスト: 関数 syncEmailsToSheet を選択して実行
+function syncEmailsToSheet() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  let sheet = ss.getSheetByName('メール履歴');
+  if (!sheet) {
+    sheet = ss.insertSheet('メール履歴');
+    sheet.appendRow([
+      'メッセージID', '送信時刻', '種別', '宛先(スタッフ)',
+      '対応日', 'お客様名', 'サービス内容',
+      '総売上', 'スタッフ報酬', 'メモ・備考', '件名', '本文プレビュー'
+    ]);
+    // ヘッダー行を固定
+    sheet.setFrozenRows(1);
+  }
+
+  // 既存のメッセージIDを取得（重複排除用）
+  const existingIds = new Set();
+  const existingVals = sheet.getDataRange().getValues();
+  for (let i = 1; i < existingVals.length; i++) {
+    const id = String(existingVals[i][0] || '').trim();
+    if (id) existingIds.add(id);
+  }
+
+  // 過去7日間のメールを検索（余裕を持って取得。重複はIDで除外）
+  const threads = GmailApp.search(
+    'from:me (subject:"業務報告の受付確認" OR subject:"入金確認のお知らせ" OR subject:"ブラックリスト登録") newer_than:7d',
+    0, 300
+  );
+
+  const newRows = [];
+  threads.forEach(thread => {
+    thread.getMessages().forEach(msg => {
+      const id = msg.getId();
+      if (existingIds.has(id)) return; // 既に取得済み
+
+      const body = msg.getPlainBody();
+      const subject = msg.getSubject();
+      const to = msg.getTo();
+      const sentAt = Utilities.formatDate(msg.getDate(), "JST", "yyyy/MM/dd HH:mm:ss");
+
+      let type = 'その他';
+      if (subject.indexOf('業務報告の受付確認') >= 0) type = '業務報告';
+      else if (subject.indexOf('入金確認') >= 0) type = '入金確認';
+      else if (subject.indexOf('ブラックリスト') >= 0) type = 'ブラックリスト';
+
+      // 本文から各項目を正規表現で抽出（業務報告と入金確認の両フォーマットに対応）
+      const extractField = function(patterns) {
+        for (let p = 0; p < patterns.length; p++) {
+          const m = body.match(patterns[p]);
+          if (m && m[1]) return m[1].trim();
+        }
+        return '';
+      };
+
+      const dateField = extractField([
+        /【対応日】\s*([^\n【]+)/,
+        /対応日:\s*([^\n]+)/
+      ]);
+      const nameField = extractField([
+        /【お客様名】\s*([^\n【]+)/,
+        /お客様名:\s*([^\n]+)/
+      ]);
+      const svcField = extractField([
+        /【サービス内容】\s*([^\n【]+)/,
+        /サービス内容:\s*([^\n]+)/
+      ]);
+      const salesField = extractField([
+        /【総売上】\s*¥([\d,]+)/,
+        /売上金額:\s*¥([\d,]+)/
+      ]);
+      const payField = extractField([
+        /【スタッフ報酬】\s*¥([\d,]+)/
+      ]);
+      const memoField = extractField([
+        /【メモ】\s*([^\n]+)/,
+        /備考:\s*([^\n]+)/
+      ]);
+
+      newRows.push([
+        id,
+        sentAt,
+        type,
+        to,
+        dateField,
+        nameField,
+        svcField,
+        Number(String(salesField).replace(/,/g, '')) || 0,
+        Number(String(payField).replace(/,/g, '')) || 0,
+        memoField,
+        subject,
+        body.slice(0, 150).replace(/\n/g, ' ')
+      ]);
+    });
+  });
+
+  // バッチで一括追加（performance向上）
+  if (newRows.length > 0) {
+    const startRow = sheet.getLastRow() + 1;
+    sheet.getRange(startRow, 1, newRows.length, newRows[0].length).setValues(newRows);
+  }
+  SpreadsheetApp.flush();
+
+  Logger.log('メール同期完了: ' + newRows.length + '件追加 (累計' + (existingIds.size + newRows.length) + '件)');
+  return { added: newRows.length, total: existingIds.size + newRows.length };
+}
+
+// 初回用: 過去の全メール（5月分以上）を取得したい場合に使用
+function initialSyncEmails() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  let sheet = ss.getSheetByName('メール履歴');
+  if (!sheet) {
+    sheet = ss.insertSheet('メール履歴');
+    sheet.appendRow([
+      'メッセージID', '送信時刻', '種別', '宛先(スタッフ)',
+      '対応日', 'お客様名', 'サービス内容',
+      '総売上', 'スタッフ報酬', 'メモ・備考', '件名', '本文プレビュー'
+    ]);
+    sheet.setFrozenRows(1);
+  }
+
+  // 既存ID取得
+  const existingIds = new Set();
+  const existingVals = sheet.getDataRange().getValues();
+  for (let i = 1; i < existingVals.length; i++) {
+    const id = String(existingVals[i][0] || '').trim();
+    if (id) existingIds.add(id);
+  }
+
+  // 過去60日分を一気に取得（上限500件）
+  const threads = GmailApp.search(
+    'from:me (subject:"業務報告の受付確認" OR subject:"入金確認のお知らせ" OR subject:"ブラックリスト登録") newer_than:60d',
+    0, 500
+  );
+
+  const newRows = [];
+  threads.forEach(thread => {
+    thread.getMessages().forEach(msg => {
+      const id = msg.getId();
+      if (existingIds.has(id)) return;
+
+      const body = msg.getPlainBody();
+      const subject = msg.getSubject();
+      const to = msg.getTo();
+      const sentAt = Utilities.formatDate(msg.getDate(), "JST", "yyyy/MM/dd HH:mm:ss");
+
+      let type = 'その他';
+      if (subject.indexOf('業務報告の受付確認') >= 0) type = '業務報告';
+      else if (subject.indexOf('入金確認') >= 0) type = '入金確認';
+      else if (subject.indexOf('ブラックリスト') >= 0) type = 'ブラックリスト';
+
+      const extractField = function(patterns) {
+        for (let p = 0; p < patterns.length; p++) {
+          const m = body.match(patterns[p]);
+          if (m && m[1]) return m[1].trim();
+        }
+        return '';
+      };
+
+      const dateField = extractField([/【対応日】\s*([^\n【]+)/, /対応日:\s*([^\n]+)/]);
+      const nameField = extractField([/【お客様名】\s*([^\n【]+)/, /お客様名:\s*([^\n]+)/]);
+      const svcField = extractField([/【サービス内容】\s*([^\n【]+)/, /サービス内容:\s*([^\n]+)/]);
+      const salesField = extractField([/【総売上】\s*¥([\d,]+)/, /売上金額:\s*¥([\d,]+)/]);
+      const payField = extractField([/【スタッフ報酬】\s*¥([\d,]+)/]);
+      const memoField = extractField([/【メモ】\s*([^\n]+)/, /備考:\s*([^\n]+)/]);
+
+      newRows.push([
+        id, sentAt, type, to,
+        dateField, nameField, svcField,
+        Number(String(salesField).replace(/,/g, '')) || 0,
+        Number(String(payField).replace(/,/g, '')) || 0,
+        memoField, subject,
+        body.slice(0, 150).replace(/\n/g, ' ')
+      ]);
+    });
+  });
+
+  if (newRows.length > 0) {
+    const startRow = sheet.getLastRow() + 1;
+    sheet.getRange(startRow, 1, newRows.length, newRows[0].length).setValues(newRows);
+  }
+  SpreadsheetApp.flush();
+
+  SpreadsheetApp.getUi().alert('初回同期完了: ' + newRows.length + '件追加');
+  return { added: newRows.length };
 }
