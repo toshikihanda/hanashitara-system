@@ -2398,18 +2398,25 @@ function sendChatworkNotification(message) {
   const props = PropertiesService.getScriptProperties();
   const token = props.getProperty('CHATWORK_TOKEN');
   const roomId = props.getProperty('CHATWORK_ROOM_ID');
+  // 通知先メンション（オプション）: スクリプトプロパティ CHATWORK_MENTION に設定
+  //   例: [To:5455807]はんだ　としきさん
+  //   未設定時はメンションなしで送信
+  const mention = props.getProperty('CHATWORK_MENTION') || '';
 
   if (!token || !roomId) {
     Logger.log('チャットワーク未設定: CHATWORK_TOKEN / CHATWORK_ROOM_ID をスクリプトプロパティに登録してください');
     return { ok: false, reason: 'not_configured' };
   }
 
+  // メンションがあれば先頭に付与
+  const finalMessage = mention ? (mention + '\n' + message) : message;
+
   try {
     const url = `https://api.chatwork.com/v2/rooms/${roomId}/messages`;
     const response = UrlFetchApp.fetch(url, {
       method: 'post',
       headers: { 'X-ChatWorkToken': token },
-      payload: { body: message },
+      payload: { body: finalMessage },
       muteHttpExceptions: true
     });
     const code = response.getResponseCode();
