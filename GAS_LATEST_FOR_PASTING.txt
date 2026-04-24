@@ -2552,8 +2552,63 @@ function syncEmailsToSheet() {
   return { added: newRows.length, total: existingIds.size + newRows.length };
 }
 
-// 初回用: 過去の全メール（5月分以上）を取得したい場合に使用
+// 初回用: 過去の全メールを取得したい場合（チャンク処理＆自動リトライ対応）
+// GASの6分タイムアウト対策：3日ずつ分割処理し、進捗を PropertiesService で管理。
+// 繰り返し実行すれば自動的に過去分まで遡る（または下のinitialSync_Xで手動実行）。
 function initialSyncEmails() {
+  const props = PropertiesService.getScriptProperties();
+  const startTime = Date.now();
+  const maxRuntimeMs = 4 * 60 * 1000; // 4分で中断（6分制限の余裕）
+  const chunkDays = 3;
+  const maxDays = 60;
+
+  // 進捗取得（X日前まで処理済み、次は X〜X+3 日前を処理）
+  let lastProcessed = Number(props.getProperty('INITIAL_SYNC_DAYS_AGO') || '0');
+
+  if (lastProcessed >= maxDays) {
+    // 既に完了している場合は進捗をリセットして再実行可能にする
+    props.deleteProperty('INITIAL_SYNC_DAYS_AGO');
+    lastProcessed = 0;
+  }
+
+  let totalAdded = 0;
+  while (lastProcessed < maxDays) {
+    // 時間切れ判定
+    if (Date.now() - startTime > maxRuntimeMs) {
+      props.setProperty('INITIAL_SYNC_DAYS_AGO', String(lastProcessed));
+      Logger.log('⏰ 時間切れで中断: ' + lastProcessed + '日前まで処理済み。' +
+        '\nもう一度 initialSyncEmails を実行してください（自動で続きから再開）。');
+      try {
+        SpreadsheetApp.getUi().alert(
+          '⏰ 4分経過で一時停止\n' +
+          lastProcessed + '日前まで処理済みです。\n' +
+          'もう一度「initialSyncEmails」を実行すると続きから再開します。\n' +
+          '（あと ' + (maxDays - lastProcessed) + '日分が残っています）'
+        );
+      } catch (e) {}
+      return { done: false, lastProcessed: lastProcessed, addedThisRun: totalAdded };
+    }
+
+    const rangeStart = lastProcessed;
+    const rangeEnd = Math.min(lastProcessed + chunkDays, maxDays);
+
+    // 期間内のメールを取得して同期
+    const added = _syncEmailsInDayRange(rangeStart, rangeEnd);
+    totalAdded += added;
+
+    lastProcessed = rangeEnd;
+  }
+
+  // 完了
+  props.deleteProperty('INITIAL_SYNC_DAYS_AGO');
+  try {
+    SpreadsheetApp.getUi().alert('✅ 初回同期完了\n今回のバッチで ' + totalAdded + '件追加されました');
+  } catch (e) {}
+  return { done: true, addedThisRun: totalAdded };
+}
+
+// 内部ヘルパー: X日前〜Y日前の範囲でメール同期
+function _syncEmailsInDayRange(daysAgoStart, daysAgoEnd) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   let sheet = ss.getSheetByName('メール履歴');
   if (!sheet) {
@@ -2566,7 +2621,7 @@ function initialSyncEmails() {
     sheet.setFrozenRows(1);
   }
 
-  // 既存ID取得
+  // 既存ID取得（キャッシュ的に使用）
   const existingIds = new Set();
   const existingVals = sheet.getDataRange().getValues();
   for (let i = 1; i < existingVals.length; i++) {
@@ -2574,11 +2629,16 @@ function initialSyncEmails() {
     if (id) existingIds.add(id);
   }
 
-  // 過去60日分を一気に取得（上限500件）
-  const threads = GmailApp.search(
-    'from:me (subject:"業務報告の受付確認" OR subject:"入金確認のお知らせ" OR subject:"ブラックリスト登録") newer_than:60d',
-    0, 500
-  );
+  // 日付範囲を文字列で構築（Gmail検索クエリ用 YYYY/M/D）
+  const now = new Date();
+  const startDate = new Date(now.getTime() - daysAgoEnd * 24 * 60 * 60 * 1000);
+  const endDate = new Date(now.getTime() - daysAgoStart * 24 * 60 * 60 * 1000);
+  const fmt = function(d) {
+    return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate();
+  };
+  const query = 'from:me (subject:"業務報告の受付確認" OR subject:"入金確認のお知らせ" OR subject:"ブラックリスト登録") ' +
+                'after:' + fmt(startDate) + ' before:' + fmt(endDate);
+  const threads = GmailApp.search(query, 0, 200);
 
   const newRows = [];
   threads.forEach(thread => {
@@ -2625,9 +2685,16 @@ function initialSyncEmails() {
   if (newRows.length > 0) {
     const startRow = sheet.getLastRow() + 1;
     sheet.getRange(startRow, 1, newRows.length, newRows[0].length).setValues(newRows);
+    SpreadsheetApp.flush();
   }
-  SpreadsheetApp.flush();
 
-  SpreadsheetApp.getUi().alert('初回同期完了: ' + newRows.length + '件追加');
-  return { added: newRows.length };
+  return newRows.length;
+}
+
+// 進捗をリセット（最初から再実行したい時）
+function resetInitialSyncProgress() {
+  PropertiesService.getScriptProperties().deleteProperty('INITIAL_SYNC_DAYS_AGO');
+  try {
+    SpreadsheetApp.getUi().alert('進捗をリセットしました。initialSyncEmails を再実行すると最初から始まります。');
+  } catch (e) {}
 }
