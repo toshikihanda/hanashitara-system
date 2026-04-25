@@ -2237,36 +2237,85 @@ function dailyHealthCheck() {
   // ========================================================================
   // ① 孤立デポジット履歴の検出（最重要）
   //    デポジット履歴に関連IDがあるのに業務報告にそのIDがない = 今回のバグパターン
+  //    ただし以下のケースは「正規/補填済」として除外:
+  //      A) 同一関連IDで「報告削除」エントリが存在 → 正規に削除されたケース
+  //      B) 同じ顧客電話番号・同じ日付で別IDの業務報告が存在 → 後から補填されたケース
   // ========================================================================
   const reportIdSet = new Set();
+  // 顧客電話番号 + 対応日(YYYY/MM/DD) → 業務報告が存在するか のマップ
+  const reportByPhoneDate = {};
   for (let i = 1; i < reportVals.length; i++) {
     const rid = String(reportVals[i][0] || '').trim();
     if (rid) reportIdSet.add(rid);
+    const rPhone = normalizePhoneGAS(reportVals[i][3]);
+    let rDStr = '';
+    if (reportVals[i][1] instanceof Date) {
+      rDStr = Utilities.formatDate(reportVals[i][1], "JST", "yyyy/MM/dd");
+    } else {
+      rDStr = String(reportVals[i][1] || '').slice(0, 10).replace(/-/g, '/');
+    }
+    if (rPhone && rDStr) {
+      reportByPhoneDate[rPhone + '|' + rDStr] = true;
+    }
+  }
+
+  // 「報告削除」エントリの関連IDセットを構築（除外用）
+  const deletedReportIds = new Set();
+  for (let i = 1; i < histVals.length; i++) {
+    const t = String(histVals[i][4] || '');
+    const rid = String(histVals[i][6] || '').trim();
+    if (rid && t.indexOf('報告削除') === 0) {
+      deletedReportIds.add(rid);
+    }
   }
 
   const orphans = [];
+  const suppressed = []; // 除外された行（参考表示用）
   for (let i = 1; i < histVals.length; i++) {
     const relId = String(histVals[i][6] || '').trim();
     const type = String(histVals[i][4] || '');
     if (!relId) continue;
-    // 利用系で関連IDがあるのに業務報告に存在しないもの = 孤立
-    if (type.indexOf('利用') === 0 && !reportIdSet.has(relId)) {
-      orphans.push({
-        date: histVals[i][0] instanceof Date ? Utilities.formatDate(histVals[i][0], "JST", "yyyy/MM/dd HH:mm:ss") : String(histVals[i][0]),
-        name: String(histVals[i][1] || ''),
-        phone: String(histVals[i][2] || ''),
-        amount: Number(histVals[i][3]) || 0,
-        type: type,
-        relId: relId
-      });
+    // 利用系で関連IDがあるのに業務報告に存在しないもの = 孤立候補
+    if (type.indexOf('利用') !== 0 || reportIdSet.has(relId)) continue;
+
+    const histPhone = normalizePhoneGAS(histVals[i][2]);
+    let hDStr = '';
+    if (histVals[i][0] instanceof Date) {
+      hDStr = Utilities.formatDate(histVals[i][0], "JST", "yyyy/MM/dd");
+    } else {
+      hDStr = String(histVals[i][0] || '').slice(0, 10).replace(/-/g, '/');
     }
+
+    // 除外条件A: 同じ関連IDで「報告削除」エントリあり = 正規削除
+    if (deletedReportIds.has(relId)) {
+      suppressed.push({ reason: 'deleted', relId: relId, name: String(histVals[i][1] || '') });
+      continue;
+    }
+    // 除外条件B: 同じ顧客電話番号 + 同じ日付の業務報告が存在 = 後から補填済み
+    if (histPhone && hDStr && reportByPhoneDate[histPhone + '|' + hDStr]) {
+      suppressed.push({ reason: 'replaced', relId: relId, name: String(histVals[i][1] || '') });
+      continue;
+    }
+
+    orphans.push({
+      date: histVals[i][0] instanceof Date ? Utilities.formatDate(histVals[i][0], "JST", "yyyy/MM/dd HH:mm:ss") : String(histVals[i][0]),
+      name: String(histVals[i][1] || ''),
+      phone: String(histVals[i][2] || ''),
+      amount: Number(histVals[i][3]) || 0,
+      type: type,
+      relId: relId
+    });
   }
   if (orphans.length > 0) {
     issues.push(`🚨 孤立デポジット履歴: ${orphans.length}件\n（業務報告が欠落している可能性 - 直ちに要確認）\n` +
       orphans.slice(0, 5).map(o => `  ・${o.date.slice(5, 16)} ${o.name} ${o.type} ¥${o.amount}`).join('\n') +
       (orphans.length > 5 ? `\n  ...他${orphans.length - 5}件` : ''));
   } else {
-    stats.push(`✅ 孤立デポジット履歴: 0件`);
+    if (suppressed.length > 0) {
+      stats.push(`✅ 孤立デポジット履歴: 0件（補填/削除済みの残骸 ${suppressed.length}件は除外）`);
+    } else {
+      stats.push(`✅ 孤立デポジット履歴: 0件`);
+    }
   }
 
   // ========================================================================
