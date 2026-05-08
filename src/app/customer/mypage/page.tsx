@@ -191,7 +191,7 @@ export default function CustomerMyPage() {
                     {([
                         { key: 'all', label: 'すべて' },
                         { key: 'usage', label: '利用' },
-                        { key: 'charge', label: 'チャ���ジ' },
+                        { key: 'charge', label: 'チャージ' },
                     ] as const).map(({ key, label }) => (
                         <button
                             key={key}
@@ -207,7 +207,7 @@ export default function CustomerMyPage() {
                     ))}
                 </div>
 
-                {/* 通帳形式の履歴テ���ブル */}
+                {/* 通帳形式の履歴テーブル */}
                 <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] shadow-sm overflow-hidden">
                     {filteredHistory.length === 0 ? (
                         <div className="p-8 text-center">
