@@ -32,7 +32,6 @@ export default function CustomerMyPage() {
     const [unpaidTotal, setUnpaidTotal] = useState<number>(0);
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [activeFilter, setActiveFilter] = useState<'all' | 'usage' | 'charge'>('all');
 
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzhzZLoVQRSYYykqnu88ebBtx79htz-3A7YDa3RgBKbjYJ-ie308nsQXhJflpEnNfuz0g/exec';
 
@@ -75,11 +74,7 @@ export default function CustomerMyPage() {
         router.push('/customer/login');
     };
 
-    const filteredHistory = history.filter((item) => {
-        if (activeFilter === 'all') return true;
-        if (activeFilter === 'charge') return item.type === 'charge' || item.type === 'deposit_op';
-        return item.type === activeFilter;
-    });
+    const displayHistory = [...history].reverse();
 
     // 日付フォーマット
     const formatDate = (dateStr: string) => {
@@ -186,30 +181,16 @@ export default function CustomerMyPage() {
                     </div>
                 </div>
 
-                {/* フィルタータブ */}
-                <div className="flex gap-1.5 bg-[var(--surface)] rounded-xl border border-[var(--border)] p-1">
-                    {([
-                        { key: 'all', label: 'すべて' },
-                        { key: 'usage', label: '利用' },
-                        { key: 'charge', label: 'チャージ' },
-                    ] as const).map(({ key, label }) => (
-                        <button
-                            key={key}
-                            onClick={() => setActiveFilter(key)}
-                            className={`flex-1 text-xs font-medium py-2 rounded-lg transition-all ${
-                                activeFilter === key
-                                    ? 'bg-[var(--primary)] text-white shadow-sm'
-                                    : 'text-[var(--muted)] hover:text-[var(--foreground)]'
-                            }`}
-                        >
-                            {label}
-                        </button>
-                    ))}
+                {/* 履歴見出し */}
+                <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-1">
+                    <div className="w-full text-center text-xs font-medium py-2 rounded-lg bg-[var(--primary)] text-white shadow-sm">
+                        履歴
+                    </div>
                 </div>
 
                 {/* 通帳形式の履歴テーブル */}
                 <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] shadow-sm overflow-hidden">
-                    {filteredHistory.length === 0 ? (
+                    {displayHistory.length === 0 ? (
                         <div className="p-8 text-center">
                             <p className="text-sm text-[var(--muted)]">履歴がありません</p>
                         </div>
@@ -226,7 +207,7 @@ export default function CustomerMyPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredHistory.map((item, idx) => {
+                                    {displayHistory.map((item, idx) => {
                                         const credit = getCreditAmount(item);
                                         const debit = getDebitAmount(item);
                                         const itemBalance = item.runningBalance ?? 0;
