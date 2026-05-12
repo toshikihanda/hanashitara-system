@@ -95,6 +95,26 @@ export default function CustomerMyPage() {
         return 0;
     };
 
+    const getDirectPaymentAmount = (item: HistoryItem): number => {
+        const match = item.depositType?.match(/直接入金確認\(¥([\d,]+)\)/);
+        return match ? parseInt(match[1].replace(/,/g, ''), 10) : 0;
+    };
+
+    const getPaymentAmount = (item: HistoryItem): number => {
+        return getCreditAmount(item) || getDirectPaymentAmount(item);
+    };
+
+    const formatYen = (amount: number) => {
+        return `¥${Math.floor(amount).toLocaleString()}`;
+    };
+
+    const totalUsageAmount = history.reduce((sum, item) => {
+        return item.type === 'usage' ? sum + (item.amount ?? 0) : sum;
+    }, 0);
+    const latestPayment = history.find((item) => getPaymentAmount(item) > 0);
+    const latestPaymentAmount = latestPayment ? getPaymentAmount(latestPayment) : 0;
+    const latestUsageAmount = history.find((item) => item.type === 'usage')?.amount ?? 0;
+
     // 利用額（負の金額の絶対値）を取得
     const getDebitAmount = (item: HistoryItem): number => {
         if (item.type === 'usage') {
@@ -163,21 +183,35 @@ export default function CustomerMyPage() {
             </header>
 
             <main className="max-w-lg mx-auto px-4 py-6 space-y-5">
-                {/* 残高カード */}
+                {/* KPIカード */}
                 <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] shadow-sm p-5">
-                    <div className="flex items-end justify-between gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
-                            <p className="text-xs text-[var(--muted)] mb-1">デポジット残高</p>
-                            <p className={`text-3xl font-bold tracking-tight ${(balance ?? 0) < 0 ? 'text-red-500' : 'text-[var(--foreground)]'}`}>
-                                ¥{(balance ?? 0).toLocaleString()}
+                            <p className="text-xs text-[var(--muted)] mb-1">利用累計金額</p>
+                            <p className="text-2xl sm:text-xl font-bold tracking-tight text-red-500">
+                                {formatYen(totalUsageAmount)}
+                            </p>
+                            <p className="text-[10px] text-[var(--muted)] mt-1">
+                                直近利用 {formatYen(latestUsageAmount)}
                             </p>
                         </div>
-                        {unpaidTotal > 0 && (
-                            <div className="text-right">
-                                <p className="text-[10px] text-[var(--muted)] mb-1">未払い合計</p>
-                                <p className="text-lg font-bold text-red-500">¥{unpaidTotal.toLocaleString()}</p>
-                            </div>
-                        )}
+                        <div className="sm:border-l sm:border-[var(--border)] sm:pl-4">
+                            <p className="text-xs text-[var(--muted)] mb-1">デポジット残高</p>
+                            <p className={`text-2xl sm:text-xl font-bold tracking-tight ${(balance ?? 0) < 0 ? 'text-red-500' : 'text-[var(--foreground)]'}`}>
+                                {formatYen(balance ?? 0)}
+                            </p>
+                        </div>
+                        <div className="sm:border-l sm:border-[var(--border)] sm:pl-4">
+                            <p className="text-xs text-[var(--muted)] mb-1">直近の支払金額</p>
+                            <p className="text-2xl sm:text-xl font-bold tracking-tight text-blue-600 dark:text-blue-400">
+                                {formatYen(latestPaymentAmount)}
+                            </p>
+                            {unpaidTotal > 0 && (
+                                <p className="text-[10px] text-red-500 font-semibold mt-1">
+                                    未払い {formatYen(unpaidTotal)}
+                                </p>
+                            )}
+                        </div>
                     </div>
                 </div>
 
