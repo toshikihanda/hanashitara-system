@@ -184,30 +184,30 @@ export default function CustomerMyPage() {
 
             <main className="max-w-lg mx-auto px-4 py-6 space-y-5">
                 {/* KPIカード */}
-                <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] shadow-sm p-5">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div>
-                            <p className="text-xs text-[var(--muted)] mb-1">利用累計金額</p>
-                            <p className="text-2xl sm:text-xl font-bold tracking-tight text-red-500">
+                <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] shadow-sm p-4 sm:p-5">
+                    <div className="grid grid-cols-3 divide-x divide-[var(--border)]">
+                        <div className="min-w-0 pr-2 sm:pr-4">
+                            <p className="text-[10px] sm:text-xs text-[var(--muted)] mb-1 leading-tight">利用累計金額</p>
+                            <p className="text-lg sm:text-2xl font-bold tracking-tight text-[var(--foreground)] whitespace-nowrap">
                                 {formatYen(totalUsageAmount)}
                             </p>
-                            <p className="text-[10px] text-[var(--muted)] mt-1">
+                            <p className="text-[9px] sm:text-[10px] text-[var(--muted)] mt-1 leading-tight whitespace-nowrap">
                                 直近利用 {formatYen(latestUsageAmount)}
                             </p>
                         </div>
-                        <div className="sm:border-l sm:border-[var(--border)] sm:pl-4">
-                            <p className="text-xs text-[var(--muted)] mb-1">デポジット残高</p>
-                            <p className={`text-2xl sm:text-xl font-bold tracking-tight ${(balance ?? 0) < 0 ? 'text-red-500' : 'text-[var(--foreground)]'}`}>
+                        <div className="min-w-0 px-2 sm:px-4">
+                            <p className="text-[10px] sm:text-xs text-[var(--muted)] mb-1 leading-tight">デポジット残高</p>
+                            <p className={`text-lg sm:text-2xl font-bold tracking-tight whitespace-nowrap ${(balance ?? 0) < 0 ? 'text-red-500' : 'text-[var(--foreground)]'}`}>
                                 {formatYen(balance ?? 0)}
                             </p>
                         </div>
-                        <div className="sm:border-l sm:border-[var(--border)] sm:pl-4">
-                            <p className="text-xs text-[var(--muted)] mb-1">直近の支払金額</p>
-                            <p className="text-2xl sm:text-xl font-bold tracking-tight text-blue-600 dark:text-blue-400">
+                        <div className="min-w-0 pl-2 sm:pl-4">
+                            <p className="text-[10px] sm:text-xs text-[var(--muted)] mb-1 leading-tight">直近の支払金額</p>
+                            <p className="text-lg sm:text-2xl font-bold tracking-tight text-blue-600 dark:text-blue-400 whitespace-nowrap">
                                 {formatYen(latestPaymentAmount)}
                             </p>
                             {unpaidTotal > 0 && (
-                                <p className="text-[10px] text-red-500 font-semibold mt-1">
+                                <p className="text-[9px] sm:text-[10px] text-red-500 font-semibold mt-1 leading-tight whitespace-nowrap">
                                     未払い {formatYen(unpaidTotal)}
                                 </p>
                             )}
